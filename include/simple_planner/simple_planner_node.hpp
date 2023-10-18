@@ -1,8 +1,14 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/int32.hpp>
 
+#include <perception_interfaces/msg/ego_data.hpp>
+#include <perception_interfaces/object_access.hpp>
+
+#include <route_planning_interfaces/msg/route.hpp>
+
+#include <trajectory_interfaces/msg/trajectory.hpp>
+#include <trajectory_interfaces/trajectory_access.hpp>
 
 namespace simple_planner {
 
@@ -15,9 +21,10 @@ class SimplePlannerNode : public rclcpp::Node {
 
  private:
 
-  static const std::string kInputTopic;
+  static const std::string kEgoDataTopic;
+  static const std::string kRouteTopic;
   static const std::string kOutputTopic;
-  static const std::string kParam;
+  static const std::string kFreqParam;
 
  private:
 
@@ -25,26 +32,30 @@ class SimplePlannerNode : public rclcpp::Node {
 
   void setup();
 
-  rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter>& parameters);
+  void egoDataCallback(const perception_interfaces::msg::EgoData::UniquePtr msg);
+  void routeCallback(const route_planning_interfaces::msg::Route::UniquePtr msg);
 
-  void topicCallback(const std_msgs::msg::Int32& msg);
+  trajectory_interfaces::msg::Trajectory createTrajectory();
+  bool isDestinationReached(const geometry_msgs::msg::Pose& current_pose, const geometry_msgs::msg::Point& destination);
+  double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
 
   void publishTimerCallback();
 
  private:
 
-  OnSetParametersCallbackHandle::SharedPtr parameters_callback_;
+  rclcpp::Subscription<perception_interfaces::msg::EgoData>::SharedPtr sub_egoData_;
+  rclcpp::Subscription<route_planning_interfaces::msg::Route>::SharedPtr sub_route_;
 
-  rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr subscriber_;
-
-  rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr publisher_;
+  rclcpp::Publisher<trajectory_interfaces::msg::Trajectory>::SharedPtr pub_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
-  double param_ = 1.0;
+  // Parameters
+  double freq_ = 1.0;
 
+  perception_interfaces::msg::EgoData ego_data_;
+  route_planning_interfaces::msg::Route route_;
 
-  int count_ = 0;
 };
 
 
