@@ -1,0 +1,3 @@
+simple_planner_node:
+  ros__parameters:
+    param: 1.0
