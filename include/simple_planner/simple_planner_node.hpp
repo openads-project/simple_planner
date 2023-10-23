@@ -25,6 +25,7 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kRouteTopic;
   static const std::string kOutputTopic;
   static const std::string kFreqParam;
+  static const std::string kDriveModeParam;
 
  private:
 
@@ -52,6 +53,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   // Parameters
   double freq_ = 1.0;
+  bool drivable_mode_ = false;
 
   perception_interfaces::msg::EgoData ego_data_;
   route_planning_interfaces::msg::Route route_;

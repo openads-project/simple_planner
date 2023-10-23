@@ -22,6 +22,7 @@ const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data_topic";
 const std::string SimplePlannerNode::kRouteTopic = "~/route_topic";
 const std::string SimplePlannerNode::kOutputTopic = "~/trajectory_topic";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
+const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 
 
 /**
@@ -44,15 +45,24 @@ void SimplePlannerNode::loadParameters() {
   // set parameter description
   rcl_interfaces::msg::ParameterDescriptor freq_param_desc;
   freq_param_desc.description = "frequency of publishing trajectory";
+  rcl_interfaces::msg::ParameterDescriptor driveMode_param_desc;
+  driveMode_param_desc.description = "true: creating drivable trajectory; false: creating reference trajectory";
 
   // declare parameter
   this->declare_parameter(kFreqParam, rclcpp::ParameterType::PARAMETER_DOUBLE, freq_param_desc);
+  this->declare_parameter(kDriveModeParam, rclcpp::ParameterType::PARAMETER_BOOL, driveMode_param_desc);
 
   // load parameter
   try {
     freq_ = this->get_parameter(kFreqParam).as_double();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kFreqParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    drivable_mode_ = this->get_parameter(kDriveModeParam).as_bool();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kDriveModeParam.c_str());
     exit(EXIT_FAILURE);
   }
 }
@@ -64,19 +74,21 @@ void SimplePlannerNode::loadParameters() {
  */
 void SimplePlannerNode::setup() {
 
-  // create subscriber for handling incoming messages
+  // create subscriber for egoData
   sub_egoData_ =
     this->create_subscription<perception_interfaces::msg::EgoData>(
       kEgoDataTopic, 10,
       std::bind(&SimplePlannerNode::egoDataCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_egoData_->get_topic_name());
+  
+  // create subscriber for route
   sub_route_ =
     this->create_subscription<route_planning_interfaces::msg::Route>(
       kRouteTopic, 10,
       std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
-  // create a publisher for publishing messages
+  // create a publisher for publishing output trajectory
   pub_ = this->create_publisher<trajectory_interfaces::msg::Trajectory>(
     kOutputTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
@@ -86,6 +98,7 @@ void SimplePlannerNode::setup() {
     this->create_wall_timer(std::chrono::duration<double>(1.0/freq_),
                             std::bind(&SimplePlannerNode::publishTimerCallback,
                             this));
+  RCLCPP_INFO(this->get_logger(), "Publishing trajectory at '%f' hz", freq_);
 }
 
 
@@ -123,18 +136,20 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
   double current_speed_limit = route_.current_speed_limit/3.6;
 
   trajectory_interfaces::msg::Trajectory tra;
-  trajectory_interfaces::trajectory_access::initializeTrajectory(tra, trajectory_interfaces::DRIVABLE::TYPE_ID, path.size());
+  int type_id = drivable_mode_ ? trajectory_interfaces::DRIVABLE::TYPE_ID : trajectory_interfaces::REFERENCE::TYPE_ID;
+  trajectory_interfaces::trajectory_access::initializeTrajectory(tra, type_id, path.size());
   tra.header.stamp = now();
   tra.header.frame_id = "base_link";
 
   for (int i = 0; i < path.size(); i++) {
-    // set the state
-    
+    trajectory_interfaces::trajectory_access::setT(tra, calcDistance(path, i)/3.0, i);
     trajectory_interfaces::trajectory_access::setX(tra, path[i].x, i);
     trajectory_interfaces::trajectory_access::setY(tra, path[i].y, i);
-    trajectory_interfaces::trajectory_access::setV(tra, current_speed_limit, i);
-    trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
-    trajectory_interfaces::trajectory_access::setT(tra, calcDistance(path, i)/current_speed_limit, i);
+    trajectory_interfaces::trajectory_access::setV(tra, 3.0, i);
+    if (drivable_mode_) {
+      trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
+      // TODO: setTheta, setA, setKappa, setDkappa
+    }
   }
 
   trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(current_pose, route_.target_position));
@@ -163,6 +178,11 @@ double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Poi
  *
  */
 void SimplePlannerNode::publishTimerCallback() {
+  // if route and ego data are not received, do nothing
+  if (route_.shortest_path.empty() || perception_interfaces::object_access::getPose(ego_data_).position.x == 0.0) {
+    return;
+  }
+
   trajectory_interfaces::msg::Trajectory msg = createTrajectory();
 
   pub_->publish(msg);
