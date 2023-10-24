@@ -37,10 +37,12 @@ class SimplePlannerNode : public rclcpp::Node {
   void routeCallback(const route_planning_interfaces::msg::Route::UniquePtr msg);
 
   trajectory_interfaces::msg::Trajectory createTrajectory();
+  trajectory_interfaces::msg::Trajectory createDemoTrajectory();
   bool isDestinationReached(const geometry_msgs::msg::Pose& current_pose, const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
 
   void publishTimerCallback();
+  void publishDemoCallback();
 
  private:
 
@@ -48,8 +50,10 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::Subscription<route_planning_interfaces::msg::Route>::SharedPtr sub_route_;
 
   rclcpp::Publisher<trajectory_interfaces::msg::Trajectory>::SharedPtr pub_;
+  rclcpp::Publisher<trajectory_interfaces::msg::Trajectory>::SharedPtr pub_demo_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
+  rclcpp::TimerBase::SharedPtr demo_timer_;
 
   // Parameters
   double freq_ = 1.0;

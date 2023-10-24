@@ -93,12 +93,24 @@ void SimplePlannerNode::setup() {
     kOutputTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
 
+  // create a publisher for demo trajectory
+  pub_demo_ = this->create_publisher<trajectory_interfaces::msg::Trajectory>(
+    "/trajectory_supervision_node/output_topic", 10);
+  RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
+
   // create a timer for repeatedly invoking a callback to publish messages
   publish_timer_ =
     this->create_wall_timer(std::chrono::duration<double>(1.0/freq_),
                             std::bind(&SimplePlannerNode::publishTimerCallback,
                             this));
   RCLCPP_INFO(this->get_logger(), "Publishing trajectory at '%f' hz", freq_);
+
+  // create a timer for repeatedly invoking a callback to publish messages
+  demo_timer_ =
+    this->create_wall_timer(std::chrono::duration<double>(10.0),
+                            std::bind(&SimplePlannerNode::publishDemoCallback,
+                            this));
+  RCLCPP_INFO(this->get_logger(), "Publishing Demo at '%f' hz", freq_);
 }
 
 
@@ -124,6 +136,51 @@ void SimplePlannerNode::routeCallback(
 
   route_ = *msg;
   // RCLCPP_INFO(this->get_logger(), "Received Route!");
+}
+
+trajectory_interfaces::msg::Trajectory SimplePlannerNode::createDemoTrajectory() {
+  geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
+  double current_velocity = perception_interfaces::object_access::getVelocityMagnitude(ego_data_);
+
+  trajectory_interfaces::msg::Trajectory tra;
+  trajectory_interfaces::trajectory_access::initializeTrajectory(tra, trajectory_interfaces::DRIVABLE::TYPE_ID, 5);
+  tra.header.stamp = now();
+  tra.header.frame_id = "base_link";
+
+  // straight 100m
+  // for (int i = 0; i < 2; i++) {
+  //   double distance = i * 100.0;
+  //   trajectory_interfaces::trajectory_access::setT(tra, distance/3.0, i);
+  //   trajectory_interfaces::trajectory_access::setX(tra, distance, i);
+  //   trajectory_interfaces::trajectory_access::setY(tra, 0, i);
+  //   trajectory_interfaces::trajectory_access::setV(tra, 3.0 , i);
+  //   // trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
+  // }
+
+
+  // const radius
+
+  // t,x,y,v,theta,a,kappa,dkappa,s
+  // 0,0,0,0,0,0,0,0,0
+  // t,10,0,3,0,0,0,0,10
+  // t,45.3553,-14.6447,3,-0.7854,0,0.02,0,49.27
+  // t,60,-50,3,-1.5708,0,0.02,0,88.54
+  // t,60,-60,3,-1.5708,0,0,0,98.54
+
+  std::vector<double> state0 = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  trajectory_interfaces::trajectory_access::setState(tra, state0, 0);
+  std::vector<double> state1 = {10.0/3.0,10.0,0.0,3.0,0.0,0.0,0.0,0.0,10.0};
+  trajectory_interfaces::trajectory_access::setState(tra, state1, 1);
+  std::vector<double> state2 = {49.27/3.0,45.3553,-14.6447,3.0,-0.7854,0.0,0.02,0.02,49.27};
+  trajectory_interfaces::trajectory_access::setState(tra, state2, 2);
+  std::vector<double> state3 = {88.54/3.0,60.0,-50.0,3.0,-1.5708,0.0,0.02,0.02,88.54};
+  trajectory_interfaces::trajectory_access::setState(tra, state3, 3);
+  std::vector<double> state4 = {98.54/3.0,60.0,-60.0,3.0,-1.5708,0.0,0.0,0.0,98.54};
+  trajectory_interfaces::trajectory_access::setState(tra, state4, 4);
+
+
+  trajectory_interfaces::trajectory_access::setStandstill(tra, false);
+  return tra;
 }
 
 trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
@@ -178,15 +235,23 @@ double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Poi
  *
  */
 void SimplePlannerNode::publishTimerCallback() {
-  // if route and ego data are not received, do nothing
-  if (route_.shortest_path.empty() || perception_interfaces::object_access::getPose(ego_data_).position.x == 0.0) {
-    return;
-  }
+  // // if route and ego data are not received, do nothing
+  // if (route_.shortest_path.empty() || perception_interfaces::object_access::getPose(ego_data_).position.x == 0.0) {
+  //   return;
+  // }
 
-  trajectory_interfaces::msg::Trajectory msg = createTrajectory();
+  // trajectory_interfaces::msg::Trajectory msg = createTrajectory();
 
-  pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "Published Trajectory!");
+  // pub_->publish(msg);
+  // RCLCPP_INFO(this->get_logger(), "Published Trajectory!");
+}
+
+void SimplePlannerNode::publishDemoCallback() {
+
+  trajectory_interfaces::msg::Trajectory msg = createDemoTrajectory();
+
+  pub_demo_->publish(msg);
+  RCLCPP_INFO(this->get_logger(), "Published Demo-Trajectory!");
 }
 
 
