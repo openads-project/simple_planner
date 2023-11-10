@@ -10,6 +10,11 @@
 #include <trajectory_interfaces/msg/trajectory.hpp>
 #include <trajectory_interfaces/trajectory_access.hpp>
 
+#include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
+
 namespace simple_planner {
 
 
@@ -38,6 +43,8 @@ class SimplePlannerNode : public rclcpp::Node {
 
   trajectory_interfaces::msg::Trajectory createTrajectory();
   trajectory_interfaces::msg::Trajectory createDemoTrajectory();
+  void trajectoryToCarlaCtrl(trajectory_interfaces::msg::Trajectory tra);
+  bool linearInterpolation(const std::vector<double>& X, const std::vector<double>& Y, const double& desired_x, double& output_y);
   bool isDestinationReached(const geometry_msgs::msg::Pose& current_pose, const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
 
