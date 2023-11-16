@@ -10,6 +10,7 @@ find_package(perception_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(route_planning_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(trajectory_interfaces REQUIRED)
 
 set(TARGET_NAME simple_planner_node)

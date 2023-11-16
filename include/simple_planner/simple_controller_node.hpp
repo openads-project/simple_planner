@@ -12,6 +12,8 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 namespace simple_controller {
 
@@ -41,6 +43,9 @@ class SimpleControllerNode : public rclcpp::Node {
   bool linearInterpolation(const std::vector<double>& X, const std::vector<double>& Y, const double& desired_x, double& output_y);
 
  private:
+
+  std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
   rclcpp::Subscription<perception_interfaces::msg::EgoData>::SharedPtr sub_egoData_;
   rclcpp::Subscription<trajectory_interfaces::msg::Trajectory>::SharedPtr sub_trajectory_;

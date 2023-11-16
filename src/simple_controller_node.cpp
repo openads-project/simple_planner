@@ -40,6 +40,9 @@ SimpleControllerNode::SimpleControllerNode() : Node("simple_controller_node") {
  */
 void SimpleControllerNode::setup() {
 
+  tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+  tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
+
   // create subscriber for egoData
   sub_egoData_ =
     this->create_subscription<perception_interfaces::msg::EgoData>(
@@ -140,7 +143,18 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   
   // fetch current ego pose
   geometry_msgs::msg::Pose pose = perception_interfaces::object_access::getPose(ego_data_);
+  geometry_msgs::msg::PoseStamped pose_bl;
+  pose_bl.header.stamp = ego_data_.header.stamp;
+  pose_bl.header.frame_id = "base_link";
+  pose_bl.pose = pose;
+  pose_bl.pose.position.x = x_tgt;
+  pose_bl.pose.position.y = y_tgt;
   double yaw = perception_interfaces::object_access::getYaw(ego_data_);
+  RCLCPP_WARN(this->get_logger(), "Yaw: %f", yaw);
+  RCLCPP_WARN(this->get_logger(), "x_tgt: %f", x_tgt);
+  RCLCPP_WARN(this->get_logger(), "y_tgt: %f", y_tgt);
+  RCLCPP_WARN(this->get_logger(), "pose.x: %f", pose.position.x);
+  RCLCPP_WARN(this->get_logger(), "pose.y: %f", pose.position.y);
 
   // set yaw for target pose
   tf2::Quaternion quat_tf;
@@ -148,10 +162,20 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   pose.orientation = tf2::toMsg(quat_tf);
 
   // set x and y for target pose
-  double dx = (x_tgt * std::cos(yaw) - y_tgt * std::sin(yaw));
-  double dy = (x_tgt * std::sin(yaw) + y_tgt * std::cos(yaw));
-  pose.position.x = pose.position.x + dx;
-  pose.position.y = pose.position.y + dy;
+
+  geometry_msgs::msg::PoseStamped pose_map;
+  auto timeout = rclcpp::Duration::from_seconds(1.0);
+  geometry_msgs::msg::TransformStamped base_link_to_carla_map_tf;
+  try {
+    base_link_to_carla_map_tf = tf2_buffer_->lookupTransform("carla_map", pose_bl.header.frame_id, pose_bl.header.stamp, timeout);
+  } catch (tf2::TransformException& ex) {
+    RCLCPP_WARN(this->get_logger(), "Tranformation from %s to 'carla_map' is not available", pose_bl.header.frame_id);
+    return;
+  }
+
+  tf2::doTransform(pose_bl, pose_map, base_link_to_carla_map_tf);
+  RCLCPP_WARN(this->get_logger(), "pose_map.x: %f", pose_map.pose.position.x);
+  RCLCPP_WARN(this->get_logger(), "pose_map.y: %f", pose_map.pose.position.y);
 
   // set velocity of pose to zero (pose is set sufficiently often)
   geometry_msgs::msg::Twist twist = geometry_msgs::msg::Twist();
@@ -163,7 +187,7 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   twist.angular.z = 0;
 
   // publish pose and twist to carla
-  pub_pose_->publish(pose);
+  pub_pose_->publish(pose_map.pose);
   pub_twist_->publish(twist);
   RCLCPP_INFO(this->get_logger(), "Published pose and twist to Carla!");
 }
