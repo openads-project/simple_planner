@@ -15,12 +15,18 @@ find_package(trajectory_interfaces REQUIRED)
 set(TARGET_NAME simple_planner_node)
 
 add_executable(${TARGET_NAME} src/simple_planner_node.cpp)
+add_executable(simple_controller_node src/simple_controller_node.cpp)
 
 target_include_directories(${TARGET_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+target_include_directories(simple_controller_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
 target_compile_features(${TARGET_NAME} PUBLIC c_std_99 cxx_std_17)
+target_compile_features(simple_controller_node PUBLIC c_std_99 cxx_std_17)
 
 ament_target_dependencies(${TARGET_NAME}
   perception_interfaces  
@@ -29,8 +35,14 @@ ament_target_dependencies(${TARGET_NAME}
   std_msgs
   trajectory_interfaces
 )
+ament_target_dependencies(simple_controller_node
+  perception_interfaces  
+  rclcpp
+  std_msgs
+  trajectory_interfaces
+)
 
-install(TARGETS ${TARGET_NAME}
+install(TARGETS ${TARGET_NAME} simple_controller_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

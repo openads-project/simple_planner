@@ -43,8 +43,6 @@ class SimplePlannerNode : public rclcpp::Node {
 
   trajectory_interfaces::msg::Trajectory createTrajectory();
   trajectory_interfaces::msg::Trajectory createDemoTrajectory();
-  void trajectoryToCarlaCtrl(trajectory_interfaces::msg::Trajectory tra);
-  bool linearInterpolation(const std::vector<double>& X, const std::vector<double>& Y, const double& desired_x, double& output_y);
   bool isDestinationReached(const geometry_msgs::msg::Pose& current_pose, const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
 

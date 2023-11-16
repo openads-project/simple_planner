@@ -4,7 +4,7 @@
 #include <functional>
 #include <thread>
 
-#include <simple_planner/simple_planner_node.hpp>
+#include <simple_planner/simple_controller_node.hpp>
 
 
 
@@ -54,9 +54,9 @@ void SimpleControllerNode::setup() {
       std::bind(&SimpleControllerNode::trajectoryCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_trajectory_->get_topic_name());
 
+  // create publisher for Pose and Twist (pass to carla topics)
   pub_pose_ = this->create_publisher<geometry_msgs::msg::Pose>(kOutputPose, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_pose_->get_topic_name());
-
   pub_twist_ = this->create_publisher<geometry_msgs::msg::Twist>(kOutputTwist, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_twist_->get_topic_name());
 
@@ -77,6 +77,11 @@ void SimpleControllerNode::egoDataCallback(
   const perception_interfaces::msg::EgoData::UniquePtr msg) {
 
   ego_data_ = *msg;
+
+  if (!ego_data_init_){
+    ego_data_init_ = true;
+    RCLCPP_INFO(this->get_logger(), "Received first ego data message, initialized global variable");
+  }
 }
 
 /**
@@ -88,6 +93,11 @@ void SimpleControllerNode::trajectoryCallback(
   const trajectory_interfaces::msg::Trajectory::UniquePtr msg) {
 
   trajectory_ = *msg;
+
+  if (!trajectory_init_){
+    trajectory_init_ = true;
+    RCLCPP_INFO(this->get_logger(), "Received first trajectory message, initialized global variable");
+  }
 }
 
 /**
@@ -96,18 +106,19 @@ void SimpleControllerNode::trajectoryCallback(
  */
 void SimpleControllerNode::publishTimerCallback() {
   // if route and ego data are not received, do nothing
-  if (trajectory trajectory_ == 0.0) {
+  if (!trajectory_init_ || !ego_data_init_) {
     return;
   }
-
-  trajectory_interfaces::msg::Trajectory msg = createTrajectory();
-
-  pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "Published Trajectory!");
+  
+  trajectoryToCarlaCtrl(trajectory_);
 }
 
 void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::msg::Trajectory tra) {
-  double des_time = (tra.header.stamp - now()).seconds();
+
+  double traj_stamp = tra.header.stamp.sec + 1e-9 * tra.header.stamp.nanosec;
+  rclcpp::Time current_time = now();
+  double current_stamp = current_time.seconds() + 1e-9 * current_time.nanoseconds();
+  double des_time = current_stamp - traj_stamp;
   double v_tgt;
   double x_tgt;
   double y_tgt;
@@ -121,35 +132,43 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
     V.push_back(trajectory_interfaces::trajectory_access::getV(tra, i));
     X.push_back(trajectory_interfaces::trajectory_access::getX(tra, i));
     Y.push_back(trajectory_interfaces::trajectory_access::getY(tra, i));
-    THETA.push_back(trajectory_interfaces::trajectory_access::getTheata(tra, i));
+    THETA.push_back(trajectory_interfaces::trajectory_access::getTheta(tra, i));
   }
+
+  // Interpolate target states by time
   if(!linearInterpolation(TIME, V, des_time, v_tgt)) return;
   if(!linearInterpolation(TIME, X, des_time, x_tgt)) return;
   if(!linearInterpolation(TIME, Y, des_time, y_tgt)) return;
   if(!linearInterpolation(TIME, THETA, des_time, theta_tgt)) return;
   
+  // fetch current ego pose
   geometry_msgs::msg::Pose pose = perception_interfaces::object_access::getPose(ego_data_);
   double yaw = perception_interfaces::object_access::getYaw(ego_data_);
 
+  // set yaw for target pose
   tf2::Quaternion quat_tf;
   quat_tf.setRPY(0, 0, yaw + theta_tgt);
   pose.orientation = tf2::toMsg(quat_tf);
 
-  double dx = (x_tgt - y_tgt * std::tan(yaw)) / (std::cos(yaw) * pow(std::sin(yaw)/std::cos(yaw), 2))
-  double dy = (x_tgt + dx * std::sin(yaw)) / std::cos(yaw);
-
+  // set x and y for target pose
+  double dx = (x_tgt * std::cos(yaw) - y_tgt * std::sin(yaw));
+  double dy = (x_tgt * std::sin(yaw) + y_tgt * std::cos(yaw));
   pose.position.x = pose.position.x + dx;
   pose.position.y = pose.position.y + dy;
 
-  auto twist_message = geometry_msgs::msg::Twist();
-  twist_message.linear.x = 0;
-  twist_message.linear.y = 0;
-  twist_message.linear.z = 0;
+  // set velocity of pose to zero (pose is set sufficiently often)
+  geometry_msgs::msg::Twist twist = geometry_msgs::msg::Twist();
+  twist.linear.x = 0;
+  twist.linear.y = 0;
+  twist.linear.z = 0;
+  twist.angular.x = 0;
+  twist.angular.y = 0;
+  twist.angular.z = 0;
 
-  twist_message.angular.x = 0;
-  twist_message.angular.y = 0;
-  twist_message.angular.z = 0;
-
+  // publish pose and twist to carla
+  pub_pose_->publish(pose);
+  pub_twist_->publish(twist);
+  RCLCPP_INFO(this->get_logger(), "Published pose and twist to Carla!");
 }
 
 bool SimpleControllerNode::linearInterpolation(const std::vector<double>& X, const std::vector<double>& Y, const double& desired_x, double& output_y)
@@ -187,24 +206,13 @@ bool SimpleControllerNode::linearInterpolation(const std::vector<double>& X, con
   return true;
 }
 
-void SimpleControllerNode::publishDemoCallback() {
-
-  trajectory_interfaces::msg::Trajectory msg = createDemoTrajectory();
-  
-  trajectoryToCarlaCtrl(msg);
-
-  pub_demo_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "Published Demo-Trajectory!");
-}
-
-
 }
 
 
 int main(int argc, char *argv[]) {
 
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<simple_planner::SimpleControllerNode>());
+  rclcpp::spin(std::make_shared<simple_controller::SimpleControllerNode>());
   rclcpp::shutdown();
 
   return 0;

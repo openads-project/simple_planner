@@ -107,10 +107,10 @@ void SimplePlannerNode::setup() {
 
   // create a timer for repeatedly invoking a callback to publish messages
   demo_timer_ =
-    this->create_wall_timer(std::chrono::duration<double>(10.0),
+    this->create_wall_timer(std::chrono::duration<double>(1.0),
                             std::bind(&SimplePlannerNode::publishDemoCallback,
                             this));
-  RCLCPP_INFO(this->get_logger(), "Publishing Demo at '%f' hz", freq_);
+  RCLCPP_INFO(this->get_logger(), "Publishing Demo at 1 hz");
 }
 
 
@@ -139,8 +139,6 @@ void SimplePlannerNode::routeCallback(
 }
 
 trajectory_interfaces::msg::Trajectory SimplePlannerNode::createDemoTrajectory() {
-  geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
-  double current_velocity = perception_interfaces::object_access::getVelocityMagnitude(ego_data_);
 
   trajectory_interfaces::msg::Trajectory tra;
   trajectory_interfaces::trajectory_access::initializeTrajectory(tra, trajectory_interfaces::DRIVABLE::TYPE_ID, 5);
