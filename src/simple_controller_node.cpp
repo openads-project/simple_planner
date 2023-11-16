@@ -115,10 +115,7 @@ void SimpleControllerNode::publishTimerCallback() {
 
 void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::msg::Trajectory tra) {
 
-  double traj_stamp = tra.header.stamp.sec + 1e-9 * tra.header.stamp.nanosec;
-  rclcpp::Time current_time = now();
-  double current_stamp = current_time.seconds() + 1e-9 * current_time.nanoseconds();
-  double des_time = current_stamp - traj_stamp;
+  double des_time = (now() - tra.header.stamp).seconds();
   double v_tgt;
   double x_tgt;
   double y_tgt;
