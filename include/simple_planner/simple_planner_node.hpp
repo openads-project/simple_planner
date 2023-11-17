@@ -6,6 +6,7 @@
 #include <perception_interfaces/object_access.hpp>
 
 #include <route_planning_interfaces/msg/route.hpp>
+#include <route_planning_interfaces/tf2_route_planning_interfaces.hpp>
 
 #include <trajectory_interfaces/msg/trajectory.hpp>
 #include <trajectory_interfaces/trajectory_access.hpp>
@@ -14,6 +15,8 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 namespace simple_planner {
 
@@ -29,6 +32,7 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kEgoDataTopic;
   static const std::string kRouteTopic;
   static const std::string kOutputTopic;
+  static const std::string kDemoTopic;
   static const std::string kFreqParam;
   static const std::string kDriveModeParam;
 
@@ -45,11 +49,15 @@ class SimplePlannerNode : public rclcpp::Node {
   trajectory_interfaces::msg::Trajectory createDemoTrajectory();
   bool isDestinationReached(const geometry_msgs::msg::Pose& current_pose, const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
+  double calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
 
   void publishTimerCallback();
   void publishDemoCallback();
 
  private:
+
+  std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
   rclcpp::Subscription<perception_interfaces::msg::EgoData>::SharedPtr sub_egoData_;
   rclcpp::Subscription<route_planning_interfaces::msg::Route>::SharedPtr sub_route_;
@@ -67,6 +75,8 @@ class SimplePlannerNode : public rclcpp::Node {
   perception_interfaces::msg::EgoData ego_data_;
   route_planning_interfaces::msg::Route route_;
 
+  bool ego_data_init_ = false;
+  bool route_init_ = false;
 };
 
 

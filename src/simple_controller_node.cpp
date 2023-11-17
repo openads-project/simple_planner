@@ -108,7 +108,7 @@ void SimpleControllerNode::trajectoryCallback(
  *
  */
 void SimpleControllerNode::publishTimerCallback() {
-  // if route and ego data are not received, do nothing
+  // if trajectory and ego data are not received, do nothing
   if (!trajectory_init_ || !ego_data_init_) {
     return;
   }

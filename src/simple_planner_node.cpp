@@ -21,6 +21,7 @@ namespace simple_planner {
 const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data_topic";
 const std::string SimplePlannerNode::kRouteTopic = "~/route_topic";
 const std::string SimplePlannerNode::kOutputTopic = "~/trajectory_topic";
+const std::string SimplePlannerNode::kDemoTopic = "~/demo_trajectory_topic";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 
@@ -74,6 +75,9 @@ void SimplePlannerNode::loadParameters() {
  */
 void SimplePlannerNode::setup() {
 
+  tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+  tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
+
   // create subscriber for egoData
   sub_egoData_ =
     this->create_subscription<perception_interfaces::msg::EgoData>(
@@ -95,8 +99,8 @@ void SimplePlannerNode::setup() {
 
   // create a publisher for demo trajectory
   pub_demo_ = this->create_publisher<trajectory_interfaces::msg::Trajectory>(
-    "/trajectory_supervision_node/output_topic", 10);
-  RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
+    kDemoTopic, 10);
+  RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_demo_->get_topic_name());
 
   // create a timer for repeatedly invoking a callback to publish messages
   publish_timer_ =
@@ -110,7 +114,7 @@ void SimplePlannerNode::setup() {
     this->create_wall_timer(std::chrono::duration<double>(10.0),
                             std::bind(&SimplePlannerNode::publishDemoCallback,
                             this));
-  RCLCPP_INFO(this->get_logger(), "Publishing Demo at 1 hz");
+  RCLCPP_INFO(this->get_logger(), "Publishing Demo Trajectory at 0.1 hz");
 }
 
 
@@ -123,7 +127,11 @@ void SimplePlannerNode::egoDataCallback(
   const perception_interfaces::msg::EgoData::UniquePtr msg) {
 
   ego_data_ = *msg;
-  // RCLCPP_INFO(this->get_logger(), "Received EgoData!");
+  
+  if (!ego_data_init_){
+    ego_data_init_ = true;
+    RCLCPP_INFO(this->get_logger(), "Received first ego data message, initialized global variable");
+  }
 }
 
 /**
@@ -135,7 +143,11 @@ void SimplePlannerNode::routeCallback(
   const route_planning_interfaces::msg::Route::UniquePtr msg) {
 
   route_ = *msg;
-  // RCLCPP_INFO(this->get_logger(), "Received Route!");
+
+  if (!route_init_){
+    route_init_ = true;
+    RCLCPP_INFO(this->get_logger(), "Received first route message, initialized global variable");
+  }
 }
 
 trajectory_interfaces::msg::Trajectory SimplePlannerNode::createDemoTrajectory() {
@@ -144,17 +156,6 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createDemoTrajectory()
   trajectory_interfaces::trajectory_access::initializeTrajectory(tra, trajectory_interfaces::DRIVABLE::TYPE_ID, 5);
   tra.header.stamp = now();
   tra.header.frame_id = "base_link";
-
-  // straight 100m
-  // for (int i = 0; i < 2; i++) {
-  //   double distance = i * 100.0;
-  //   trajectory_interfaces::trajectory_access::setT(tra, distance/3.0, i);
-  //   trajectory_interfaces::trajectory_access::setX(tra, distance, i);
-  //   trajectory_interfaces::trajectory_access::setY(tra, 0, i);
-  //   trajectory_interfaces::trajectory_access::setV(tra, 3.0 , i);
-  //   // trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
-  // }
-
 
   // const radius
 
@@ -182,13 +183,24 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createDemoTrajectory()
 }
 
 trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
-  std::vector<geometry_msgs::msg::Point> path = route_.shortest_path;
+
+  geometry_msgs::msg::TransformStamped tf;
+  try {
+    tf = tf2_buffer_->lookupTransform("base_link", now(), "base_link", route_.header.stamp, "map", rclcpp::Duration::from_seconds(1.0));
+  } catch (tf2::TransformException& ex) {
+    RCLCPP_WARN(this->get_logger(), "Tranformation is not available");
+  }
+  route_planning_interfaces::msg::Route route;
+  tf2::doTransform(route_, route, tf);
+
+  std::vector<geometry_msgs::msg::Point> path = route.shortest_path;
   while(path[0].x < 0.0) {
     path.erase(path.begin());
   }
+  if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
   geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
   double current_velocity = perception_interfaces::object_access::getVelocityMagnitude(ego_data_);
-  double current_speed_limit = route_.current_speed_limit/3.6;
+  double current_speed_limit = route.current_speed_limit/3.6;
 
   trajectory_interfaces::msg::Trajectory tra;
   int type_id = drivable_mode_ ? trajectory_interfaces::DRIVABLE::TYPE_ID : trajectory_interfaces::REFERENCE::TYPE_ID;
@@ -203,11 +215,12 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
     trajectory_interfaces::trajectory_access::setV(tra, 3.0, i);
     if (drivable_mode_) {
       trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
-      // TODO: setTheta, setA, setKappa, setDkappa
+      trajectory_interfaces::trajectory_access::setTheta(tra, calcTheta(path, i), i);
+      // TODO: setA, setKappa, setDkappa
     }
   }
 
-  trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(current_pose, route_.target_position));
+  trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(current_pose, route.target_position));
   return tra;
 }
 
@@ -228,20 +241,33 @@ double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Poi
   return distance;
 }
 
+double SimplePlannerNode::calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint) {
+  double theta = 0.0;
+  for (int i = 0; i <= nPoint; i++) {
+    if (i == 0) {
+      // theta += atan2(points[i].y - 0.0, points[i].x - 0.0);
+      theta += 0.0;
+    } else {
+      theta += atan2(points[i].y - points[i-1].y, points[i].x - points[i-1].x);
+    }
+  }
+  return theta;
+}
+
 /**
  * @brief This callback is invoked every period seconds by the timer
  *
  */
 void SimplePlannerNode::publishTimerCallback() {
-  // // if route and ego data are not received, do nothing
-  // if (route_.shortest_path.empty() || perception_interfaces::object_access::getPose(ego_data_).position.x == 0.0) {
-  //   return;
-  // }
+  // if route and ego data are not received, do nothing
+  if (!route_init_ || !ego_data_init_) {
+    return;
+  }
 
-  // trajectory_interfaces::msg::Trajectory msg = createTrajectory();
+  trajectory_interfaces::msg::Trajectory msg = createTrajectory();
 
-  // pub_->publish(msg);
-  // RCLCPP_INFO(this->get_logger(), "Published Trajectory!");
+  pub_->publish(msg);
+  RCLCPP_INFO(this->get_logger(), "Published Trajectory!");
 }
 
 void SimplePlannerNode::publishDemoCallback() {
