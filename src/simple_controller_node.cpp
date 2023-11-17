@@ -141,44 +141,35 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   if(!linearInterpolation(TIME, Y, des_time, y_tgt)) return;
   if(!linearInterpolation(TIME, THETA, des_time, theta_tgt)) return;
   
-  // fetch current ego pose
-  geometry_msgs::msg::Pose pose = perception_interfaces::object_access::getPose(ego_data_);
+  // Wrap interpolations into pose
   geometry_msgs::msg::PoseStamped pose_bl;
-  pose_bl.header.stamp = ego_data_.header.stamp;
+  pose_bl.header.stamp = trajectory_.header.stamp;
   pose_bl.header.frame_id = "base_link";
-  pose_bl.pose = pose;
   pose_bl.pose.position.x = x_tgt;
   pose_bl.pose.position.y = y_tgt;
-  double yaw = perception_interfaces::object_access::getYaw(ego_data_);
-  RCLCPP_WARN(this->get_logger(), "Yaw: %f", yaw);
-  RCLCPP_WARN(this->get_logger(), "x_tgt: %f", x_tgt);
-  RCLCPP_WARN(this->get_logger(), "y_tgt: %f", y_tgt);
-  RCLCPP_WARN(this->get_logger(), "pose.x: %f", pose.position.x);
-  RCLCPP_WARN(this->get_logger(), "pose.y: %f", pose.position.y);
 
-  // set yaw for target pose
+  // Set yaw for target pose (in base_link frame)
   tf2::Quaternion quat_tf;
-  quat_tf.setRPY(0, 0, yaw + theta_tgt);
-  pose.orientation = tf2::toMsg(quat_tf);
+  quat_tf.setRPY(0, 0, theta_tgt);
+  pose_bl.pose.orientation = tf2::toMsg(quat_tf);
 
-  // set x and y for target pose
-
-  geometry_msgs::msg::PoseStamped pose_map;
+  // Get transform from base_link to carla_map frame
   auto timeout = rclcpp::Duration::from_seconds(1.0);
   geometry_msgs::msg::TransformStamped base_link_to_carla_map_tf;
   try {
     base_link_to_carla_map_tf = tf2_buffer_->lookupTransform("carla_map", pose_bl.header.frame_id, pose_bl.header.stamp, timeout);
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Tranformation from %s to 'carla_map' is not available", pose_bl.header.frame_id);
+    RCLCPP_WARN(this->get_logger(), "Tranformation from %s to 'carla_map' is not available", pose_bl.header.frame_id.c_str());
     return;
   }
 
+  // Transform pose from base_link to carla_map frame
+  geometry_msgs::msg::PoseStamped pose_map;
   tf2::doTransform(pose_bl, pose_map, base_link_to_carla_map_tf);
-  RCLCPP_WARN(this->get_logger(), "pose_map.x: %f", pose_map.pose.position.x);
-  RCLCPP_WARN(this->get_logger(), "pose_map.y: %f", pose_map.pose.position.y);
 
-  // set velocity of pose to zero (pose is set sufficiently often)
-  geometry_msgs::msg::Twist twist = geometry_msgs::msg::Twist();
+  // Set velocity of pose to zero (pose is set sufficiently often)
+  // TODO: Set velocity to desired velocity
+  geometry_msgs::msg::Twist twist;
   twist.linear.x = 0;
   twist.linear.y = 0;
   twist.linear.z = 0;
@@ -186,10 +177,10 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   twist.angular.y = 0;
   twist.angular.z = 0;
 
-  // publish pose and twist to carla
+  // Publish pose and twist to carla
   pub_pose_->publish(pose_map.pose);
   pub_twist_->publish(twist);
-  RCLCPP_INFO(this->get_logger(), "Published pose and twist to Carla!");
+  RCLCPP_DEBUG(this->get_logger(), "Published pose and twist to Carla!");
 }
 
 bool SimpleControllerNode::linearInterpolation(const std::vector<double>& X, const std::vector<double>& Y, const double& desired_x, double& output_y)
@@ -206,7 +197,7 @@ bool SimpleControllerNode::linearInterpolation(const std::vector<double>& X, con
   }
 
   //go through array and search for sampling points
-  int i;
+  size_t i;
   for(i = 0; i < X.size(); i++)
   {
     if (X[i] < desired_x)

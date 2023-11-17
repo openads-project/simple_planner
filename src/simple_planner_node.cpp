@@ -107,7 +107,7 @@ void SimplePlannerNode::setup() {
 
   // create a timer for repeatedly invoking a callback to publish messages
   demo_timer_ =
-    this->create_wall_timer(std::chrono::duration<double>(1.0),
+    this->create_wall_timer(std::chrono::duration<double>(10.0),
                             std::bind(&SimplePlannerNode::publishDemoCallback,
                             this));
   RCLCPP_INFO(this->get_logger(), "Publishing Demo at 1 hz");
