@@ -63,8 +63,10 @@ void SimpleControllerNode::setup() {
   pub_twist_ = this->create_publisher<geometry_msgs::msg::Twist>(kOutputTwist, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_twist_->get_topic_name());
 
+  pub_duration_ = 1.0/100.0;
+
   publish_timer_ =
-    this->create_wall_timer(std::chrono::duration<double>(1.0/100.0),
+    this->create_wall_timer(std::chrono::duration<double>(pub_duration_),
                             std::bind(&SimpleControllerNode::publishTimerCallback,
                             this));
 
@@ -167,18 +169,39 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   geometry_msgs::msg::PoseStamped pose_map;
   tf2::doTransform(pose_bl, pose_map, base_link_to_carla_map_tf);
 
-  // Set velocity of pose to zero (pose is set sufficiently often)
-  // TODO: Set velocity to desired velocity
+  // Set velocity of pose by backward differences
   geometry_msgs::msg::Twist twist;
-  twist.linear.x = 0;
-  twist.linear.y = 0;
-  twist.linear.z = 0;
-  twist.angular.x = 0;
-  twist.angular.y = 0;
-  twist.angular.z = 0;
+  if (!recent_pose_init_) {
+    // If no recent pose exists, set velocity to zero (only for very first pose)
+    twist.linear.x = 0;
+    twist.linear.y = 0;
+    twist.linear.z = 0;
+    twist.angular.x = 0;
+    twist.angular.y = 0;
+    twist.angular.z = 0;
+    recent_pose_init_ = true;
+  }
+  else {
+    // Take backwards differences to derive estimated velocites (only set v_x, v_y and yaw rate)
+    twist.linear.x = (pose_map.pose.position.x - recent_pose_.position.x) / pub_duration_; // v_x
+    twist.linear.y = (pose_map.pose.position.y - recent_pose_.position.y) / pub_duration_; // v_y
+    twist.linear.z = 0;
+
+    twist.angular.x = 0;
+    twist.angular.y = 0;
+    double current_roll, current_pitch, current_yaw, recent_roll, recent_pitch, recent_yaw;
+    tf2::Quaternion q_current(pose_map.pose.orientation.x, pose_map.pose.orientation.y, pose_map.pose.orientation.z, pose_map.pose.orientation.w);
+    tf2::Matrix3x3 m_current(q_current);
+    m_current.getRPY(current_roll, current_pitch, current_yaw);
+    tf2::Quaternion q_recent(recent_pose_.orientation.x, recent_pose_.orientation.y, recent_pose_.orientation.z, recent_pose_.orientation.w);
+    tf2::Matrix3x3 m_recent(q_recent);
+    m_recent.getRPY(recent_roll, recent_pitch, recent_yaw);
+    twist.angular.z = (current_yaw - recent_yaw) / pub_duration_ ; // yaw rate
+  }  
 
   // Publish pose and twist to carla
   pub_pose_->publish(pose_map.pose);
+  recent_pose_ = pose_map.pose;
   pub_twist_->publish(twist);
   RCLCPP_DEBUG(this->get_logger(), "Published pose and twist to Carla!");
 }
@@ -187,7 +210,10 @@ bool SimpleControllerNode::linearInterpolation(const std::vector<double>& X, con
 {
   if (desired_x < *min_element(X.begin(), X.end()) || desired_x > *max_element(X.begin(), X.end()))
   {
-    RCLCPP_ERROR_STREAM(get_logger(), "Desired X-Value is not in between of X-Min and X-Max of the given vector!");
+    RCLCPP_ERROR(get_logger(), "Desired Time is not in between of Time-Min and Time-Max of the given vector!");
+    RCLCPP_ERROR(get_logger(), "Desired Time: %f s", desired_x);
+    RCLCPP_ERROR(get_logger(), "Time-Min: %f s", *min_element(X.begin(), X.end()));
+    RCLCPP_ERROR(get_logger(), "Time-Max: %f s", *max_element(X.begin(), X.end()));
     return false;
   }
   if(X.size() != Y.size())

@@ -58,8 +58,12 @@ class SimpleControllerNode : public rclcpp::Node {
   perception_interfaces::msg::EgoData ego_data_;
   trajectory_interfaces::msg::Trajectory trajectory_;
 
+  double pub_duration_;
+  geometry_msgs::msg::Pose recent_pose_;
+  
   bool ego_data_init_ = false;
   bool trajectory_init_ = false;
+  bool recent_pose_init_ = false; 
 };
 
 
