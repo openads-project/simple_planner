@@ -22,7 +22,7 @@ const std::string SimpleControllerNode::kEgoDataTopic = "~/ego_data_topic";
 const std::string SimpleControllerNode::kTrajectoryTopic = "~/trajectory_topic";
 const std::string SimpleControllerNode::kOutputPose = "/carla/ego_vehicle/control/set_transform";
 const std::string SimpleControllerNode::kOutputTwist = "/carla/ego_vehicle/control/set_target_velocity";
-const std::string SimpleControllerNode::kOutputCtrl = "/carla/ego_vehicle/control/ToDo";
+const std::string SimpleControllerNode::kOutputCtrl = "/carla/ego_vehicle/vehicle_control_cmd";
 
 
 /**
@@ -159,7 +159,7 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
 
   // set longitudinal control (throttle and brake)
-  double long_output = longitudinalControlStep(perception_interfaces::object_access::getV(ego_data_), v_tgt);
+  double long_output = longitudinalControlStep(perception_interfaces::object_access::getVelocityMagnitude(ego_data_), v_tgt);
 
   if (long_output >= 0.0){
     ctrl_msg.throttle = long_output;
@@ -172,13 +172,13 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
 
   // set lateral control (steering angle)
   double target_yaw = std::atan2(y_tgt, x_tgt); // Yaw angle to get to the target from current ego pose, NOT yaw angle of target pose!
-  double lat_output = lateralControlStep(perception_interfaces::object_access::getYaw(ego_data_), target_yaw);
-  ctrl_msg.steer = lat_output;
+  double lat_output = lateralControlStep(0.0, target_yaw);
+  ctrl_msg.steer = -lat_output;
 
   // set other states that are not relevant
-  control.hand_brake = false;
-  control.reverse = false;
-  control.manual_gear_shift = false;
+  ctrl_msg.hand_brake = false;
+  ctrl_msg.reverse = false;
+  ctrl_msg.manual_gear_shift = false;
 
   // publish control message
   pub_ctrl_->publish(ctrl_msg);

@@ -11,7 +11,7 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <carla_msgs/msg/carla_egovehicle_control.hpp>
+#include <carla_msgs/msg/carla_ego_vehicle_control.hpp>
 
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -31,6 +31,7 @@ class SimpleControllerNode : public rclcpp::Node {
   static const std::string kTrajectoryTopic;
   static const std::string kOutputPose;
   static const std::string kOutputTwist;
+  static const std::string kOutputCtrl;
 
  private:
 
@@ -86,11 +87,11 @@ class SimpleControllerNode : public rclcpp::Node {
 
   // PID Controller state variables
   double error_long = 0.0;
-  double error_integral_long = 0.0;
-  double error_derivative_long = 0.0;
+  double error_long_integral = 0.0;
+  double error_long_derivative = 0.0;
   double error_lat = 0.0;
-  double error_integral_lat = 0.0;
-  double error_derivative_lat = 0.0;
+  double error_lat_integral = 0.0;
+  double error_lat_derivative = 0.0;
 
 };
 

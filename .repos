@@ -9,6 +9,5 @@ repositories:
     version: main
   carla_msgs:
     type: git
-    url: https://github.com/carla-simulator/ros-carla-msgs/tree/master
+    url: https://github.com/carla-simulator/ros-carla-msgs.git
     version: master
-
