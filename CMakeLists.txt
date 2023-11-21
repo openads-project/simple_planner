@@ -41,6 +41,7 @@ ament_target_dependencies(simple_controller_node
   rclcpp
   std_msgs
   trajectory_interfaces
+  carla_msgs
 )
 
 install(TARGETS ${TARGET_NAME} simple_controller_node

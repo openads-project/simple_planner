@@ -7,3 +7,8 @@ repositories:
     type: git
     url: https://gitlab.ika.rwth-aachen.de/fb-fi/definitions/planning_interfaces.git
     version: main
+  carla_msgs:
+    type: git
+    url: https://github.com/carla-simulator/ros-carla-msgs/tree/master
+    version: master
+
