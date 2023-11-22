@@ -264,7 +264,17 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
     pub_ctrl_->publish(ctrl_msg);
   }
   else {
-    // reached final destination (standstill = true), no control messages should be published
+    // reached final destination (standstill = true)
+    carla_msgs::msg::CarlaEgoVehicleControl ctrl_msg;
+    ctrl_msg.header.stamp = trajectory_.header.stamp;
+    ctrl_msg.header.frame_id = "base_link";
+    ctrl_msg.throttle = 0.0;
+    ctrl_msg.brake = 1.0;
+    ctrl_msg.steer = 0.0;
+    ctrl_msg.hand_brake = false;
+    ctrl_msg.reverse = false;
+    ctrl_msg.manual_gear_shift = false;
+    pub_ctrl_->publish(ctrl_msg);
   }
 }
 
