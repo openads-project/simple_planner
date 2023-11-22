@@ -124,7 +124,7 @@ void SimpleControllerNode::publishTimerCallback() {
 
 void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::msg::Trajectory tra) {
 
-  double des_time = (now() - tra.header.stamp).seconds();
+  double des_time = (now() - tra.header.stamp).seconds() + 2;
   double v_tgt;
   double x_tgt;
   double y_tgt;
@@ -174,6 +174,8 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
   double target_yaw = std::atan2(y_tgt, x_tgt); // Yaw angle to get to the target from current ego pose, NOT yaw angle of target pose!
   double lat_output = lateralControlStep(0.0, target_yaw);
   ctrl_msg.steer = -lat_output;
+
+  RCLCPP_DEBUG(this->get_logger(), "Computed longitudinal and lateral control:   throttle: %f    brake: %f    steering: %f ", ctrl_msg.throttle, ctrl_msg.brake, ctrl_msg.steer);
 
   // set other states that are not relevant
   ctrl_msg.hand_brake = false;
