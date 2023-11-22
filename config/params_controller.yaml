@@ -7,5 +7,5 @@
     p_lateral: 0.9
     i_lateral: 0.0
     d_lateral: 0.0
-    lookahead_time_pid: 2 # s
+    lookahead_time_pid: 2.0 # s
     use_sim_time: True

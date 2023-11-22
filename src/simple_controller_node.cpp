@@ -36,8 +36,8 @@ const std::string SimpleControllerNode::kLookaheadTime = "lookahead_time_pid";
  */
 SimpleControllerNode::SimpleControllerNode() : Node("simple_controller_node") {
 
-  this->setup();
   this->loadParameters();
+  this->setup();
 }
 
 
