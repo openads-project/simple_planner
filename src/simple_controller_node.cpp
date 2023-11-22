@@ -107,7 +107,7 @@ void SimpleControllerNode::loadParameters() {
 
   // load parameters
   try {
-    freq_ = this->get_parameter(kFreqParam).as_double();
+    frequency_ = this->get_parameter(kFreqParam).as_double();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kFreqParam.c_str());
     exit(EXIT_FAILURE);
@@ -282,7 +282,7 @@ double SimpleControllerNode::longitudinalControlStep(double current_velocity, do
 double SimpleControllerNode::lateralControlStep(double current_yaw, double target_yaw)
 {
   double previous_error = error_lat_;
-  error_lat = target_yaw - current_yaw;
+  error_lat_ = target_yaw - current_yaw;
   // restrict integral term to avoid integral windup
   error_lat_integral_ = std::max(-400.0, std::min(error_lat_integral_ + error_lat_, 400.0));
   error_lat_derivative_ = error_lat_ - previous_error;
