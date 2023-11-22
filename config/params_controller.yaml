@@ -1,0 +1,11 @@
+/**:
+  ros__parameters:
+    frequency: 100.0 # Hz
+    p_longitudinal: 0.206
+    i_longitudinal: 0.0206
+    d_longitudinal: 0.515
+    p_lateral: 0.9
+    i_lateral: 0.0
+    d_lateral: 0.0
+    lookahead_time_pid: 2 # s
+    use_sim_time: True

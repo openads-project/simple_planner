@@ -9,7 +9,7 @@
 
 
 /**
- * @brief Namespace for simple_planner package
+ * @brief Namespace for simple_controller
  *
  */
 namespace simple_controller {
@@ -20,10 +20,15 @@ namespace simple_controller {
 // constants
 const std::string SimpleControllerNode::kEgoDataTopic = "~/ego_data_topic";
 const std::string SimpleControllerNode::kTrajectoryTopic = "~/trajectory_topic";
-const std::string SimpleControllerNode::kOutputPose = "/carla/ego_vehicle/control/set_transform";
-const std::string SimpleControllerNode::kOutputTwist = "/carla/ego_vehicle/control/set_target_velocity";
 const std::string SimpleControllerNode::kOutputCtrl = "/carla/ego_vehicle/vehicle_control_cmd";
-
+const std::string SimpleControllerNode::kFreqParam = "frequency";
+const std::string SimpleControllerNode::kPLongParam = "p_longitudinal";
+const std::string SimpleControllerNode::kILongParam = "i_longitudinal";
+const std::string SimpleControllerNode::kDLongParam = "d_longitudinal";
+const std::string SimpleControllerNode::kPLatParam = "p_lateral";
+const std::string SimpleControllerNode::kILatParam = "i_lateral";
+const std::string SimpleControllerNode::kDLatParam = "d_lateral";
+const std::string SimpleControllerNode::kLookaheadTime = "lookahead_time_pid";
 
 /**
  * @brief Creates a SimpleControllerNode node
@@ -32,6 +37,7 @@ const std::string SimpleControllerNode::kOutputCtrl = "/carla/ego_vehicle/vehicl
 SimpleControllerNode::SimpleControllerNode() : Node("simple_controller_node") {
 
   this->setup();
+  this->loadParameters();
 }
 
 
@@ -40,9 +46,6 @@ SimpleControllerNode::SimpleControllerNode() : Node("simple_controller_node") {
  *
  */
 void SimpleControllerNode::setup() {
-
-  // tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-  // tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
 
   // create subscriber for egoData
   sub_egoData_ =
@@ -58,24 +61,100 @@ void SimpleControllerNode::setup() {
       std::bind(&SimpleControllerNode::trajectoryCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_trajectory_->get_topic_name());
 
-  // create publisher for Pose and Twist (pass to carla topics)
-  // pub_pose_ = this->create_publisher<geometry_msgs::msg::Pose>(kOutputPose, 10);
-  // RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_pose_->get_topic_name());
-  // pub_twist_ = this->create_publisher<geometry_msgs::msg::Twist>(kOutputTwist, 10);
-  // RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_twist_->get_topic_name());
-
   // create publisher for Ego Vehicle Control message (pass to carla topic)
   pub_ctrl_ = this->create_publisher<carla_msgs::msg::CarlaEgoVehicleControl>(kOutputCtrl, 10);
 
-  pub_duration_ = 1.0/100.0;
-
   publish_timer_ =
-    this->create_wall_timer(std::chrono::duration<double>(pub_duration_),
+    this->create_wall_timer(std::chrono::duration<double>(1.0/frequency_),
                             std::bind(&SimpleControllerNode::publishTimerCallback,
                             this));
-
+  RCLCPP_INFO(this->get_logger(), "Publishing vehicle control messages at '%f' hz", frequency_);
 }
 
+/**
+ * @brief Loads ROS parameters used in the node.
+ *
+ */
+void SimpleControllerNode::loadParameters() {
+
+  // set parameter descriptions
+  rcl_interfaces::msg::ParameterDescriptor freq_param_desc;
+  freq_param_desc.description = "frequency of published control actions";
+  rcl_interfaces::msg::ParameterDescriptor p_longitudinal_param_desc;
+  p_longitudinal_param_desc.description = "P-Factor of the longitudinal PID controller";
+  rcl_interfaces::msg::ParameterDescriptor i_longitudinal_param_desc;
+  i_longitudinal_param_desc.description = "I-Factor of the longitudinal PID controller";
+  rcl_interfaces::msg::ParameterDescriptor d_longitudinal_param_desc;
+  d_longitudinal_param_desc.description = "D-Factor of the longitudinal PID controller";
+  rcl_interfaces::msg::ParameterDescriptor p_lateral_param_desc;
+  p_lateral_param_desc.description = "P-Factor of the lateral PID controller";
+  rcl_interfaces::msg::ParameterDescriptor i_lateral_param_desc;
+  i_lateral_param_desc.description = "I-Factor of the lateral PID controller";
+  rcl_interfaces::msg::ParameterDescriptor d_lateral_param_desc;
+  d_lateral_param_desc.description = "D-Factor of the lateral PID controller";
+  rcl_interfaces::msg::ParameterDescriptor lookahead_time_param_desc;
+  lookahead_time_param_desc.description = "Lookahead time of both PID controllers";
+
+  // declare parameters
+  this->declare_parameter(kFreqParam, rclcpp::ParameterType::PARAMETER_DOUBLE, freq_param_desc);
+  this->declare_parameter(kPLongParam, rclcpp::ParameterType::PARAMETER_DOUBLE, p_longitudinal_param_desc);
+  this->declare_parameter(kILongParam, rclcpp::ParameterType::PARAMETER_DOUBLE, i_longitudinal_param_desc);
+  this->declare_parameter(kDLongParam, rclcpp::ParameterType::PARAMETER_DOUBLE, d_longitudinal_param_desc);
+  this->declare_parameter(kPLatParam, rclcpp::ParameterType::PARAMETER_DOUBLE, p_lateral_param_desc);
+  this->declare_parameter(kILatParam, rclcpp::ParameterType::PARAMETER_DOUBLE, i_lateral_param_desc);
+  this->declare_parameter(kDLatParam, rclcpp::ParameterType::PARAMETER_DOUBLE, d_lateral_param_desc);
+  this->declare_parameter(kLookaheadTime, rclcpp::ParameterType::PARAMETER_DOUBLE, lookahead_time_param_desc);
+
+  // load parameters
+  try {
+    freq_ = this->get_parameter(kFreqParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kFreqParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    p_long_ = this->get_parameter(kPLongParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kPLongParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    i_long_ = this->get_parameter(kILongParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kILongParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    d_long_ = this->get_parameter(kDLongParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kDLongParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    p_lat_ = this->get_parameter(kPLatParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kPLatParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    i_lat_ = this->get_parameter(kILatParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kILatParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    d_lat_ = this->get_parameter(kDLatParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kDLatParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    lookahead_time_ = this->get_parameter(kLookaheadTime).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kLookaheadTime.c_str());
+    exit(EXIT_FAILURE);
+  }
+}
 
 /**
  * @brief This callback is invoked when the subscriber receives a new egoData message
@@ -123,155 +202,92 @@ void SimpleControllerNode::publishTimerCallback() {
 }
 
 void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::msg::Trajectory tra) {
+  if (!trajectory_interfaces::trajectory_access::getStandstill(tra)) {
+    double des_time = (now() - tra.header.stamp).seconds() + lookahead_time_;
+    double v_tgt;
+    double x_tgt;
+    double y_tgt;
+    double theta_tgt;
 
-  double des_time = (now() - tra.header.stamp).seconds() + 2;
-  double v_tgt;
-  double x_tgt;
-  double y_tgt;
-  double theta_tgt;
+    // Derive State Vectors
+    std::vector<double> TIME, V, X, Y, THETA;
+    int n_samples = trajectory_interfaces::trajectory_access::getSamplePointSize(tra);
+    for(int i=0; i<n_samples; i++){
+      TIME.push_back(trajectory_interfaces::trajectory_access::getT(tra, i));
+      V.push_back(trajectory_interfaces::trajectory_access::getV(tra, i));
+      X.push_back(trajectory_interfaces::trajectory_access::getX(tra, i));
+      Y.push_back(trajectory_interfaces::trajectory_access::getY(tra, i));
+      THETA.push_back(trajectory_interfaces::trajectory_access::getTheta(tra, i));
+    }
 
-  // Derive State Vectors
-  std::vector<double> TIME, V, X, Y, THETA;
-  int n_samples = trajectory_interfaces::trajectory_access::getSamplePointSize(tra);
-  for(int i=0; i<n_samples; i++){
-    TIME.push_back(trajectory_interfaces::trajectory_access::getT(tra, i));
-    V.push_back(trajectory_interfaces::trajectory_access::getV(tra, i));
-    X.push_back(trajectory_interfaces::trajectory_access::getX(tra, i));
-    Y.push_back(trajectory_interfaces::trajectory_access::getY(tra, i));
-    THETA.push_back(trajectory_interfaces::trajectory_access::getTheta(tra, i));
-  }
+    // Interpolate target states by time
+    if(!linearInterpolation(TIME, V, des_time, v_tgt)) return;
+    if(!linearInterpolation(TIME, X, des_time, x_tgt)) return;
+    if(!linearInterpolation(TIME, Y, des_time, y_tgt)) return;
+    if(!linearInterpolation(TIME, THETA, des_time, theta_tgt)) return;
 
-  // Interpolate target states by time
-  if(!linearInterpolation(TIME, V, des_time, v_tgt)) return;
-  if(!linearInterpolation(TIME, X, des_time, x_tgt)) return;
-  if(!linearInterpolation(TIME, Y, des_time, y_tgt)) return;
-  if(!linearInterpolation(TIME, THETA, des_time, theta_tgt)) return;
+    // Publish steering angle and throttle/brake messages
+    carla_msgs::msg::CarlaEgoVehicleControl ctrl_msg;
 
+    // set header
+    ctrl_msg.header.stamp = trajectory_.header.stamp;
+    ctrl_msg.header.frame_id = "base_link";
 
-  // Implementation to publish steering angle and throttle/brake messages
-  carla_msgs::msg::CarlaEgoVehicleControl ctrl_msg;
+    // fetch current ego pose
+    geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
 
-  // set header
-  ctrl_msg.header.stamp = trajectory_.header.stamp;
-  ctrl_msg.header.frame_id = "base_link";
+    // set longitudinal control (throttle and brake)
+    double long_output = longitudinalControlStep(perception_interfaces::object_access::getVelocityMagnitude(ego_data_), v_tgt);
 
-  // fetch current ego pose
-  geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
+    if (long_output >= 0.0){
+      ctrl_msg.throttle = long_output;
+      ctrl_msg.brake = 0.0;
+    }
+    else {
+      ctrl_msg.throttle = 0.0;
+      ctrl_msg.brake = (-1) * long_output;
+    }
 
-  // set longitudinal control (throttle and brake)
-  double long_output = longitudinalControlStep(perception_interfaces::object_access::getVelocityMagnitude(ego_data_), v_tgt);
+    // set lateral control (steering angle)
+    double target_yaw = std::atan2(y_tgt, x_tgt); // Yaw angle to get to the target from current ego pose, NOT yaw angle of target pose!
+    double lat_output = lateralControlStep(0.0, target_yaw);
+    ctrl_msg.steer = -lat_output;
 
-  if (long_output >= 0.0){
-    ctrl_msg.throttle = long_output;
-    ctrl_msg.brake = 0.0;
+    RCLCPP_DEBUG(this->get_logger(), "Computed longitudinal and lateral control:   throttle: %f    brake: %f    steering: %f ", ctrl_msg.throttle, ctrl_msg.brake, ctrl_msg.steer);
+
+    // set other states that are not relevant
+    ctrl_msg.hand_brake = false;
+    ctrl_msg.reverse = false;
+    ctrl_msg.manual_gear_shift = false;
+
+    // publish control message
+    pub_ctrl_->publish(ctrl_msg);
   }
   else {
-    ctrl_msg.throttle = 0.0;
-    ctrl_msg.brake = (-1) * long_output;
+    // reached final destination (standstill = true), no control messages should be published
   }
-
-  // set lateral control (steering angle)
-  double target_yaw = std::atan2(y_tgt, x_tgt); // Yaw angle to get to the target from current ego pose, NOT yaw angle of target pose!
-  double lat_output = lateralControlStep(0.0, target_yaw);
-  ctrl_msg.steer = -lat_output;
-
-  RCLCPP_DEBUG(this->get_logger(), "Computed longitudinal and lateral control:   throttle: %f    brake: %f    steering: %f ", ctrl_msg.throttle, ctrl_msg.brake, ctrl_msg.steer);
-
-  // set other states that are not relevant
-  ctrl_msg.hand_brake = false;
-  ctrl_msg.reverse = false;
-  ctrl_msg.manual_gear_shift = false;
-
-  // publish control message
-  pub_ctrl_->publish(ctrl_msg);
-
-
-  // Implementation to publish pose and twist messages
-  
-  // // Wrap interpolations into pose
-  // geometry_msgs::msg::PoseStamped pose_bl;
-  // pose_bl.header.stamp = trajectory_.header.stamp;
-  // pose_bl.header.frame_id = "base_link";
-  // pose_bl.pose.position.x = x_tgt;
-  // pose_bl.pose.position.y = y_tgt;
-
-  // // Set yaw for target pose (in base_link frame)
-  // tf2::Quaternion quat_tf;
-  // quat_tf.setRPY(0, 0, theta_tgt);
-  // pose_bl.pose.orientation = tf2::toMsg(quat_tf);
-
-  // // Get transform from base_link to carla_map frame
-  // auto timeout = rclcpp::Duration::from_seconds(1.0);
-  // geometry_msgs::msg::TransformStamped base_link_to_carla_map_tf;
-  // try {
-  //   base_link_to_carla_map_tf = tf2_buffer_->lookupTransform("carla_map", pose_bl.header.frame_id, pose_bl.header.stamp, timeout);
-  // } catch (tf2::TransformException& ex) {
-  //   RCLCPP_WARN(this->get_logger(), "Tranformation from %s to 'carla_map' is not available", pose_bl.header.frame_id.c_str());
-  //   return;
-  // }
-
-  // // Transform pose from base_link to carla_map frame
-  // geometry_msgs::msg::PoseStamped pose_map;
-  // tf2::doTransform(pose_bl, pose_map, base_link_to_carla_map_tf);
-
-  // // Set velocity of pose by backward differences
-  // geometry_msgs::msg::Twist twist;
-  // if (!recent_pose_init_) {
-  //   // If no recent pose exists, set velocity to zero (only for very first pose)
-  //   twist.linear.x = 0;
-  //   twist.linear.y = 0;
-  //   twist.linear.z = 0;
-  //   twist.angular.x = 0;
-  //   twist.angular.y = 0;
-  //   twist.angular.z = 0;
-  //   recent_pose_init_ = true;
-  // }
-  // else {
-  //   // Take backwards differences to derive estimated velocites (only set v_x, v_y and yaw rate)
-  //   twist.linear.x = (pose_map.pose.position.x - recent_pose_.position.x) / pub_duration_; // v_x
-  //   twist.linear.y = (pose_map.pose.position.y - recent_pose_.position.y) / pub_duration_; // v_y
-  //   twist.linear.z = 0;
-
-  //   twist.angular.x = 0;
-  //   twist.angular.y = 0;
-  //   double current_roll, current_pitch, current_yaw, recent_roll, recent_pitch, recent_yaw;
-  //   tf2::Quaternion q_current(pose_map.pose.orientation.x, pose_map.pose.orientation.y, pose_map.pose.orientation.z, pose_map.pose.orientation.w);
-  //   tf2::Matrix3x3 m_current(q_current);
-  //   m_current.getRPY(current_roll, current_pitch, current_yaw);
-  //   tf2::Quaternion q_recent(recent_pose_.orientation.x, recent_pose_.orientation.y, recent_pose_.orientation.z, recent_pose_.orientation.w);
-  //   tf2::Matrix3x3 m_recent(q_recent);
-  //   m_recent.getRPY(recent_roll, recent_pitch, recent_yaw);
-  //   twist.angular.z = (current_yaw - recent_yaw) / pub_duration_ ; // yaw rate
-  // }  
-
-  // // Publish pose and twist to carla
-  // pub_pose_->publish(pose_map.pose);
-  // recent_pose_ = pose_map.pose;
-  // pub_twist_->publish(twist);
-  // RCLCPP_DEBUG(this->get_logger(), "Published pose and twist to Carla!");
 }
 
 double SimpleControllerNode::longitudinalControlStep(double current_velocity, double target_velocity)
 {
-  double previous_error = error_long;
-  error_long = target_velocity - current_velocity;
+  double previous_error = error_long_;
+  error_long_ = target_velocity - current_velocity;
   // restrict integral term to avoid integral windup
-  error_long_integral = std::max(-40.0, std::min(error_long_integral + error_long, 40.0));
-  error_long_derivative = error_long - previous_error;
-  double output = p_long * error_long + i_long * error_long_integral + d_long * error_long_derivative;
+  error_long_integral_ = std::max(-40.0, std::min(error_long_integral_ + error_long_, 40.0));
+  error_long_derivative_ = error_long_ - previous_error;
+  double output = p_long_ * error_long_ + i_long_ * error_long_integral_ + d_long_ * error_long_derivative_;
   return std::max(-1.0, std::min(output, 1.0));
 }
 
 double SimpleControllerNode::lateralControlStep(double current_yaw, double target_yaw)
 {
-  double previous_error = error_lat;
+  double previous_error = error_lat_;
   error_lat = target_yaw - current_yaw;
   // restrict integral term to avoid integral windup
-  error_lat_integral = std::max(-400.0, std::min(error_lat_integral + error_lat, 400.0));
-  error_lat_derivative = error_lat - previous_error;
-  double output = p_lat * error_lat + i_lat * error_lat_integral + d_lat * error_lat_derivative;
+  error_lat_integral_ = std::max(-400.0, std::min(error_lat_integral_ + error_lat_, 400.0));
+  error_lat_derivative_ = error_lat_ - previous_error;
+  double output = p_lat_ * error_lat_ + i_lat_ * error_lat_integral_ + d_lat_ * error_lat_derivative_;
   return std::max(-1.0, std::min(output, 1.0));
-
 }
 
 bool SimpleControllerNode::linearInterpolation(const std::vector<double>& X, const std::vector<double>& Y, const double& desired_x, double& output_y)
@@ -279,14 +295,14 @@ bool SimpleControllerNode::linearInterpolation(const std::vector<double>& X, con
   if (desired_x < *min_element(X.begin(), X.end()) || desired_x > *max_element(X.begin(), X.end()))
   {
     RCLCPP_ERROR(get_logger(), "Desired Time is not in between of Time-Min and Time-Max of the given vector!");
-    RCLCPP_ERROR(get_logger(), "Desired Time: %f s", desired_x);
-    RCLCPP_ERROR(get_logger(), "Time-Min: %f s", *min_element(X.begin(), X.end()));
-    RCLCPP_ERROR(get_logger(), "Time-Max: %f s", *max_element(X.begin(), X.end()));
+    RCLCPP_DEBUG(get_logger(), "Desired Time: %f s", desired_x);
+    RCLCPP_DEBUG(get_logger(), "Time-Min: %f s", *min_element(X.begin(), X.end()));
+    RCLCPP_DEBUG(get_logger(), "Time-Max: %f s", *max_element(X.begin(), X.end()));
     return false;
   }
   if(X.size() != Y.size())
   {
-    RCLCPP_ERROR_STREAM(get_logger(), "Input vectors don't have the same length!");
+    RCLCPP_ERROR(get_logger(), "Input vectors don't have the same length!");
     return false;
   }
 

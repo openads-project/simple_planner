@@ -29,13 +29,20 @@ class SimpleControllerNode : public rclcpp::Node {
 
   static const std::string kEgoDataTopic;
   static const std::string kTrajectoryTopic;
-  static const std::string kOutputPose;
-  static const std::string kOutputTwist;
   static const std::string kOutputCtrl;
+  static const std::string kFreqParam;
+  static const std::string kPLongParam;
+  static const std::string kILongParam;
+  static const std::string kDLongParam;
+  static const std::string kPLatParam;
+  static const std::string kILatParam;
+  static const std::string kDLatParam;
+  static const std::string kLookaheadTime;
 
  private:
 
   void setup();
+  void loadParameters();
 
   void egoDataCallback(const perception_interfaces::msg::EgoData::UniquePtr msg);
   void trajectoryCallback(const trajectory_interfaces::msg::Trajectory::UniquePtr msg);
@@ -49,14 +56,8 @@ class SimpleControllerNode : public rclcpp::Node {
 
  private:
 
-  // std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
-  // std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
-
   rclcpp::Subscription<perception_interfaces::msg::EgoData>::SharedPtr sub_egoData_;
   rclcpp::Subscription<trajectory_interfaces::msg::Trajectory>::SharedPtr sub_trajectory_;
-
-  // rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr pub_pose_;
-  // rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr pub_twist_;
 
   rclcpp::Publisher<carla_msgs::msg::CarlaEgoVehicleControl>::SharedPtr pub_ctrl_;
 
@@ -65,34 +66,34 @@ class SimpleControllerNode : public rclcpp::Node {
   perception_interfaces::msg::EgoData ego_data_;
   trajectory_interfaces::msg::Trajectory trajectory_;
 
-  double pub_duration_;
-  // geometry_msgs::msg::Pose recent_pose_;
+  double frequency_;
   
   bool ego_data_init_ = false;
   bool trajectory_init_ = false;
-  // bool recent_pose_init_ = false; 
 
 
   // PID Controller
   
   // Longitudinal Controller Parameters:
-  double p_long = 0.206;
-  double i_long = 0.0206;
-  double d_long = 0.515;
+  double p_long_;
+  double i_long_;
+  double d_long_;
 
   // Lateral Controller Parameters:
-  double p_lat = 0.9;
-  double i_lat = 0.0;
-  double d_lat = 0.0;
+  double p_lat_;
+  double i_lat_;
+  double d_lat_;
 
   // PID Controller state variables
-  double error_long = 0.0;
-  double error_long_integral = 0.0;
-  double error_long_derivative = 0.0;
-  double error_lat = 0.0;
-  double error_lat_integral = 0.0;
-  double error_lat_derivative = 0.0;
+  double error_long_ = 0.0;
+  double error_long_integral_ = 0.0;
+  double error_long_derivative_ = 0.0;
+  double error_lat_ = 0.0;
+  double error_lat_integral_ = 0.0;
+  double error_lat_derivative_ = 0.0;
 
+  // PID Controller lookahead time
+  double lookahead_time_; // s
 };
 
 
