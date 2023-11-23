@@ -192,10 +192,19 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
   }
   route_planning_interfaces::msg::Route route;
   tf2::doTransform(route_, route, tf);
-
   std::vector<geometry_msgs::msg::Point> path = route.shortest_path;
+  bool validPath = true;
   while(path[0].x < 0.0) {
     path.erase(path.begin());
+    if (path.size() <= 1){
+      path.erase(path.begin(), path.end());
+      // push back three empty points to fill with zeros later
+      path.push_back(geometry_msgs::msg::Point());
+      path.push_back(geometry_msgs::msg::Point());
+      path.push_back(geometry_msgs::msg::Point());
+      validPath = false;
+      break;
+    }
   }
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
   geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
@@ -203,31 +212,53 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
   double current_speed_limit = route.current_speed_limit/3.6;
 
   trajectory_interfaces::msg::Trajectory tra;
-  int type_id = drivable_mode_ ? trajectory_interfaces::DRIVABLE::TYPE_ID : trajectory_interfaces::REFERENCE::TYPE_ID;
-  trajectory_interfaces::trajectory_access::initializeTrajectory(tra, type_id, path.size());
-  tra.header.stamp = now();
-  tra.header.frame_id = "base_link";
-
-  for (int i = 0; i < path.size(); i++) {
-    trajectory_interfaces::trajectory_access::setT(tra, calcDistance(path, i)/3.0, i);
-    trajectory_interfaces::trajectory_access::setX(tra, path[i].x, i);
-    trajectory_interfaces::trajectory_access::setY(tra, path[i].y, i);
-    trajectory_interfaces::trajectory_access::setV(tra, 3.0, i);
-    if (drivable_mode_) {
-      trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
-      trajectory_interfaces::trajectory_access::setTheta(tra, calcTheta(path, i), i);
-      // TODO: setA, setKappa, setDkappa
+  if (!validPath){
+    int type_id = drivable_mode_ ? trajectory_interfaces::DRIVABLE::TYPE_ID : trajectory_interfaces::REFERENCE::TYPE_ID;
+    trajectory_interfaces::trajectory_access::initializeTrajectory(tra, type_id, path.size());
+    tra.header.stamp = now();
+    tra.header.frame_id = "base_link";
+    for (int i = 0; i < path.size(); i++) {
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+      trajectory_interfaces::trajectory_access::setT(tra, (double)i, i);
+      trajectory_interfaces::trajectory_access::setX(tra, 0.0, i);
+      trajectory_interfaces::trajectory_access::setY(tra, 0.0, i);
+      trajectory_interfaces::trajectory_access::setV(tra, 0.0, i);
+      if (drivable_mode_) {
+        trajectory_interfaces::trajectory_access::setS(tra, 0.0, i);
+        trajectory_interfaces::trajectory_access::setTheta(tra, 0.0, i);
+        // TODO: setA, setKappa, setDkappa
+      }
     }
+    trajectory_interfaces::trajectory_access::setStandstill(tra, true);
+  }
+  else {
+    int type_id = drivable_mode_ ? trajectory_interfaces::DRIVABLE::TYPE_ID : trajectory_interfaces::REFERENCE::TYPE_ID;
+    trajectory_interfaces::trajectory_access::initializeTrajectory(tra, type_id, path.size());
+    tra.header.stamp = now();
+    tra.header.frame_id = "base_link";
+    for (int i = 0; i < path.size(); i++) {
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+      trajectory_interfaces::trajectory_access::setT(tra, calcDistance(path, i)/3.0, i);
+      trajectory_interfaces::trajectory_access::setX(tra, path[i].x, i);
+      trajectory_interfaces::trajectory_access::setY(tra, path[i].y, i);
+      trajectory_interfaces::trajectory_access::setV(tra, 3.0, i);
+      if (drivable_mode_) {
+        trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
+        trajectory_interfaces::trajectory_access::setTheta(tra, calcTheta(path, i), i);
+        // TODO: setA, setKappa, setDkappa
+      }
+    }
+    trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(route.target_position));
   }
 
-  trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(route.target_position));
+  RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
   return tra;
 }
 
 bool SimplePlannerNode::isDestinationReached(const geometry_msgs::msg::Point& destination) {
   double distance = sqrt(pow(destination.x, 2) + pow(destination.y, 2));
-  RCLCPP_WARN(this->get_logger(), "Distance to goal: %f", distance);
-  return distance < 0.5;
+  RCLCPP_DEBUG(this->get_logger(), "Distance to goal: %f", distance);
+  return distance < 2.0;
 }
 
 double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint) {

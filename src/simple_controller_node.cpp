@@ -203,7 +203,22 @@ void SimpleControllerNode::publishTimerCallback() {
 
 void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::msg::Trajectory tra) {
   if (!trajectory_interfaces::trajectory_access::getStandstill(tra)) {
-    double des_time = (now() - tra.header.stamp).seconds() + lookahead_time_;
+
+    int n_samples = trajectory_interfaces::trajectory_access::getSamplePointSize(tra);
+
+    double lookahead_time_current_step = lookahead_time_;
+
+    while (trajectory_interfaces::trajectory_access::getT(tra, n_samples - 1) < ((now() - tra.header.stamp).seconds() + lookahead_time_current_step))
+    {
+      lookahead_time_current_step = lookahead_time_current_step/2;
+      if (lookahead_time_current_step < 0.01){
+        break; // Current time exceeds planned trajectory even with no lookahead, interpolation will throw an error
+      }
+    }
+
+    RCLCPP_DEBUG(this->get_logger(), "Lookahead time: %f ", lookahead_time_current_step);
+
+    double des_time = (now() - tra.header.stamp).seconds() + lookahead_time_current_step;
     double v_tgt;
     double x_tgt;
     double y_tgt;
@@ -211,7 +226,6 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
 
     // Derive State Vectors
     std::vector<double> TIME, V, X, Y, THETA;
-    int n_samples = trajectory_interfaces::trajectory_access::getSamplePointSize(tra);
     for(int i=0; i<n_samples; i++){
       TIME.push_back(trajectory_interfaces::trajectory_access::getT(tra, i));
       V.push_back(trajectory_interfaces::trajectory_access::getV(tra, i));
