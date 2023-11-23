@@ -220,12 +220,13 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
     }
   }
 
-  trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(current_pose, route.target_position));
+  trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(route.target_position));
   return tra;
 }
 
-bool SimplePlannerNode::isDestinationReached(const geometry_msgs::msg::Pose& current_pose, const geometry_msgs::msg::Point& destination) {
-  double distance = sqrt(pow(current_pose.position.x - destination.x, 2) + pow(current_pose.position.y - destination.y, 2));
+bool SimplePlannerNode::isDestinationReached(const geometry_msgs::msg::Point& destination) {
+  double distance = sqrt(pow(destination.x, 2) + pow(destination.y, 2));
+  RCLCPP_WARN(this->get_logger(), "Distance to goal: %f", distance);
   return distance < 0.5;
 }
 

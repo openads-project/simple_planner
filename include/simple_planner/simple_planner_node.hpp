@@ -47,7 +47,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   trajectory_interfaces::msg::Trajectory createTrajectory();
   trajectory_interfaces::msg::Trajectory createDemoTrajectory();
-  bool isDestinationReached(const geometry_msgs::msg::Pose& current_pose, const geometry_msgs::msg::Point& destination);
+  bool isDestinationReached(const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
   double calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
 
