@@ -49,14 +49,14 @@ void SimpleControllerNode::setup() {
 
   // create subscriber for egoData
   sub_egoData_ =
-    this->create_subscription<perception_interfaces::msg::EgoData>(
+    this->create_subscription<perception_msgs::msg::EgoData>(
       kEgoDataTopic, 10,
       std::bind(&SimpleControllerNode::egoDataCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_egoData_->get_topic_name());
 
   // create subscriber for Trajectory
   sub_trajectory_ =
-    this->create_subscription<trajectory_interfaces::msg::Trajectory>(
+    this->create_subscription<trajectory_planning_msgs::msg::Trajectory>(
       kTrajectoryTopic, 10,
       std::bind(&SimpleControllerNode::trajectoryCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_trajectory_->get_topic_name());
@@ -162,7 +162,7 @@ void SimpleControllerNode::loadParameters() {
  * @param[in] msg   egoData
  */
 void SimpleControllerNode::egoDataCallback(
-  const perception_interfaces::msg::EgoData::UniquePtr msg) {
+  const perception_msgs::msg::EgoData::UniquePtr msg) {
 
   ego_data_ = *msg;
 
@@ -178,7 +178,7 @@ void SimpleControllerNode::egoDataCallback(
  * @param[in] msg   trajectory
  */
 void SimpleControllerNode::trajectoryCallback(
-  const trajectory_interfaces::msg::Trajectory::UniquePtr msg) {
+  const trajectory_planning_msgs::msg::Trajectory::UniquePtr msg) {
 
   trajectory_ = *msg;
 
@@ -201,14 +201,14 @@ void SimpleControllerNode::publishTimerCallback() {
   trajectoryToCarlaCtrl(trajectory_);
 }
 
-void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::msg::Trajectory tra) {
-  if (!trajectory_interfaces::trajectory_access::getStandstill(tra)) {
+void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_planning_msgs::msg::Trajectory tra) {
+  if (!trajectory_planning_msgs::trajectory_access::getStandstill(tra)) {
 
-    int n_samples = trajectory_interfaces::trajectory_access::getSamplePointSize(tra);
+    int n_samples = trajectory_planning_msgs::trajectory_access::getSamplePointSize(tra);
 
     double lookahead_time_current_step = lookahead_time_;
 
-    while (trajectory_interfaces::trajectory_access::getT(tra, n_samples - 1) < ((now() - tra.header.stamp).seconds() + lookahead_time_current_step))
+    while (trajectory_planning_msgs::trajectory_access::getT(tra, n_samples - 1) < ((now() - tra.header.stamp).seconds() + lookahead_time_current_step))
     {
       lookahead_time_current_step = lookahead_time_current_step/2;
       if (lookahead_time_current_step < 0.01){
@@ -227,11 +227,11 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
     // Derive State Vectors
     std::vector<double> TIME, V, X, Y, THETA;
     for(int i=0; i<n_samples; i++){
-      TIME.push_back(trajectory_interfaces::trajectory_access::getT(tra, i));
-      V.push_back(trajectory_interfaces::trajectory_access::getV(tra, i));
-      X.push_back(trajectory_interfaces::trajectory_access::getX(tra, i));
-      Y.push_back(trajectory_interfaces::trajectory_access::getY(tra, i));
-      THETA.push_back(trajectory_interfaces::trajectory_access::getTheta(tra, i));
+      TIME.push_back(trajectory_planning_msgs::trajectory_access::getT(tra, i));
+      V.push_back(trajectory_planning_msgs::trajectory_access::getV(tra, i));
+      X.push_back(trajectory_planning_msgs::trajectory_access::getX(tra, i));
+      Y.push_back(trajectory_planning_msgs::trajectory_access::getY(tra, i));
+      THETA.push_back(trajectory_planning_msgs::trajectory_access::getTheta(tra, i));
     }
 
     // Interpolate target states by time
@@ -248,10 +248,10 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
     ctrl_msg.header.frame_id = "base_link";
 
     // fetch current ego pose
-    geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
+    geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
 
     // set longitudinal control (throttle and brake)
-    double long_output = longitudinalControlStep(perception_interfaces::object_access::getVelocityMagnitude(ego_data_), v_tgt);
+    double long_output = longitudinalControlStep(perception_msgs::object_access::getVelocityMagnitude(ego_data_), v_tgt);
 
     if (long_output >= 0.0){
       ctrl_msg.throttle = long_output;
@@ -259,7 +259,8 @@ void SimpleControllerNode::trajectoryToCarlaCtrl(const trajectory_interfaces::ms
     }
     else {
       ctrl_msg.throttle = 0.0;
-      ctrl_msg.brake = (-1) * long_output;
+      ctrl_msg.brake = 0.0;
+      // ctrl_msg.brake = (-1) * long_output;
     }
 
     // set lateral control (steering angle)
@@ -296,6 +297,7 @@ double SimpleControllerNode::longitudinalControlStep(double current_velocity, do
 {
   double previous_error = error_long_;
   error_long_ = target_velocity - current_velocity;
+  RCLCPP_WARN(get_logger(), "LongControl: currentVel: %f     targetVel: %f     currentError: %f    prevError: %f ", current_velocity, target_velocity, error_long_, previous_error);
   // restrict integral term to avoid integral windup
   error_long_integral_ = std::max(-40.0, std::min(error_long_integral_ + error_long_, 40.0));
   error_long_derivative_ = error_long_ - previous_error;

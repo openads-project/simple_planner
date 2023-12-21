@@ -2,11 +2,11 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include <perception_interfaces/msg/ego_data.hpp>
-#include <perception_interfaces/object_access.hpp>
+#include <perception_msgs/msg/ego_data.hpp>
+#include <perception_msgs_utils/object_access.hpp>
 
-#include <trajectory_interfaces/msg/trajectory.hpp>
-#include <trajectory_interfaces/trajectory_access.hpp>
+#include <trajectory_planning_msgs/msg/trajectory.hpp>
+#include <trajectory_planning_msgs_utils/trajectory_access.hpp>
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -44,27 +44,27 @@ class SimpleControllerNode : public rclcpp::Node {
   void setup();
   void loadParameters();
 
-  void egoDataCallback(const perception_interfaces::msg::EgoData::UniquePtr msg);
-  void trajectoryCallback(const trajectory_interfaces::msg::Trajectory::UniquePtr msg);
+  void egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg);
+  void trajectoryCallback(const trajectory_planning_msgs::msg::Trajectory::UniquePtr msg);
   void publishTimerCallback();
 
   double longitudinalControlStep(double current_velocity, double target_velocity);
   double lateralControlStep(double current_yaw, double target_yaw);
 
-  void trajectoryToCarlaCtrl(trajectory_interfaces::msg::Trajectory tra);
+  void trajectoryToCarlaCtrl(trajectory_planning_msgs::msg::Trajectory tra);
   bool linearInterpolation(const std::vector<double>& X, const std::vector<double>& Y, const double& desired_x, double& output_y);
 
  private:
 
-  rclcpp::Subscription<perception_interfaces::msg::EgoData>::SharedPtr sub_egoData_;
-  rclcpp::Subscription<trajectory_interfaces::msg::Trajectory>::SharedPtr sub_trajectory_;
+  rclcpp::Subscription<perception_msgs::msg::EgoData>::SharedPtr sub_egoData_;
+  rclcpp::Subscription<trajectory_planning_msgs::msg::Trajectory>::SharedPtr sub_trajectory_;
 
   rclcpp::Publisher<carla_msgs::msg::CarlaEgoVehicleControl>::SharedPtr pub_ctrl_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
-  perception_interfaces::msg::EgoData ego_data_;
-  trajectory_interfaces::msg::Trajectory trajectory_;
+  perception_msgs::msg::EgoData ego_data_;
+  trajectory_planning_msgs::msg::Trajectory trajectory_;
 
   double frequency_;
   

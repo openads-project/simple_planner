@@ -80,25 +80,25 @@ void SimplePlannerNode::setup() {
 
   // create subscriber for egoData
   sub_egoData_ =
-    this->create_subscription<perception_interfaces::msg::EgoData>(
+    this->create_subscription<perception_msgs::msg::EgoData>(
       kEgoDataTopic, 10,
       std::bind(&SimplePlannerNode::egoDataCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_egoData_->get_topic_name());
   
   // create subscriber for route
   sub_route_ =
-    this->create_subscription<route_planning_interfaces::msg::Route>(
+    this->create_subscription<route_planning_msgs::msg::Route>(
       kRouteTopic, 10,
       std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
   // create a publisher for publishing output trajectory
-  pub_ = this->create_publisher<trajectory_interfaces::msg::Trajectory>(
+  pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(
     kOutputTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
 
   // create a publisher for demo trajectory
-  pub_demo_ = this->create_publisher<trajectory_interfaces::msg::Trajectory>(
+  pub_demo_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(
     kDemoTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_demo_->get_topic_name());
 
@@ -124,7 +124,7 @@ void SimplePlannerNode::setup() {
  * @param[in] msg   egoData
  */
 void SimplePlannerNode::egoDataCallback(
-  const perception_interfaces::msg::EgoData::UniquePtr msg) {
+  const perception_msgs::msg::EgoData::UniquePtr msg) {
 
   ego_data_ = *msg;
   
@@ -140,7 +140,7 @@ void SimplePlannerNode::egoDataCallback(
  * @param[in] msg   route
  */
 void SimplePlannerNode::routeCallback(
-  const route_planning_interfaces::msg::Route::UniquePtr msg) {
+  const route_planning_msgs::msg::Route::UniquePtr msg) {
 
   route_ = *msg;
 
@@ -150,10 +150,10 @@ void SimplePlannerNode::routeCallback(
   }
 }
 
-trajectory_interfaces::msg::Trajectory SimplePlannerNode::createDemoTrajectory() {
+trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createDemoTrajectory() {
 
-  trajectory_interfaces::msg::Trajectory tra;
-  trajectory_interfaces::trajectory_access::initializeTrajectory(tra, trajectory_interfaces::DRIVABLE::TYPE_ID, 5);
+  trajectory_planning_msgs::msg::Trajectory tra;
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, trajectory_planning_msgs::DRIVABLE::TYPE_ID, 5);
   tra.header.stamp = now();
   tra.header.frame_id = "base_link";
 
@@ -167,22 +167,22 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createDemoTrajectory()
   // t,60,-60,3,-1.5708,0,0,0,98.54
 
   std::vector<double> state0 = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
-  trajectory_interfaces::trajectory_access::setState(tra, state0, 0);
+  trajectory_planning_msgs::trajectory_access::setState(tra, state0, 0);
   std::vector<double> state1 = {10.0/3.0,10.0,0.0,3.0,0.0,0.0,0.0,0.0,10.0};
-  trajectory_interfaces::trajectory_access::setState(tra, state1, 1);
+  trajectory_planning_msgs::trajectory_access::setState(tra, state1, 1);
   std::vector<double> state2 = {49.27/3.0,45.3553,-14.6447,3.0,-0.7854,0.0,0.02,0.02,49.27};
-  trajectory_interfaces::trajectory_access::setState(tra, state2, 2);
+  trajectory_planning_msgs::trajectory_access::setState(tra, state2, 2);
   std::vector<double> state3 = {88.54/3.0,60.0,-50.0,3.0,-1.5708,0.0,0.02,0.02,88.54};
-  trajectory_interfaces::trajectory_access::setState(tra, state3, 3);
+  trajectory_planning_msgs::trajectory_access::setState(tra, state3, 3);
   std::vector<double> state4 = {98.54/3.0,60.0,-60.0,3.0,-1.5708,0.0,0.0,0.0,98.54};
-  trajectory_interfaces::trajectory_access::setState(tra, state4, 4);
+  trajectory_planning_msgs::trajectory_access::setState(tra, state4, 4);
 
 
-  trajectory_interfaces::trajectory_access::setStandstill(tra, false);
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
   return tra;
 }
 
-trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
+trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
 
   geometry_msgs::msg::TransformStamped tf;
   try {
@@ -190,7 +190,7 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
   } catch (tf2::TransformException& ex) {
     RCLCPP_WARN(this->get_logger(), "Tranformation is not available");
   }
-  route_planning_interfaces::msg::Route route;
+  route_planning_msgs::msg::Route route;
   tf2::doTransform(route_, route, tf);
   std::vector<geometry_msgs::msg::Point> path = route.shortest_path;
   bool validPath = true;
@@ -207,48 +207,48 @@ trajectory_interfaces::msg::Trajectory SimplePlannerNode::createTrajectory() {
     }
   }
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
-  geometry_msgs::msg::Pose current_pose = perception_interfaces::object_access::getPose(ego_data_);
-  double current_velocity = perception_interfaces::object_access::getVelocityMagnitude(ego_data_);
+  geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
+  double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   double current_speed_limit = route.current_speed_limit/3.6;
 
-  trajectory_interfaces::msg::Trajectory tra;
+  trajectory_planning_msgs::msg::Trajectory tra;
   if (!validPath){
-    int type_id = drivable_mode_ ? trajectory_interfaces::DRIVABLE::TYPE_ID : trajectory_interfaces::REFERENCE::TYPE_ID;
-    trajectory_interfaces::trajectory_access::initializeTrajectory(tra, type_id, path.size());
+    int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
+    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
     for (int i = 0; i < path.size(); i++) {
       RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
-      trajectory_interfaces::trajectory_access::setT(tra, (double)i, i);
-      trajectory_interfaces::trajectory_access::setX(tra, 0.0, i);
-      trajectory_interfaces::trajectory_access::setY(tra, 0.0, i);
-      trajectory_interfaces::trajectory_access::setV(tra, 0.0, i);
+      trajectory_planning_msgs::trajectory_access::setT(tra, (double)i, i);
+      trajectory_planning_msgs::trajectory_access::setX(tra, 0.0, i);
+      trajectory_planning_msgs::trajectory_access::setY(tra, 0.0, i);
+      trajectory_planning_msgs::trajectory_access::setV(tra, 0.0, i);
       if (drivable_mode_) {
-        trajectory_interfaces::trajectory_access::setS(tra, 0.0, i);
-        trajectory_interfaces::trajectory_access::setTheta(tra, 0.0, i);
+        trajectory_planning_msgs::trajectory_access::setS(tra, 0.0, i);
+        trajectory_planning_msgs::trajectory_access::setTheta(tra, 0.0, i);
         // TODO: setA, setKappa, setDkappa
       }
     }
-    trajectory_interfaces::trajectory_access::setStandstill(tra, true);
+    trajectory_planning_msgs::trajectory_access::setStandstill(tra, true);
   }
   else {
-    int type_id = drivable_mode_ ? trajectory_interfaces::DRIVABLE::TYPE_ID : trajectory_interfaces::REFERENCE::TYPE_ID;
-    trajectory_interfaces::trajectory_access::initializeTrajectory(tra, type_id, path.size());
+    int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
+    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
     for (int i = 0; i < path.size(); i++) {
       RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
-      trajectory_interfaces::trajectory_access::setT(tra, calcDistance(path, i)/3.0, i);
-      trajectory_interfaces::trajectory_access::setX(tra, path[i].x, i);
-      trajectory_interfaces::trajectory_access::setY(tra, path[i].y, i);
-      trajectory_interfaces::trajectory_access::setV(tra, 3.0, i);
+      trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/3.0, i);
+      trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
+      trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
+      trajectory_planning_msgs::trajectory_access::setV(tra, 3.0, i);
       if (drivable_mode_) {
-        trajectory_interfaces::trajectory_access::setS(tra, calcDistance(path, i), i);
-        trajectory_interfaces::trajectory_access::setTheta(tra, calcTheta(path, i), i);
+        trajectory_planning_msgs::trajectory_access::setS(tra, calcDistance(path, i), i);
+        trajectory_planning_msgs::trajectory_access::setTheta(tra, calcTheta(path, i), i);
         // TODO: setA, setKappa, setDkappa
       }
     }
-    trajectory_interfaces::trajectory_access::setStandstill(tra, isDestinationReached(route.target_position));
+    trajectory_planning_msgs::trajectory_access::setStandstill(tra, isDestinationReached(route.target_position));
   }
 
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
@@ -296,7 +296,7 @@ void SimplePlannerNode::publishTimerCallback() {
     return;
   }
 
-  trajectory_interfaces::msg::Trajectory msg = createTrajectory();
+  trajectory_planning_msgs::msg::Trajectory msg = createTrajectory();
 
   pub_->publish(msg);
   RCLCPP_INFO(this->get_logger(), "Published Trajectory!");
@@ -304,7 +304,7 @@ void SimplePlannerNode::publishTimerCallback() {
 
 void SimplePlannerNode::publishDemoCallback() {
 
-  trajectory_interfaces::msg::Trajectory msg = createDemoTrajectory();
+  trajectory_planning_msgs::msg::Trajectory msg = createDemoTrajectory();
 
   pub_demo_->publish(msg);
   RCLCPP_INFO(this->get_logger(), "Published Demo-Trajectory!");

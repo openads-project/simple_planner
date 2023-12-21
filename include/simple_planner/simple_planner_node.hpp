@@ -2,14 +2,14 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include <perception_interfaces/msg/ego_data.hpp>
-#include <perception_interfaces/object_access.hpp>
+#include <perception_msgs/msg/ego_data.hpp>
+#include <perception_msgs_utils/object_access.hpp>
 
-#include <route_planning_interfaces/msg/route.hpp>
-#include <route_planning_interfaces/tf2_route_planning_interfaces.hpp>
+#include <route_planning_msgs/msg/route.hpp>
+#include <tf2_route_planning_msgs/tf2_route_planning_msgs.hpp>
 
-#include <trajectory_interfaces/msg/trajectory.hpp>
-#include <trajectory_interfaces/trajectory_access.hpp>
+#include <trajectory_planning_msgs/msg/trajectory.hpp>
+#include <trajectory_planning_msgs_utils/trajectory_access.hpp>
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -42,11 +42,11 @@ class SimplePlannerNode : public rclcpp::Node {
 
   void setup();
 
-  void egoDataCallback(const perception_interfaces::msg::EgoData::UniquePtr msg);
-  void routeCallback(const route_planning_interfaces::msg::Route::UniquePtr msg);
+  void egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg);
+  void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
-  trajectory_interfaces::msg::Trajectory createTrajectory();
-  trajectory_interfaces::msg::Trajectory createDemoTrajectory();
+  trajectory_planning_msgs::msg::Trajectory createTrajectory();
+  trajectory_planning_msgs::msg::Trajectory createDemoTrajectory();
   bool isDestinationReached(const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
   double calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
@@ -59,11 +59,11 @@ class SimplePlannerNode : public rclcpp::Node {
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
-  rclcpp::Subscription<perception_interfaces::msg::EgoData>::SharedPtr sub_egoData_;
-  rclcpp::Subscription<route_planning_interfaces::msg::Route>::SharedPtr sub_route_;
+  rclcpp::Subscription<perception_msgs::msg::EgoData>::SharedPtr sub_egoData_;
+  rclcpp::Subscription<route_planning_msgs::msg::Route>::SharedPtr sub_route_;
 
-  rclcpp::Publisher<trajectory_interfaces::msg::Trajectory>::SharedPtr pub_;
-  rclcpp::Publisher<trajectory_interfaces::msg::Trajectory>::SharedPtr pub_demo_;
+  rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
+  rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_demo_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
   rclcpp::TimerBase::SharedPtr demo_timer_;
@@ -72,8 +72,8 @@ class SimplePlannerNode : public rclcpp::Node {
   double freq_ = 1.0;
   bool drivable_mode_ = false;
 
-  perception_interfaces::msg::EgoData ego_data_;
-  route_planning_interfaces::msg::Route route_;
+  perception_msgs::msg::EgoData ego_data_;
+  route_planning_msgs::msg::Route route_;
 
   bool ego_data_init_ = false;
   bool route_init_ = false;

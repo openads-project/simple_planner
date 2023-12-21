@@ -13,12 +13,15 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>perception_interfaces</depend>
+  <depend>perception_msgs</depend>
+  <depend>perception_msgs_utils</depend>
   <depend>rclcpp</depend>
-  <depend>route_planning_interfaces</depend>
+  <depend>route_planning_msgs</depend>
+  <depend>tf2_route_planning_msgs</depend>
   <depend>std_msgs</depend>
   <depend>tf2</depend>
-  <depend>trajectory_interfaces</depend>
+  <depend>trajectory_planning_msgs</depend>
+  <depend>trajectory_planning_msgs_utils</depend>
   <depend>carla_msgs</depend>
 
   <export>
