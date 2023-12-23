@@ -1,21 +1,15 @@
-#include <math.h>
-
 #include <chrono>
 #include <functional>
+#include <math.h>
 #include <thread>
 
 #include <simple_planner/simple_controller_node.hpp>
-
-
 
 /**
  * @brief Namespace for simple_controller
  *
  */
 namespace simple_controller {
-
-
-// parameter names
 
 // constants
 const std::string SimpleControllerNode::kEgoDataTopic = "~/ego_data_topic";
@@ -39,7 +33,6 @@ SimpleControllerNode::SimpleControllerNode() : Node("simple_controller_node") {
   this->loadParameters();
   this->setup();
 }
-
 
 /**
  * @brief Sets up subscribers, publishers, and more.

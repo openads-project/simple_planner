@@ -1,21 +1,15 @@
-#include <math.h>
-
 #include <chrono>
 #include <functional>
+#include <math.h>
 #include <thread>
 
 #include <simple_planner/simple_planner_node.hpp>
-
-
 
 /**
  * @brief Namespace for simple_planner package
  *
  */
 namespace simple_planner {
-
-
-// parameter names
 
 // constants
 const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data_topic";
@@ -24,7 +18,6 @@ const std::string SimplePlannerNode::kOutputTopic = "~/trajectory_topic";
 const std::string SimplePlannerNode::kDemoTopic = "~/demo_trajectory_topic";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
-
 
 /**
  * @brief Creates a SimplePlannerNode node
@@ -35,7 +28,6 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->loadParameters();
   this->setup();
 }
-
 
 /**
  * @brief Loads ROS parameters used in the node.
@@ -67,7 +59,6 @@ void SimplePlannerNode::loadParameters() {
     exit(EXIT_FAILURE);
   }
 }
-
 
 /**
  * @brief Sets up subscribers, publishers, and more.
@@ -309,7 +300,6 @@ void SimplePlannerNode::publishDemoCallback() {
   pub_demo_->publish(msg);
   RCLCPP_INFO(this->get_logger(), "Published Demo-Trajectory!");
 }
-
 
 }
 
