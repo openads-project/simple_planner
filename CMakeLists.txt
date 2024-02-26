@@ -6,7 +6,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
-find_package(carla_msgs REQUIRED)
 find_package(perception_msgs REQUIRED)
 find_package(perception_msgs_utils REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -20,18 +19,13 @@ find_package(trajectory_planning_msgs_utils REQUIRED)
 set(TARGET_NAME simple_planner_node)
 
 add_executable(${TARGET_NAME} src/simple_planner_node.cpp)
-add_executable(simple_controller_node src/simple_controller_node.cpp)
 
 target_include_directories(${TARGET_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-target_include_directories(simple_controller_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
+
 target_compile_features(${TARGET_NAME} PUBLIC c_std_99 cxx_std_17)
-target_compile_features(simple_controller_node PUBLIC c_std_99 cxx_std_17)
 
 ament_target_dependencies(${TARGET_NAME}
   perception_msgs  
@@ -43,17 +37,8 @@ ament_target_dependencies(${TARGET_NAME}
   trajectory_planning_msgs
   trajectory_planning_msgs_utils
 )
-ament_target_dependencies(simple_controller_node
-  carla_msgs
-  perception_msgs  
-  perception_msgs_utils
-  rclcpp
-  std_msgs
-  trajectory_planning_msgs
-  trajectory_planning_msgs_utils
-)
 
-install(TARGETS ${TARGET_NAME} simple_controller_node
+install(TARGETS ${TARGET_NAME}
   DESTINATION lib/${PROJECT_NAME}
 )
 
