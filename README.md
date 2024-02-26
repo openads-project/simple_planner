@@ -1,7 +1,5 @@
 # simple_planner
 
-TODO
-
 - [Nodes](#nodes)
   - [simple_planner/simple_planner_node](#simple_plannersimple_planner_node)
 - [Usage of docker-ros Images](#usage-of-docker-ros-images)
@@ -10,58 +8,36 @@ TODO
   - [Environment Variables](#environment-variables)
   - [Launch Files](#launch-files)
   - [Configuration Files](#configuration-files)
-  - [Additional Remarks](#additional-remarks)
-- [Official Documentation](#official-documentation)
 
 
 ## Nodes
 
 | Package | Node | Description |
 | --- | --- | --- |
-| `simple_planner` | `simple_planner_node` | TODO |
+| `simple_planner` | `simple_planner_node` | plans trajectory based on route with constant velocity |
 
 ### simple_planner/simple_planner_node
 
 #### Subscribed Topics
 
-<LINK_TO_PUBLIC_DOCUMENTATION_OR_TABLE_BELOW>
-
 | Topic | Type | Description |
 | --- | --- | --- |
-| `<TOPIC/NAME>` | `<PACKAGE>/msg/<MESSAGE_TYPE>` | \<DESCRIPTION\> |
+| `~/ego_data` | `perception_msgs/msg/ego_data` | Input EgoData |
+| `~/route` | `route_planning_msgs/msg/route` | Input Route |
 
 #### Published Topics
 
-<LINK_TO_PUBLIC_DOCUMENTATION_OR_TABLE_BELOW>
-
 | Topic | Type | Description |
 | --- | --- | --- |
-| `<TOPIC/NAME>` | `<PACKAGE>/msg/<MESSAGE_TYPE>` | \<DESCRIPTION\> |
-
-#### Services
-
-<LINK_TO_PUBLIC_DOCUMENTATION_OR_TABLE_BELOW>
-
-| Service | Type | Description |
-| --- | --- | --- |
-| `<SERVICE/NAME>` | `<PACKAGE>/srv/<SERVICE_TYPE>` | \<DESCRIPTION\> |
-
-#### Actions
-
-<LINK_TO_PUBLIC_DOCUMENTATION_OR_TABLE_BELOW>
-
-| Action | Type | Description |
-| --- | --- | --- |
-| `<ACTION/NAME>` | `<PACKAGE>/action/<ACTION_TYPE>` | \<DESCRIPTION\> |
+| `~/trajectory` | `trajectory_planning_msgs/msg/trajectory` | Output Trajectory |
+| `~/demo_trajectory` | `trajectory_planning_msgs/msg/trajectory` | Demo Trajectory (published with 0.1 Hz) |
 
 #### Parameters
 
-<LINK_TO_PUBLIC_DOCUMENTATION_OR_TABLE_BELOW>
-
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `<PARAMETER/NAME>` | `<PARAMETER_TYPE>` | \<DESCRIPTION\> |
-
+| `frequency` | `double` | frequency for publishing output trajectory |
+| `drivable_mode` | `bool` | publish trajectory in `drivable` (true) or `reference` format (false) |
 
 ## Usage of docker-ros Images
 
@@ -74,32 +50,17 @@ TODO
 ### Default Command
 
 ```bash
-<DEFAULT_DOCKER_COMMAND_IN_RUN_IMAGE>
+ros2 launch simple_planner simple_planner.launch.py
 ```
-
-### Environment Variables
-
-| Variable | Description |
-| --- | --- |
-| `<VARIABLE>` | \<DESCRIPTION\> |
 
 ### Launch Files
 
 | Package | File | Path | Description |
 | --- | --- | --- | --- |
-| `<PACKAGE>` | `<LAUNCH_FILE>.<XYZ>` | `<PATH/TO/FILE/IN/RUN/IMAGE>` | \<DESCRIPTION\> |
+| `simple_planner` | `simple_planner.launch.py` | `/docker-ros/ws/install/simple_planner/share/simple_planner/launch/` | launchs the simple planner node with default config |
 
 ### Configuration Files
 
 | Package | File | Path | Description |
 | --- | --- | --- | --- |
-| `<PACKAGE>` | `<CONFIG_FILE>.<XYZ>` | `<PATH/TO/FILE/IN/RUN/IMAGE>` | \<DESCRIPTION\> |
-
-### Additional Remarks
-
-\-
-
-
-## Official Documentation
-
-- \<LINK_TO_PUBLIC_DOCUMENTATION>
+| `simple_planner` | `params.yml` | `/docker-ros/ws/install/simple_planner/share/simple_planner/config/` | config defaultly loaded by `simple_planner.launch.py` |

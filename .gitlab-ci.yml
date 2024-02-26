@@ -5,4 +5,4 @@ variables:
   TARGET: dev,run
   PLATFORM: arm64,amd64
   BASE_IMAGE: rwthika/ros2:humble
-  COMMAND: ros2 launch simple_planner simple_planner.launch.xml
+  COMMAND: ros2 launch simple_planner simple_planner.launch.py
