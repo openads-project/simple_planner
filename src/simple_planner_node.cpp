@@ -12,10 +12,10 @@
 namespace simple_planner {
 
 // constants
-const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data_topic";
-const std::string SimplePlannerNode::kRouteTopic = "~/route_topic";
-const std::string SimplePlannerNode::kOutputTopic = "~/trajectory_topic";
-const std::string SimplePlannerNode::kDemoTopic = "~/demo_trajectory_topic";
+const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data";
+const std::string SimplePlannerNode::kRouteTopic = "~/route";
+const std::string SimplePlannerNode::kOutputTopic = "~/trajectory";
+const std::string SimplePlannerNode::kDemoTopic = "~/demo_trajectory";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 
@@ -208,8 +208,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
-    for (int i = 0; i < path.size(); i++) {
-      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+    for (size_t i = 0; i < path.size(); i++) {
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
       trajectory_planning_msgs::trajectory_access::setT(tra, (double)i, i);
       trajectory_planning_msgs::trajectory_access::setX(tra, 0.0, i);
       trajectory_planning_msgs::trajectory_access::setY(tra, 0.0, i);
@@ -227,8 +227,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
-    for (int i = 0; i < path.size(); i++) {
-      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+    for (size_t i = 0; i < path.size(); i++) {
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
       trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/3.0, i);
       trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
       trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);

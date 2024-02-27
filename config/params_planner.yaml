@@ -1,5 +1,0 @@
-/**:
-  ros__parameters:
-    frequency: 10.0
-    drivable_mode: True
-    use_sim_time: True
