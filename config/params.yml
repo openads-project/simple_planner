@@ -2,3 +2,5 @@
   ros__parameters:
     frequency: 10.0
     drivable_mode: True
+    n_states: 51
+    v_ref: 3.0

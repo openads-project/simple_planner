@@ -18,6 +18,8 @@ const std::string SimplePlannerNode::kOutputTopic = "~/trajectory";
 const std::string SimplePlannerNode::kDemoTopic = "~/demo_trajectory";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
+const std::string SimplePlannerNode::kNStatesParam = "n_states";
+const std::string SimplePlannerNode::kVRefParam = "v_ref";
 
 /**
  * @brief Creates a SimplePlannerNode node
@@ -40,10 +42,16 @@ void SimplePlannerNode::loadParameters() {
   freq_param_desc.description = "frequency of publishing trajectory";
   rcl_interfaces::msg::ParameterDescriptor driveMode_param_desc;
   driveMode_param_desc.description = "true: creating drivable trajectory; false: creating reference trajectory";
+  rcl_interfaces::msg::ParameterDescriptor nStates_param_desc;
+  nStates_param_desc.description = "number of states in the trajectory";
+  rcl_interfaces::msg::ParameterDescriptor vRef_param_desc;
+  vRef_param_desc.description = "reference velocity (m/s); set for all states in the trajectory";
 
   // declare parameter
   this->declare_parameter(kFreqParam, rclcpp::ParameterType::PARAMETER_DOUBLE, freq_param_desc);
   this->declare_parameter(kDriveModeParam, rclcpp::ParameterType::PARAMETER_BOOL, driveMode_param_desc);
+  this->declare_parameter(kNStatesParam, rclcpp::ParameterType::PARAMETER_INTEGER, nStates_param_desc);
+  this->declare_parameter(kVRefParam, rclcpp::ParameterType::PARAMETER_DOUBLE, vRef_param_desc);
 
   // load parameter
   try {
@@ -56,6 +64,18 @@ void SimplePlannerNode::loadParameters() {
     drivable_mode_ = this->get_parameter(kDriveModeParam).as_bool();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kDriveModeParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    n_states_ = this->get_parameter(kNStatesParam).as_int();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kNStatesParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    v_ref_ = this->get_parameter(kVRefParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kVRefParam.c_str());
     exit(EXIT_FAILURE);
   }
 }
@@ -202,14 +222,16 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   double current_speed_limit = route.current_speed_limit/3.6;
 
+  int n_states_min = n_states_ < path.size() ? n_states_ : path.size();
+
   trajectory_planning_msgs::msg::Trajectory tra;
   if (!validPath){
     int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
-    for (size_t i = 0; i < path.size(); i++) {
-      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+    for (size_t i = 0; i < n_states_min; i++) {
+      RCLCPP_DEBUG(this->get_logger(), "Invalid Path. i: %ld", i);
       trajectory_planning_msgs::trajectory_access::setT(tra, (double)i, i);
       trajectory_planning_msgs::trajectory_access::setX(tra, 0.0, i);
       trajectory_planning_msgs::trajectory_access::setY(tra, 0.0, i);
@@ -227,12 +249,12 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
-    for (size_t i = 0; i < path.size(); i++) {
-      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/3.0, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
-      trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/3.0, i);
+    for (size_t i = 0; i < n_states_min; i++) {
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/v_ref_, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+      trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/v_ref_, i);
       trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
       trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
-      trajectory_planning_msgs::trajectory_access::setV(tra, 3.0, i);
+      trajectory_planning_msgs::trajectory_access::setV(tra, v_ref_, i);
       if (drivable_mode_) {
         trajectory_planning_msgs::trajectory_access::setS(tra, calcDistance(path, i), i);
         trajectory_planning_msgs::trajectory_access::setTheta(tra, calcTheta(path, i), i);
