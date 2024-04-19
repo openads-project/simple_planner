@@ -179,7 +179,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   try {
     tf = tf2_buffer_->lookupTransform("base_link", now(), "base_link", route_.header.stamp, "map", rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Tranformation is not available");
+    RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
   }
   route_planning_msgs::msg::Route route;
   tf2::doTransform(route_, route, tf);
