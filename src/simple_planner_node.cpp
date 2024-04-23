@@ -20,6 +20,7 @@ const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 const std::string SimplePlannerNode::kNStatesParam = "n_states";
 const std::string SimplePlannerNode::kVRefParam = "v_ref";
+const std::string SimplePlannerNode::kAMaxDecelParam = "a_max_decel";
 
 /**
  * @brief Creates a SimplePlannerNode node
@@ -46,12 +47,15 @@ void SimplePlannerNode::loadParameters() {
   nStates_param_desc.description = "number of states in the trajectory";
   rcl_interfaces::msg::ParameterDescriptor vRef_param_desc;
   vRef_param_desc.description = "reference velocity (m/s); set for all states in the trajectory";
+  rcl_interfaces::msg::ParameterDescriptor aMaxDecel_param_desc;
+  aMaxDecel_param_desc.description = "maximum deceleration (m/s^2) - must be < 0.0";
 
   // declare parameter
   this->declare_parameter(kFreqParam, rclcpp::ParameterType::PARAMETER_DOUBLE, freq_param_desc);
   this->declare_parameter(kDriveModeParam, rclcpp::ParameterType::PARAMETER_BOOL, driveMode_param_desc);
   this->declare_parameter(kNStatesParam, rclcpp::ParameterType::PARAMETER_INTEGER, nStates_param_desc);
   this->declare_parameter(kVRefParam, rclcpp::ParameterType::PARAMETER_DOUBLE, vRef_param_desc);
+  this->declare_parameter(kAMaxDecelParam, rclcpp::ParameterType::PARAMETER_DOUBLE, aMaxDecel_param_desc);
 
   // load parameter
   try {
@@ -76,6 +80,12 @@ void SimplePlannerNode::loadParameters() {
     v_ref_ = this->get_parameter(kVRefParam).as_double();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kVRefParam.c_str());
+    exit(EXIT_FAILURE);
+  }
+  try {
+    a_max_decel_ = this->get_parameter(kAMaxDecelParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kAMaxDecelParam.c_str());
     exit(EXIT_FAILURE);
   }
 }
@@ -223,14 +233,30 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   double current_speed_limit = route.current_speed_limit/3.6;
 
   int n_states_min = n_states_ < path.size() ? n_states_ : path.size();
+  int start_break_index = -1;
+  double distance_last_point_to_target = sqrt(pow(path.back().x - route.target_position.x, 2) + pow(path.back().y - route.target_position.y, 2));
+  //TODO: get from route
+  if (distance_last_point_to_target < 1.0) {
+    RCLCPP_WARN(this->get_logger(), "Distance to target: %f", distance_last_point_to_target);
+    double distance_to_stop = -0.5*pow(v_ref_, 2)/a_max_decel_;
+    // get the index of the last point, which distance to the target position is less than distance_to_stop
+    double distance_to_target = 0.0;
+    for (size_t i = path.size()-1; i > 0; i--) {
+      distance_to_target += sqrt(pow(path[i].x - path[i-1].x, 2) + pow(path[i].y - path[i-1].y, 2));
+      if (distance_to_target > distance_to_stop) {
+        start_break_index = i;
+        break;
+      } 
+    }
+  }
 
   trajectory_planning_msgs::msg::Trajectory tra;
   if (!validPath){
     int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
-    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
+    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_min);
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
-    for (size_t i = 0; i < n_states_min; i++) {
+    for (int i = 0; i < n_states_min; i++) {
       RCLCPP_DEBUG(this->get_logger(), "Invalid Path. i: %ld", i);
       trajectory_planning_msgs::trajectory_access::setT(tra, (double)i, i);
       trajectory_planning_msgs::trajectory_access::setX(tra, 0.0, i);
@@ -246,10 +272,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
   else {
     int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
-    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
+    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_min);
     tra.header.stamp = now();
     tra.header.frame_id = "base_link";
-    for (size_t i = 0; i < n_states_min; i++) {
+    for (int i = 0; i < n_states_min; i++) {
       RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/v_ref_, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
       trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/v_ref_, i);
       trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
@@ -264,6 +290,20 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     trajectory_planning_msgs::trajectory_access::setStandstill(tra, isDestinationReached(route.target_position));
   }
 
+  if (start_break_index >= 0) {
+    // calc number of points to stop between start_break_index and path.size()
+    RCLCPP_INFO(this->get_logger(), "Start Break Index: %d", start_break_index);
+    double n_points_to_stop = n_states_min - start_break_index;
+    RCLCPP_WARN(this->get_logger(), "n_points_to_stop: %f", n_points_to_stop);
+    double iter = 1.0;
+    for (int i = start_break_index; i < n_states_min; i++) {
+      double velocity = v_ref_ - iter/n_points_to_stop * v_ref_;
+      RCLCPP_INFO(this->get_logger(), "Velocity: %f", velocity);
+      trajectory_planning_msgs::trajectory_access::setV(tra, velocity, i);
+      iter++;
+    }
+  }
+
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
   return tra;
 }
@@ -271,7 +311,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 bool SimplePlannerNode::isDestinationReached(const geometry_msgs::msg::Point& destination) {
   double distance = sqrt(pow(destination.x, 2) + pow(destination.y, 2));
   RCLCPP_DEBUG(this->get_logger(), "Distance to goal: %f", distance);
-  return distance < 2.0;
+  return distance < 0.2;
 }
 
 double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint) {

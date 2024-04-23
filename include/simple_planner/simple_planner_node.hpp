@@ -37,6 +37,7 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kDriveModeParam;
   static const std::string kNStatesParam;
   static const std::string kVRefParam;
+  static const std::string kAMaxDecelParam;
 
  private:
 
@@ -75,6 +76,7 @@ class SimplePlannerNode : public rclcpp::Node {
   bool drivable_mode_ = false;
   int n_states_ = 51;
   double v_ref_ = 3.0;
+  double a_max_decel_ = -1.0;
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;
