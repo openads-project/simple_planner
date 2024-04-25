@@ -6,4 +6,4 @@ repositories:
   planning_interfaces:
     type: git
     url: https://gitlab.ika.rwth-aachen.de/fb-fi/definitions/planning_interfaces.git
-    version: main
+    version: improvement/global_maneuver_action_feedback

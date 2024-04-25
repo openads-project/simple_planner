@@ -205,102 +205,81 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createDemoTrajector
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
 
+  int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
+  trajectory_planning_msgs::msg::Trajectory tra;
+  tra.header.stamp = now();
+  tra.header.frame_id = "base_link";
+
+  if (route_.remaining_route.empty()) {
+    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
+    RCLCPP_WARN(this->get_logger(), "Remaining route empty -> destination reached. Publishing standstill trajectory.");
+    return tra;
+  }
+
   geometry_msgs::msg::TransformStamped tf;
   try {
-    tf = tf2_buffer_->lookupTransform("base_link", now(), "base_link", route_.header.stamp, "map", rclcpp::Duration::from_seconds(1.0));
+    tf = tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id, route_.header.stamp, "map", rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
     RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
   }
   route_planning_msgs::msg::Route route;
   tf2::doTransform(route_, route, tf);
-  std::vector<geometry_msgs::msg::Point> path = route.shortest_path;
-  bool validPath = true;
-  while(path[0].x < 0.0) {
-    path.erase(path.begin());
-    if (path.size() <= 1){
-      path.erase(path.begin(), path.end());
-      // push back three empty points to fill with zeros later
-      path.push_back(geometry_msgs::msg::Point());
-      path.push_back(geometry_msgs::msg::Point());
-      path.push_back(geometry_msgs::msg::Point());
-      validPath = false;
-      break;
-    }
-  }
+
+  std::vector<geometry_msgs::msg::Point> path = route.remaining_route;
+  if (path[0].x < 0.0) RCLCPP_WARN(this->get_logger(), "Path starts %f m behind base_link. Could cause unintended behavior.", path[0].x);
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
   geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
   double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   double current_speed_limit = route.current_speed_limit/3.6;
 
-  int n_states_min = n_states_ < path.size() ? n_states_ : path.size();
+  if (n_states_ < path.size()) {
+    path.erase(path.begin() + n_states_, path.end());
+  }
+
   int start_break_index = -1;
-  double distance_last_point_to_target = sqrt(pow(path.back().x - route.target_position.x, 2) + pow(path.back().y - route.target_position.y, 2));
-  //TODO: get from route
-  if (distance_last_point_to_target < 1.0) {
-    RCLCPP_WARN(this->get_logger(), "Distance to target: %f", distance_last_point_to_target);
-    double distance_to_stop = -0.5*pow(v_ref_, 2)/a_max_decel_;
-    // get the index of the last point, which distance to the target position is less than distance_to_stop
-    double distance_to_target = 0.0;
-    for (size_t i = path.size()-1; i > 0; i--) {
-      distance_to_target += sqrt(pow(path[i].x - path[i-1].x, 2) + pow(path[i].y - path[i-1].y, 2));
-      if (distance_to_target > distance_to_stop) {
-        start_break_index = i;
-        break;
-      } 
+  double distance_to_stop = -0.5*pow(v_ref_, 2)/a_max_decel_;
+  
+  // Todo: do this somewhere else
+  double n_points_to_stop = 0.0;
+  for (size_t i = 0; i < route.remaining_route.size(); ++i){
+    if (route.remaining_route.back().z - route.remaining_route[i].z < distance_to_stop) {
+      n_points_to_stop = route.remaining_route.size() - i;
+      break;
+    }
+  }
+  RCLCPP_WARN(this->get_logger(), "n_points_to_stop: %f", n_points_to_stop);
+
+
+  for (size_t i = 0; i < path.size(); ++i) {
+    if (route_.remaining_route.back().z - path[i].z < distance_to_stop) {
+      start_break_index = i;
+      break;
     }
   }
 
-  trajectory_planning_msgs::msg::Trajectory tra;
-  if (!validPath){
-    int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
-    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_min);
-    tra.header.stamp = now();
-    tra.header.frame_id = "base_link";
-    for (int i = 0; i < n_states_min; i++) {
-      RCLCPP_DEBUG(this->get_logger(), "Invalid Path. i: %ld", i);
-      trajectory_planning_msgs::trajectory_access::setT(tra, (double)i, i);
-      trajectory_planning_msgs::trajectory_access::setX(tra, 0.0, i);
-      trajectory_planning_msgs::trajectory_access::setY(tra, 0.0, i);
-      trajectory_planning_msgs::trajectory_access::setV(tra, 0.0, i);
-      if (drivable_mode_) {
-        trajectory_planning_msgs::trajectory_access::setS(tra, 0.0, i);
-        trajectory_planning_msgs::trajectory_access::setTheta(tra, 0.0, i);
-        // TODO: setA, setKappa, setDkappa
-      }
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
+  for (size_t i = 0; i < path.size(); i++) {
+    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/v_ref_, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+    trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/v_ref_, i);
+    trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
+    trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
+    trajectory_planning_msgs::trajectory_access::setV(tra, v_ref_, i);
+    if (drivable_mode_) {
+      trajectory_planning_msgs::trajectory_access::setS(tra, calcDistance(path, i), i);
+      trajectory_planning_msgs::trajectory_access::setTheta(tra, calcTheta(path, i), i);
+      // TODO: setA, setKappa, setDkappa
     }
-    trajectory_planning_msgs::trajectory_access::setStandstill(tra, true);
   }
-  else {
-    int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
-    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_min);
-    tra.header.stamp = now();
-    tra.header.frame_id = "base_link";
-    for (int i = 0; i < n_states_min; i++) {
-      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/v_ref_, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
-      trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/v_ref_, i);
-      trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
-      trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
-      trajectory_planning_msgs::trajectory_access::setV(tra, v_ref_, i);
-      if (drivable_mode_) {
-        trajectory_planning_msgs::trajectory_access::setS(tra, calcDistance(path, i), i);
-        trajectory_planning_msgs::trajectory_access::setTheta(tra, calcTheta(path, i), i);
-        // TODO: setA, setKappa, setDkappa
-      }
-    }
-    trajectory_planning_msgs::trajectory_access::setStandstill(tra, isDestinationReached(route.target_position));
-  }
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, isDestinationReached(route.destination));
 
   if (start_break_index >= 0) {
-    // calc number of points to stop between start_break_index and path.size()
+    // calc number of points to stop between start_break_index and route.remaining_route.size()
     RCLCPP_INFO(this->get_logger(), "Start Break Index: %d", start_break_index);
-    double n_points_to_stop = n_states_min - start_break_index;
-    RCLCPP_WARN(this->get_logger(), "n_points_to_stop: %f", n_points_to_stop);
-    double iter = 1.0;
-    for (int i = start_break_index; i < n_states_min; i++) {
+    for (size_t i = start_break_index; i < path.size(); ++i) {
+      double iter = n_points_to_stop - ((path.size()-1) - i);
       double velocity = v_ref_ - iter/n_points_to_stop * v_ref_;
       RCLCPP_INFO(this->get_logger(), "Velocity: %f", velocity);
       trajectory_planning_msgs::trajectory_access::setV(tra, velocity, i);
-      iter++;
     }
   }
 
@@ -352,7 +331,7 @@ void SimplePlannerNode::publishTimerCallback() {
   trajectory_planning_msgs::msg::Trajectory msg = createTrajectory();
 
   pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "Published Trajectory!");
+  RCLCPP_DEBUG(this->get_logger(), "Published Trajectory!");
 }
 
 void SimplePlannerNode::publishDemoCallback() {
