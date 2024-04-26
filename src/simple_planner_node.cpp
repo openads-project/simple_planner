@@ -136,6 +136,9 @@ void SimplePlannerNode::setup() {
                             std::bind(&SimplePlannerNode::publishDemoCallback,
                             this));
   RCLCPP_INFO(this->get_logger(), "Publishing Demo Trajectory at 0.1 hz");
+
+  // define distance to stop
+  distance_to_stop_ = -0.5*pow(v_ref_, 2)/a_max_decel_;
 }
 
 
@@ -167,8 +170,8 @@ void SimplePlannerNode::routeCallback(
 
   if (!route_init_){
     route_init_ = true;
-    RCLCPP_INFO(this->get_logger(), "Received first route message, initialized global variable");
-  }
+    s_start_break_ = route_.remaining_route.back().z - distance_to_stop_;
+    RCLCPP_WARN(this->get_logger(), "Received first route message, start beak s: %f", s_start_break_);
 }
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createDemoTrajectory() {
@@ -210,8 +213,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.stamp = now();
   tra.header.frame_id = "base_link";
 
+  // TODO: additionally check if destination is reached or if route is outdated?
   if (route_.remaining_route.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
+    route_init_ = false;
     RCLCPP_WARN(this->get_logger(), "Remaining route empty -> destination reached. Publishing standstill trajectory.");
     return tra;
   }
@@ -228,60 +233,32 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   std::vector<geometry_msgs::msg::Point> path = route.remaining_route;
   if (path[0].x < 0.0) RCLCPP_WARN(this->get_logger(), "Path starts %f m behind base_link. Could cause unintended behavior.", path[0].x);
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
-  geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
-  double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-  double current_speed_limit = route.current_speed_limit/3.6;
+
+  // currently unused
+  // geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
+  // double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+  // double current_speed_limit = route.current_speed_limit/3.6;
 
   if (n_states_ < path.size()) {
     path.erase(path.begin() + n_states_, path.end());
   }
 
-  int start_break_index = -1;
-  double distance_to_stop = -0.5*pow(v_ref_, 2)/a_max_decel_;
-  
-  // Todo: do this somewhere else
-  double n_points_to_stop = 0.0;
-  for (size_t i = 0; i < route.remaining_route.size(); ++i){
-    if (route.remaining_route.back().z - route.remaining_route[i].z < distance_to_stop) {
-      n_points_to_stop = route.remaining_route.size() - i;
-      break;
-    }
-  }
-  RCLCPP_WARN(this->get_logger(), "n_points_to_stop: %f", n_points_to_stop);
-
-
-  for (size_t i = 0; i < path.size(); ++i) {
-    if (route_.remaining_route.back().z - path[i].z < distance_to_stop) {
-      start_break_index = i;
-      break;
-    }
-  }
-
   trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
   for (size_t i = 0; i < path.size(); i++) {
-    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  s: %f,  theta: %f", i, calcDistance(path, i)/v_ref_, path[i].x, path[i].y, calcDistance(path, i), calcTheta(path, i));
+    double v = v_ref_;
+    if (path[i].z >= s_start_break_) v = sqrt(pow(v_ref_, 2) + 2*a_max_decel_*(path[i].z - s_start_break_));
     trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/v_ref_, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
-    trajectory_planning_msgs::trajectory_access::setV(tra, v_ref_, i);
+    trajectory_planning_msgs::trajectory_access::setV(tra, v, i);
     if (drivable_mode_) {
       trajectory_planning_msgs::trajectory_access::setS(tra, calcDistance(path, i), i);
       trajectory_planning_msgs::trajectory_access::setTheta(tra, calcTheta(path, i), i);
       // TODO: setA, setKappa, setDkappa
     }
+    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  v: %f, s: %f,  theta: %f", i, calcDistance(path, i)/v_ref_, path[i].x, path[i].y, v, calcDistance(path, i), calcTheta(path, i));
   }
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, isDestinationReached(route.destination));
-
-  if (start_break_index >= 0) {
-    // calc number of points to stop between start_break_index and route.remaining_route.size()
-    RCLCPP_INFO(this->get_logger(), "Start Break Index: %d", start_break_index);
-    for (size_t i = start_break_index; i < path.size(); ++i) {
-      double iter = n_points_to_stop - ((path.size()-1) - i);
-      double velocity = v_ref_ - iter/n_points_to_stop * v_ref_;
-      RCLCPP_INFO(this->get_logger(), "Velocity: %f", velocity);
-      trajectory_planning_msgs::trajectory_access::setV(tra, velocity, i);
-    }
-  }
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
 
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
   return tra;
