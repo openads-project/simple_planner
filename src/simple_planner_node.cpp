@@ -15,7 +15,6 @@ namespace simple_planner {
 const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data";
 const std::string SimplePlannerNode::kRouteTopic = "~/route";
 const std::string SimplePlannerNode::kOutputTopic = "~/trajectory";
-const std::string SimplePlannerNode::kDemoTopic = "~/demo_trajectory";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 const std::string SimplePlannerNode::kNStatesParam = "n_states";
@@ -118,24 +117,12 @@ void SimplePlannerNode::setup() {
     kOutputTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
 
-  // create a publisher for demo trajectory
-  pub_demo_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(
-    kDemoTopic, 10);
-  RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_demo_->get_topic_name());
-
   // create a timer for repeatedly invoking a callback to publish messages
   publish_timer_ =
     this->create_wall_timer(std::chrono::duration<double>(1.0/freq_),
                             std::bind(&SimplePlannerNode::publishTimerCallback,
                             this));
   RCLCPP_INFO(this->get_logger(), "Publishing trajectory at '%f' hz", freq_);
-
-  // create a timer for repeatedly invoking a callback to publish messages
-  demo_timer_ =
-    this->create_wall_timer(std::chrono::duration<double>(10.0),
-                            std::bind(&SimplePlannerNode::publishDemoCallback,
-                            this));
-  RCLCPP_INFO(this->get_logger(), "Publishing Demo Trajectory at 0.1 hz");
 
   // define distance to stop
   distance_to_stop_ = -0.5*pow(v_ref_, 2)/a_max_decel_;
@@ -172,38 +159,7 @@ void SimplePlannerNode::routeCallback(
     route_init_ = true;
     s_start_break_ = route_.remaining_route.back().z - distance_to_stop_;
     RCLCPP_WARN(this->get_logger(), "Received first route message, start beak s: %f", s_start_break_);
-}
-
-trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createDemoTrajectory() {
-
-  trajectory_planning_msgs::msg::Trajectory tra;
-  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, trajectory_planning_msgs::DRIVABLE::TYPE_ID, 5);
-  tra.header.stamp = now();
-  tra.header.frame_id = "base_link";
-
-  // const radius
-
-  // t,x,y,v,theta,a,kappa,dkappa,s
-  // 0,0,0,0,0,0,0,0,0
-  // t,10,0,3,0,0,0,0,10
-  // t,45.3553,-14.6447,3,-0.7854,0,0.02,0,49.27
-  // t,60,-50,3,-1.5708,0,0.02,0,88.54
-  // t,60,-60,3,-1.5708,0,0,0,98.54
-
-  std::vector<double> state0 = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
-  trajectory_planning_msgs::trajectory_access::setState(tra, state0, 0);
-  std::vector<double> state1 = {10.0/3.0,10.0,0.0,3.0,0.0,0.0,0.0,0.0,10.0};
-  trajectory_planning_msgs::trajectory_access::setState(tra, state1, 1);
-  std::vector<double> state2 = {49.27/3.0,45.3553,-14.6447,3.0,-0.7854,0.0,0.02,0.02,49.27};
-  trajectory_planning_msgs::trajectory_access::setState(tra, state2, 2);
-  std::vector<double> state3 = {88.54/3.0,60.0,-50.0,3.0,-1.5708,0.0,0.02,0.02,88.54};
-  trajectory_planning_msgs::trajectory_access::setState(tra, state3, 3);
-  std::vector<double> state4 = {98.54/3.0,60.0,-60.0,3.0,-1.5708,0.0,0.0,0.0,98.54};
-  trajectory_planning_msgs::trajectory_access::setState(tra, state4, 4);
-
-
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
-  return tra;
+  }
 }
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
@@ -309,14 +265,6 @@ void SimplePlannerNode::publishTimerCallback() {
 
   pub_->publish(msg);
   RCLCPP_DEBUG(this->get_logger(), "Published Trajectory!");
-}
-
-void SimplePlannerNode::publishDemoCallback() {
-
-  trajectory_planning_msgs::msg::Trajectory msg = createDemoTrajectory();
-
-  pub_demo_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "Published Demo-Trajectory!");
 }
 
 }

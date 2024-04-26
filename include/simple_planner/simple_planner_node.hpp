@@ -32,7 +32,6 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kEgoDataTopic;
   static const std::string kRouteTopic;
   static const std::string kOutputTopic;
-  static const std::string kDemoTopic;
   static const std::string kFreqParam;
   static const std::string kDriveModeParam;
   static const std::string kNStatesParam;
@@ -49,13 +48,11 @@ class SimplePlannerNode : public rclcpp::Node {
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
-  trajectory_planning_msgs::msg::Trajectory createDemoTrajectory();
   bool isDestinationReached(const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
   double calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
 
   void publishTimerCallback();
-  void publishDemoCallback();
 
  private:
 
@@ -66,10 +63,8 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::Subscription<route_planning_msgs::msg::Route>::SharedPtr sub_route_;
 
   rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
-  rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_demo_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
-  rclcpp::TimerBase::SharedPtr demo_timer_;
 
   // Parameters
   double freq_ = 1.0;
