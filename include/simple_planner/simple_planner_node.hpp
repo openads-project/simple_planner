@@ -67,11 +67,11 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // Parameters
-  double freq_ = 1.0;
+  double freq_ = 10.0;
   bool drivable_mode_ = false;
   int n_states_ = 51;
-  double v_ref_ = 3.0;
-  double a_max_decel_ = -1.0;
+  double v_ref_ = 13.89;
+  double a_max_decel_ = -2.5;
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;

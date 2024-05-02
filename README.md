@@ -30,14 +30,16 @@
 | Topic | Type | Description |
 | --- | --- | --- |
 | `~/trajectory` | `trajectory_planning_msgs/msg/trajectory` | Output Trajectory |
-| `~/demo_trajectory` | `trajectory_planning_msgs/msg/trajectory` | Demo Trajectory (published with 0.1 Hz) |
 
 #### Parameters
 
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `frequency` | `double` | frequency for publishing output trajectory |
-| `drivable_mode` | `bool` | publish trajectory in `drivable` (true) or `reference` format (false) |
+| `drivable_mode` | `bool` | publish trajectory in `drivable` (true, recommended) or `reference` format (false) |
+| `n_states` | `int` | defines the (maximum) number of states of the published trajectory |
+| `v_ref` | `double` | defines the constant velocity of the published trajectory |
+| `a_max_decel` | `double` | defines the maximum deceleration for the braking maneuver before the end of the route (has to be `<= 0.0`; if `= 0.0`, no braking) |
 
 ## Usage of docker-ros Images
 

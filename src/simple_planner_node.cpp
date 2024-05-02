@@ -60,32 +60,27 @@ void SimplePlannerNode::loadParameters() {
   try {
     freq_ = this->get_parameter(kFreqParam).as_double();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kFreqParam.c_str());
-    exit(EXIT_FAILURE);
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kFreqParam.c_str(), freq_);
   }
   try {
     drivable_mode_ = this->get_parameter(kDriveModeParam).as_bool();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kDriveModeParam.c_str());
-    exit(EXIT_FAILURE);
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %d", kDriveModeParam.c_str(), drivable_mode_);
   }
   try {
     n_states_ = this->get_parameter(kNStatesParam).as_int();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kNStatesParam.c_str());
-    exit(EXIT_FAILURE);
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %d", kNStatesParam.c_str(), n_states_);
   }
   try {
     v_ref_ = this->get_parameter(kVRefParam).as_double();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kVRefParam.c_str());
-    exit(EXIT_FAILURE);
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kVRefParam.c_str(), v_ref_);
   }
   try {
     a_max_decel_ = this->get_parameter(kAMaxDecelParam).as_double();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_FATAL(this->get_logger(), "Parameter '%s' is required", kAMaxDecelParam.c_str());
-    exit(EXIT_FAILURE);
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kAMaxDecelParam.c_str(), a_max_decel_);
   }
 }
 
@@ -97,6 +92,25 @@ void SimplePlannerNode::setup() {
 
   tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
   tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
+
+  // define distance to stop
+  if (a_max_decel_ < 0.0){
+    distance_to_stop_ = -0.5*pow(v_ref_, 2)/a_max_decel_;
+  } else {
+    distance_to_stop_ = 0.0;
+  }
+
+  // create a publisher for publishing output trajectory
+  pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(
+    kOutputTopic, 10);
+  RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
+
+  // create a timer for repeatedly invoking a callback to publish messages
+  publish_timer_ =
+    this->create_wall_timer(std::chrono::duration<double>(1.0/freq_),
+                            std::bind(&SimplePlannerNode::publishTimerCallback,
+                            this));
+  RCLCPP_INFO(this->get_logger(), "Publishing trajectory at '%f' hz", freq_);
 
   // create subscriber for egoData
   sub_egoData_ =
@@ -111,21 +125,6 @@ void SimplePlannerNode::setup() {
       kRouteTopic, 10,
       std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
-
-  // create a publisher for publishing output trajectory
-  pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(
-    kOutputTopic, 10);
-  RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
-
-  // create a timer for repeatedly invoking a callback to publish messages
-  publish_timer_ =
-    this->create_wall_timer(std::chrono::duration<double>(1.0/freq_),
-                            std::bind(&SimplePlannerNode::publishTimerCallback,
-                            this));
-  RCLCPP_INFO(this->get_logger(), "Publishing trajectory at '%f' hz", freq_);
-
-  // define distance to stop
-  distance_to_stop_ = -0.5*pow(v_ref_, 2)/a_max_decel_;
 }
 
 
@@ -158,7 +157,7 @@ void SimplePlannerNode::routeCallback(
   if (!route_init_){
     route_init_ = true;
     s_start_break_ = route_.remaining_route.back().z - distance_to_stop_;
-    RCLCPP_WARN(this->get_logger(), "Received first route message, start beak s: %f", s_start_break_);
+    RCLCPP_INFO(this->get_logger(), "Received first route message, start beak s: %f", s_start_break_);
   }
 }
 
@@ -183,17 +182,17 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   } catch (tf2::TransformException& ex) {
     RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
   }
-  route_planning_msgs::msg::Route route;
-  tf2::doTransform(route_, route, tf);
+  route_planning_msgs::msg::Route tf_route;
+  tf2::doTransform(route_, tf_route, tf);
 
-  std::vector<geometry_msgs::msg::Point> path = route.remaining_route;
+  std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
   if (path[0].x < 0.0) RCLCPP_WARN(this->get_logger(), "Path starts %f m behind base_link. Could cause unintended behavior.", path[0].x);
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
 
   // currently unused
   // geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
   // double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-  // double current_speed_limit = route.current_speed_limit/3.6;
+  // double current_speed_limit = tf_route.current_speed_limit/3.6;
 
   if (n_states_ < path.size()) {
     path.erase(path.begin() + n_states_, path.end());
