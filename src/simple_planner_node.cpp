@@ -163,6 +163,7 @@ void SimplePlannerNode::routeCallback(
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
 
+  // define trajectory message and set header
   int type_id = drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
   trajectory_planning_msgs::msg::Trajectory tra;
   tra.header.stamp = now();
@@ -176,6 +177,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     return tra;
   }
 
+  // time-transform route to current base_link frame
   geometry_msgs::msg::TransformStamped tf;
   try {
     tf = tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id, route_.header.stamp, "map", rclcpp::Duration::from_seconds(1.0));
@@ -185,23 +187,26 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
 
+  // saving remaining route in path and checking if path starts behind base_link, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
   if (path[0].x < 0.0) RCLCPP_WARN(this->get_logger(), "Path starts %f m behind base_link. Could cause unintended behavior.", path[0].x);
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
 
-  // currently unused
+  // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
   // geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
   // double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   // double current_speed_limit = tf_route.current_speed_limit/3.6;
 
+  // keep maximum the first n_states_ in path (and therefore in trajectory)
   if (n_states_ < path.size()) {
     path.erase(path.begin() + n_states_, path.end());
   }
 
+  // init trajectory and fill with path (route) and velocity (const from param) data
   trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
   for (size_t i = 0; i < path.size(); i++) {
     double v = v_ref_;
-    if (path[i].z >= s_start_break_) v = sqrt(pow(v_ref_, 2) + 2*a_max_decel_*(path[i].z - s_start_break_));
+    if (path[i].z >= s_start_break_) v = sqrt(pow(v_ref_, 2) + 2*a_max_decel_*(path[i].z - s_start_break_)); // decelerate to stop at end of route
     trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/v_ref_, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
