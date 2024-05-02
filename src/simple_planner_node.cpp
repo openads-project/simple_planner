@@ -1,6 +1,6 @@
 #include <chrono>
 #include <functional>
-#include <math.h>
+#include <cmath>
 #include <thread>
 
 #include <simple_planner/simple_planner_node.hpp>
@@ -95,7 +95,7 @@ void SimplePlannerNode::setup() {
 
   // define distance to stop
   if (a_max_decel_ < 0.0){
-    distance_to_stop_ = -0.5*pow(v_ref_, 2)/a_max_decel_;
+    distance_to_stop_ = -0.5*std::pow(v_ref_, 2)/a_max_decel_;
   } else {
     distance_to_stop_ = 0.0;
   }
@@ -206,7 +206,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
   for (size_t i = 0; i < path.size(); i++) {
     double v = v_ref_;
-    if (path[i].z >= s_start_break_) v = sqrt(pow(v_ref_, 2) + 2*a_max_decel_*(path[i].z - s_start_break_)); // decelerate to stop at end of route
+    if (path[i].z >= s_start_break_) v = std::sqrt(std::pow(v_ref_, 2) + 2*a_max_decel_*(path[i].z - s_start_break_)); // decelerate to stop at end of route
     trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i)/v_ref_, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
@@ -225,7 +225,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 }
 
 bool SimplePlannerNode::isDestinationReached(const geometry_msgs::msg::Point& destination) {
-  double distance = sqrt(pow(destination.x, 2) + pow(destination.y, 2));
+  double distance = std::sqrt(std::pow(destination.x, 2) + std::pow(destination.y, 2));
   RCLCPP_DEBUG(this->get_logger(), "Distance to goal: %f", distance);
   return distance < 0.2;
 }
@@ -234,9 +234,9 @@ double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Poi
   double distance = 0.0;
   for (int i = 0; i <= nPoint; i++) {
     if (i == 0) {
-      distance += sqrt(pow(points[i].x - 0.0, 2) + pow(points[i].y - 0.0, 2));
+      distance += std::sqrt(std::pow(points[i].x - 0.0, 2) + std::pow(points[i].y - 0.0, 2));
     } else {
-      distance += sqrt(pow(points[i].x - points[i-1].x, 2) + pow(points[i].y - points[i-1].y, 2));
+      distance += std::sqrt(std::pow(points[i].x - points[i-1].x, 2) + std::pow(points[i].y - points[i-1].y, 2));
     }
   }
   return distance;
