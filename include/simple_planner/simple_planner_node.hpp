@@ -10,9 +10,9 @@
 
 #include <route_planning_msgs/msg/route.hpp>
 
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_route_planning_msgs/tf2_route_planning_msgs.hpp>
 
 #include <trajectory_planning_msgs/msg/trajectory.hpp>
@@ -20,15 +20,11 @@
 
 namespace simple_planner {
 
-
 class SimplePlannerNode : public rclcpp::Node {
-
  public:
-
   SimplePlannerNode();
 
  private:
-
   static const std::string kEgoDataTopic;
   static const std::string kRouteTopic;
   static const std::string kOutputTopic;
@@ -39,7 +35,6 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kAMaxDecelParam;
 
  private:
-
   void loadParameters();
 
   void setup();
@@ -55,7 +50,6 @@ class SimplePlannerNode : public rclcpp::Node {
   void publishTimerCallback();
 
  private:
-
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
@@ -82,5 +76,4 @@ class SimplePlannerNode : public rclcpp::Node {
   double distance_to_stop_ = 0.0;
 };
 
-
-}
+}  // namespace simple_planner
