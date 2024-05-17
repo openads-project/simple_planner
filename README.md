@@ -35,6 +35,8 @@
 
 | Parameter | Type | Description |
 | --- | --- | --- |
+| `trajectory_frame_id` | `string` | Frame ID of published reference trajectory |
+| `fixed_over_time_frame_id` | `string` | Frame ID of frame that is fixed over time for finding temporal transforms |
 | `frequency` | `double` | frequency for publishing output trajectory |
 | `drivable_mode` | `bool` | publish trajectory in `drivable` (true, recommended) or `reference` format (false) |
 | `n_states` | `int` | defines the (maximum) number of states of the published trajectory |

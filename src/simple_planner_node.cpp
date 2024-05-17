@@ -16,6 +16,7 @@ const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data";
 const std::string SimplePlannerNode::kRouteTopic = "~/route";
 const std::string SimplePlannerNode::kOutputTopic = "~/trajectory";
 const std::string SimplePlannerNode::kTrajectoryFrameParam = "trajectory_frame_id";
+const std::string SimplePlannerNode::kFixedOverTimeFrameParam = "fixed_over_time_frame_id";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 const std::string SimplePlannerNode::kNStatesParam = "n_states";
@@ -38,7 +39,9 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
 void SimplePlannerNode::loadParameters() {
   // set parameter description
   rcl_interfaces::msg::ParameterDescriptor trajectory_frame_param_desc;
-  trajectory_frame_param_desc.description = "frame_id of published reference trajectory";
+  trajectory_frame_param_desc.description = "Frame ID of published reference trajectory";
+  rcl_interfaces::msg::ParameterDescriptor fixed_over_time_frame_param_desc;
+  fixed_over_time_frame_param_desc.description = "Frame ID of frame that is fixed over time for finding temporal transforms";
   rcl_interfaces::msg::ParameterDescriptor freq_param_desc;
   freq_param_desc.description = "frequency of publishing trajectory";
   rcl_interfaces::msg::ParameterDescriptor driveMode_param_desc;
@@ -52,6 +55,7 @@ void SimplePlannerNode::loadParameters() {
 
   // declare parameter
   this->declare_parameter(kTrajectoryFrameParam, rclcpp::ParameterType::PARAMETER_STRING, trajectory_frame_param_desc);
+  this->declare_parameter(kFixedOverTimeFrameParam, rclcpp::ParameterType::PARAMETER_STRING, fixed_over_time_frame_param_desc);
   this->declare_parameter(kFreqParam, rclcpp::ParameterType::PARAMETER_DOUBLE, freq_param_desc);
   this->declare_parameter(kDriveModeParam, rclcpp::ParameterType::PARAMETER_BOOL, driveMode_param_desc);
   this->declare_parameter(kNStatesParam, rclcpp::ParameterType::PARAMETER_INTEGER, nStates_param_desc);
@@ -63,6 +67,11 @@ void SimplePlannerNode::loadParameters() {
     trajectory_frame_id_ = this->get_parameter(kTrajectoryFrameParam).as_string();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %s", kTrajectoryFrameParam.c_str(), trajectory_frame_id_.c_str());
+  }
+  try {
+    fixed_over_time_frame_id_ = this->get_parameter(kFixedOverTimeFrameParam).as_string();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %s", kFixedOverTimeFrameParam.c_str(), fixed_over_time_frame_id_.c_str());
   }
   try {
     freq_ = this->get_parameter(kFreqParam).as_double();
@@ -178,7 +187,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   geometry_msgs::msg::TransformStamped tf;
   try {
     tf = tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id,
-                                      route_.header.stamp, "map", rclcpp::Duration::from_seconds(1.0));
+                                      route_.header.stamp, fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
     RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
   }
