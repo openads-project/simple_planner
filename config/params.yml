@@ -1,5 +1,6 @@
 /**:
   ros__parameters:
+    trajectory_frame_id: base_link
     frequency: 10.0
     drivable_mode: False
     n_states: 51

@@ -28,6 +28,7 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kEgoDataTopic;
   static const std::string kRouteTopic;
   static const std::string kOutputTopic;
+  static const std::string kTrajectoryFrameParam;
   static const std::string kFreqParam;
   static const std::string kDriveModeParam;
   static const std::string kNStatesParam;
@@ -61,6 +62,7 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // Parameters
+  std::string trajectory_frame_id_ = "base_link"; 
   double freq_ = 10.0;
   bool drivable_mode_ = false;
   int n_states_ = 51;
