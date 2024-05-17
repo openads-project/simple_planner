@@ -38,7 +38,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
 void SimplePlannerNode::loadParameters() {
   // set parameter description
   rcl_interfaces::msg::ParameterDescriptor trajectory_frame_param_desc;
-  freq_param_desc.description = "frame_id of published reference trajectory";
+  trajectory_frame_param_desc.description = "frame_id of published reference trajectory";
   rcl_interfaces::msg::ParameterDescriptor freq_param_desc;
   freq_param_desc.description = "frequency of publishing trajectory";
   rcl_interfaces::msg::ParameterDescriptor driveMode_param_desc;
