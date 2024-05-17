@@ -15,6 +15,8 @@ namespace simple_planner {
 const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data";
 const std::string SimplePlannerNode::kRouteTopic = "~/route";
 const std::string SimplePlannerNode::kOutputTopic = "~/trajectory";
+const std::string SimplePlannerNode::kTrajectoryFrameParam = "trajectory_frame_id";
+const std::string SimplePlannerNode::kFixedOverTimeFrameParam = "fixed_over_time_frame_id";
 const std::string SimplePlannerNode::kFreqParam = "frequency";
 const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 const std::string SimplePlannerNode::kNStatesParam = "n_states";
@@ -36,6 +38,10 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
  */
 void SimplePlannerNode::loadParameters() {
   // set parameter description
+  rcl_interfaces::msg::ParameterDescriptor trajectory_frame_param_desc;
+  trajectory_frame_param_desc.description = "Frame ID of published reference trajectory";
+  rcl_interfaces::msg::ParameterDescriptor fixed_over_time_frame_param_desc;
+  fixed_over_time_frame_param_desc.description = "Frame ID of frame that is fixed over time for finding temporal transforms";
   rcl_interfaces::msg::ParameterDescriptor freq_param_desc;
   freq_param_desc.description = "frequency of publishing trajectory";
   rcl_interfaces::msg::ParameterDescriptor driveMode_param_desc;
@@ -48,6 +54,8 @@ void SimplePlannerNode::loadParameters() {
   aMaxDecel_param_desc.description = "maximum deceleration (m/s^2) - must be < 0.0";
 
   // declare parameter
+  this->declare_parameter(kTrajectoryFrameParam, rclcpp::ParameterType::PARAMETER_STRING, trajectory_frame_param_desc);
+  this->declare_parameter(kFixedOverTimeFrameParam, rclcpp::ParameterType::PARAMETER_STRING, fixed_over_time_frame_param_desc);
   this->declare_parameter(kFreqParam, rclcpp::ParameterType::PARAMETER_DOUBLE, freq_param_desc);
   this->declare_parameter(kDriveModeParam, rclcpp::ParameterType::PARAMETER_BOOL, driveMode_param_desc);
   this->declare_parameter(kNStatesParam, rclcpp::ParameterType::PARAMETER_INTEGER, nStates_param_desc);
@@ -55,6 +63,16 @@ void SimplePlannerNode::loadParameters() {
   this->declare_parameter(kAMaxDecelParam, rclcpp::ParameterType::PARAMETER_DOUBLE, aMaxDecel_param_desc);
 
   // load parameter
+  try {
+    trajectory_frame_id_ = this->get_parameter(kTrajectoryFrameParam).as_string();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %s", kTrajectoryFrameParam.c_str(), trajectory_frame_id_.c_str());
+  }
+  try {
+    fixed_over_time_frame_id_ = this->get_parameter(kFixedOverTimeFrameParam).as_string();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %s", kFixedOverTimeFrameParam.c_str(), fixed_over_time_frame_id_.c_str());
+  }
   try {
     freq_ = this->get_parameter(kFreqParam).as_double();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
@@ -155,7 +173,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
   trajectory_planning_msgs::msg::Trajectory tra;
   tra.header.stamp = now();
-  tra.header.frame_id = "base_link";
+  tra.header.frame_id = trajectory_frame_id_;
 
   // TODO: additionally check if destination is reached or if route is outdated?
   if (route_.remaining_route.empty()) {
@@ -165,21 +183,21 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     return tra;
   }
 
-  // time-transform route to current base_link frame
+  // time-transform route to current trajectory_frame_id_ frame
   geometry_msgs::msg::TransformStamped tf;
   try {
     tf = tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id,
-                                      route_.header.stamp, "map", rclcpp::Duration::from_seconds(1.0));
+                                      route_.header.stamp, fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
     RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
   }
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
 
-  // saving remaining route in path and checking if path starts behind base_link, which could cause unintended behavior for drivable trajectories
+  // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
   if (path[0].x < 0.0)
-    RCLCPP_WARN(this->get_logger(), "Path starts %f m behind base_link. Could cause unintended behavior.", path[0].x);
+    RCLCPP_WARN(this->get_logger(), "Path starts %f m behind %s. Could cause unintended behavior.", path[0].x, trajectory_frame_id_.c_str());
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
 
   // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
