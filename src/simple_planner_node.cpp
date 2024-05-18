@@ -11,25 +11,24 @@
  */
 namespace simple_planner {
 
-// constants
-const std::string SimplePlannerNode::kEgoDataTopic = "~/ego_data";
-const std::string SimplePlannerNode::kRouteTopic = "~/route";
-const std::string SimplePlannerNode::kOutputTopic = "~/trajectory";
-const std::string SimplePlannerNode::kTrajectoryFrameParam = "trajectory_frame_id";
-const std::string SimplePlannerNode::kFixedOverTimeFrameParam = "fixed_over_time_frame_id";
-const std::string SimplePlannerNode::kFreqParam = "frequency";
-const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
-const std::string SimplePlannerNode::kNStatesParam = "n_states";
-const std::string SimplePlannerNode::kVRefParam = "v_ref";
-const std::string SimplePlannerNode::kAMaxDecelParam = "a_max_decel";
-const std::string SimplePlannerNode::kConsiderTrafficLightsParam = "consider_traffic_lights";
-const std::string SimplePlannerNode::kOffsetToStopLineParam = "offset_to_stop_line";
-
 /**
  * @brief Creates a SimplePlannerNode node
  *
  */
 SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
+
+  nodeParams_ = {
+    {"trajectory_frame_id", &trajectory_frame_id_, rclcpp::ParameterType::PARAMETER_STRING, "Frame ID of published reference trajectory"},
+    {"fixed_over_time_frame_id", &fixed_over_time_frame_id_, rclcpp::ParameterType::PARAMETER_STRING, "Frame ID of frame that is fixed over time for finding temporal transforms"},
+    {"frequency", &freq_, rclcpp::ParameterType::PARAMETER_DOUBLE, "frequency of publishing trajectory"},
+    {"drivable_mode", &drivable_mode_, rclcpp::ParameterType::PARAMETER_BOOL, "true: creating drivable trajectory; false: creating reference trajectory"},
+    {"n_states", &n_states_, rclcpp::ParameterType::PARAMETER_INTEGER, "number of states in the trajectory"},
+    {"v_ref", &v_ref_, rclcpp::ParameterType::PARAMETER_DOUBLE, "reference velocity (m/s); set for all states in the trajectory"},
+    {"a_max_decel", &a_max_decel_, rclcpp::ParameterType::PARAMETER_DOUBLE, "maximum deceleration (m/s^2) - must be < 0.0"},
+    {"consider_traffic_lights", &consider_traffic_lights_, rclcpp::ParameterType::PARAMETER_BOOL, "true: planner will consider traffic lights; false: planner will ignore traffic lights"},
+    {"offset_to_stop_line", &offset_to_stop_line_, rclcpp::ParameterType::PARAMETER_DOUBLE, "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)"}
+  };
+
   this->loadParameters();
   this->setup();
 }
@@ -39,88 +38,41 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
  *
  */
 void SimplePlannerNode::loadParameters() {
-  // set parameter description
-  rcl_interfaces::msg::ParameterDescriptor trajectory_frame_param_desc;
-  trajectory_frame_param_desc.description = "Frame ID of published reference trajectory";
-  rcl_interfaces::msg::ParameterDescriptor fixed_over_time_frame_param_desc;
-  fixed_over_time_frame_param_desc.description = "Frame ID of frame that is fixed over time for finding temporal transforms";
-  rcl_interfaces::msg::ParameterDescriptor freq_param_desc;
-  freq_param_desc.description = "frequency of publishing trajectory";
-  rcl_interfaces::msg::ParameterDescriptor driveMode_param_desc;
-  driveMode_param_desc.description = "true: creating drivable trajectory; false: creating reference trajectory";
-  rcl_interfaces::msg::ParameterDescriptor nStates_param_desc;
-  nStates_param_desc.description = "number of states in the trajectory";
-  rcl_interfaces::msg::ParameterDescriptor vRef_param_desc;
-  vRef_param_desc.description = "reference velocity (m/s); set for all states in the trajectory";
-  rcl_interfaces::msg::ParameterDescriptor aMaxDecel_param_desc;
-  aMaxDecel_param_desc.description = "maximum deceleration (m/s^2) - must be < 0.0";
-  rcl_interfaces::msg::ParameterDescriptor considerTrafficLights_param_desc;
-  considerTrafficLights_param_desc.description = "true: planner will consider traffic lights; false: planner will ignore traffic lights";
-  rcl_interfaces::msg::ParameterDescriptor offsetToStopLine_param_desc;
-  offsetToStopLine_param_desc.description = "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)";
+  for (auto& param : nodeParams_) {
+    std::string paramName = std::get<0>(param);
+    void* memberParamPtr = std::get<1>(param);
+    rclcpp::ParameterType paramType = std::get<2>(param);
+    
+    rcl_interfaces::msg::ParameterDescriptor param_desc;
+    param_desc.description = std::get<3>(param);
 
+    this->declare_parameter(paramName, paramType, param_desc);
 
-  // declare parameter
-  this->declare_parameter(kTrajectoryFrameParam, rclcpp::ParameterType::PARAMETER_STRING, trajectory_frame_param_desc);
-  this->declare_parameter(kFixedOverTimeFrameParam, rclcpp::ParameterType::PARAMETER_STRING, fixed_over_time_frame_param_desc);
-  this->declare_parameter(kFreqParam, rclcpp::ParameterType::PARAMETER_DOUBLE, freq_param_desc);
-  this->declare_parameter(kDriveModeParam, rclcpp::ParameterType::PARAMETER_BOOL, driveMode_param_desc);
-  this->declare_parameter(kNStatesParam, rclcpp::ParameterType::PARAMETER_INTEGER, nStates_param_desc);
-  this->declare_parameter(kVRefParam, rclcpp::ParameterType::PARAMETER_DOUBLE, vRef_param_desc);
-  this->declare_parameter(kAMaxDecelParam, rclcpp::ParameterType::PARAMETER_DOUBLE, aMaxDecel_param_desc);
-  this->declare_parameter(kConsiderTrafficLightsParam, rclcpp::ParameterType::PARAMETER_BOOL, considerTrafficLights_param_desc);
-  this->declare_parameter(kOffsetToStopLineParam, rclcpp::ParameterType::PARAMETER_DOUBLE, offsetToStopLine_param_desc);
-
-  // load parameter
-  try {
-    trajectory_frame_id_ = this->get_parameter(kTrajectoryFrameParam).as_string();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %s", kTrajectoryFrameParam.c_str(), trajectory_frame_id_.c_str());
-  }
-  try {
-    fixed_over_time_frame_id_ = this->get_parameter(kFixedOverTimeFrameParam).as_string();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %s", kFixedOverTimeFrameParam.c_str(), fixed_over_time_frame_id_.c_str());
-  }
-  try {
-    freq_ = this->get_parameter(kFreqParam).as_double();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kFreqParam.c_str(), freq_);
-  }
-  try {
-    drivable_mode_ = this->get_parameter(kDriveModeParam).as_bool();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %d", kDriveModeParam.c_str(),
-                drivable_mode_);
-  }
-  try {
-    n_states_ = this->get_parameter(kNStatesParam).as_int();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %d", kNStatesParam.c_str(),
-                n_states_);
-  }
-  try {
-    v_ref_ = this->get_parameter(kVRefParam).as_double();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kVRefParam.c_str(), v_ref_);
-  }
-  try {
-    a_max_decel_ = this->get_parameter(kAMaxDecelParam).as_double();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kAMaxDecelParam.c_str(),
-                a_max_decel_);
-  }
-  try {
-    consider_traffic_lights_ = this->get_parameter(kConsiderTrafficLightsParam).as_bool();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %d", kConsiderTrafficLightsParam.c_str(),
-                consider_traffic_lights_);
-  }
-  try {
-    offset_to_stop_line_ = this->get_parameter(kOffsetToStopLineParam).as_double();
-  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kOffsetToStopLineParam.c_str(),
-                offset_to_stop_line_);
+    try {
+      if (paramType == rclcpp::ParameterType::PARAMETER_STRING) {
+        *static_cast<std::string*>(memberParamPtr) = this->get_parameter(paramName).as_string();
+      } else if (paramType == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+        *static_cast<double*>(memberParamPtr) = this->get_parameter(paramName).as_double();
+      } else if (paramType == rclcpp::ParameterType::PARAMETER_BOOL) {
+        *static_cast<bool*>(memberParamPtr) = this->get_parameter(paramName).as_bool();
+      } else if (paramType == rclcpp::ParameterType::PARAMETER_INTEGER) {
+        *static_cast<int*>(memberParamPtr) = this->get_parameter(paramName).as_int();
+      } else {
+        RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
+      }
+    } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+      if (paramType == rclcpp::ParameterType::PARAMETER_STRING) {
+        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %s", paramName.c_str(), *static_cast<std::string*>(memberParamPtr));
+      } else if (paramType == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %f", paramName.c_str(), *static_cast<double*>(memberParamPtr));
+      } else if (paramType == rclcpp::ParameterType::PARAMETER_BOOL) {
+        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %d", paramName.c_str(), *static_cast<bool*>(memberParamPtr));
+      } else if (paramType == rclcpp::ParameterType::PARAMETER_INTEGER) {
+        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %d", paramName.c_str(), *static_cast<int*>(memberParamPtr));
+      } else {
+        RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
+      }
+    }
   }
 }
 
@@ -207,8 +159,9 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // time-transform route to current trajectory_frame_id_ frame
   geometry_msgs::msg::TransformStamped tf;
   try {
-    tf = tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id,
-                                      route_.header.stamp, fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    tf =
+        tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id, route_.header.stamp,
+                                     fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
     RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
   }

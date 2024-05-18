@@ -25,18 +25,9 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePlannerNode();
 
  private:
-  static const std::string kEgoDataTopic;
-  static const std::string kRouteTopic;
-  static const std::string kOutputTopic;
-  static const std::string kTrajectoryFrameParam;
-  static const std::string kFixedOverTimeFrameParam;
-  static const std::string kFreqParam;
-  static const std::string kDriveModeParam;
-  static const std::string kNStatesParam;
-  static const std::string kVRefParam;
-  static const std::string kAMaxDecelParam;
-  static const std::string kConsiderTrafficLightsParam;
-  static const std::string kOffsetToStopLineParam;
+  const std::string kEgoDataTopic = "~/ego_data";
+  const std::string kRouteTopic = "~/route";
+  const std::string kOutputTopic = "~/trajectory";
 
  private:
   void loadParameters();
@@ -66,7 +57,8 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // Parameters
-  std::string trajectory_frame_id_ = "base_link";
+  std::vector<std::tuple<std::string, void*, rclcpp::ParameterType, std::string>> nodeParams_;
+  std::string trajectory_frame_id_ = "base_link"; 
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
   bool drivable_mode_ = false;
