@@ -233,7 +233,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  v: %f, s: %f,  theta: %f", i,
                  calcDistance(path, i) / v_ref_, path[i].x, path[i].y, v, calcDistance(path, i), calcTheta(path, i));
   }
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, checkForStandstill(tra));
 
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
   return tra;
@@ -268,6 +268,13 @@ double SimplePlannerNode::calcTheta(const std::vector<geometry_msgs::msg::Point>
     }
   }
   return theta;
+}
+
+bool SimplePlannerNode::checkForStandstill(const trajectory_planning_msgs::msg::Trajectory& trajectory) {
+  for (int i = 0; i < trajectory_planning_msgs::trajectory_access::getSamplePointSize(trajectory); ++i) {
+    if (trajectory_planning_msgs::trajectory_access::getV(trajectory, i) > 0.05) return false;
+  }
+  return true;
 }
 
 double SimplePlannerNode::getNextRefLineS(const route_planning_msgs::msg::Route& route) {
