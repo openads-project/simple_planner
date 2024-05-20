@@ -194,6 +194,9 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
 
+  double next_stop_line = getNextRefLineS(tf_route);
+  double next_breaking_point = std::min(s_start_break_, next_stop_line - distance_to_stop_);
+
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
   if (path[0].x < 0.0)
@@ -206,7 +209,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // double current_speed_limit = tf_route.current_speed_limit/3.6;
 
   // keep maximum the first n_states_ in path (and therefore in trajectory)
-  if (n_states_ < path.size()) {
+  if ((size_t) n_states_ < path.size()) {
     path.erase(path.begin() + n_states_, path.end());
   }
 
@@ -214,9 +217,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
   for (size_t i = 0; i < path.size(); i++) {
     double v = v_ref_;
-    if (path[i].z >= s_start_break_)
-      v = std::sqrt(std::pow(v_ref_, 2) +
-                    2 * a_max_decel_ * (path[i].z - s_start_break_));  // decelerate to stop at end of route
+    if (path[i].z >= next_breaking_point) {
+      v = std::sqrt(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (path[i].z - s_start_break_));  // decelerate to stop at ref line
+      v = std::max(v, 0.0);
+    }
     trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i) / v_ref_, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
@@ -265,6 +269,62 @@ double SimplePlannerNode::calcTheta(const std::vector<geometry_msgs::msg::Point>
   }
   return theta;
 }
+
+double SimplePlannerNode::getNextRefLineS(const route_planning_msgs::msg::Route& route) {
+  double next_stop_line = std::numeric_limits<double>::infinity();
+  for (size_t i = 0; i < route.remaining_route.size() - 1; ++i) {
+    geometry_msgs::msg::Point p1 = route.remaining_route[i];
+    geometry_msgs::msg::Point p2 = route.remaining_route[i + 1];
+    for (size_t j = 0; j < route.regulatory_elements.size(); j++) {
+      if (route.regulatory_elements[j].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
+      if (route.regulatory_elements[j].value != route_planning_msgs::msg::RegulatoryElement::MOVEMENT_ALLOWED) continue;
+      geometry_msgs::msg::Point p3 = route.regulatory_elements[j].effect_line[0];
+      geometry_msgs::msg::Point p4 = route.regulatory_elements[j].effect_line[1];
+      double lambda;
+      if (calcIntersection(p1, p2, p3, p4, lambda)) {
+        next_stop_line = p1.z + lambda * (p2.z - p1.z);
+        return next_stop_line;
+      }
+    }
+  }
+  return next_stop_line;
+}
+
+bool SimplePlannerNode::calcIntersection(const geometry_msgs::msg::Point p1, const geometry_msgs::msg::Point p2,
+                                         const geometry_msgs::msg::Point p3, const geometry_msgs::msg::Point p4,
+                                         double& lambda) {
+  // problem description:
+  // Line 1: (x,y)=(x1,y1)+t1​⋅(x2−x1,y2−y1)
+  // Line 2: (x,y)=(x3,y3)+t2​⋅(x4−x3,y4−y3)
+  // solve for t1 and t2, where lines are equal --> (x1+t1​(x2−x1),y1+t1​(y2−y1))=(x3+t2​(x4−x3),y3+t2​(y4−y3)) 
+  // two linear equations: x1+t1​(x2−x1)=x3+t2​(x4−x3) and y1+t1​(y2−y1)=y3+t2​(y4−y3)
+  
+  // direction vectors of the lines
+  double d1x = p2.x - p1.x;
+  double d1y = p2.y - p1.y;
+  double d2x = p4.x - p3.x;
+  double d2y = p4.y - p3.y;
+
+  // determinant
+  double det = d1x * d2y - d1y * d2x;
+  if (det == 0) return false; // lines are parallel or collinear
+
+  // Calculate parameters t1 and t2
+  double t1 = ((p3.x - p1.x) * d2y - (p3.y - p1.y) * d2x) / det;
+  double t2 = ((p3.x - p1.x) * d1y - (p3.y - p1.y) * d1x) / det;
+
+  if (t1 >= 0 && t1 <= 1 && t2 >= 0 && t2 <= 1) {
+      // There is an intersection within the segments
+      double x = p1.x + t1 * d1x;
+      double y = p1.y + t1 * d1y;
+      lambda = t1;
+      RCLCPP_INFO(this->get_logger(), "Intersection at x: %f, y: %f", x, y);
+      return true;
+  }
+
+  return false;
+}
+
 
 /**
  * @brief This callback is invoked every period seconds by the timer

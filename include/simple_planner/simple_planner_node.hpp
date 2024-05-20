@@ -45,6 +45,11 @@ class SimplePlannerNode : public rclcpp::Node {
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
+
+  double getNextRefLineS(const route_planning_msgs::msg::Route& route);
+  bool calcIntersection(const geometry_msgs::msg::Point p1, const geometry_msgs::msg::Point p2,
+                        const geometry_msgs::msg::Point p3, const geometry_msgs::msg::Point p4, double& lambda);
+
   bool isDestinationReached(const geometry_msgs::msg::Point& destination);
   double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
   double calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
@@ -63,7 +68,7 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // Parameters
-  std::string trajectory_frame_id_ = "base_link"; 
+  std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
   bool drivable_mode_ = false;
