@@ -284,7 +284,7 @@ double SimplePlannerNode::getNextRefLineS(const route_planning_msgs::msg::Route&
     geometry_msgs::msg::Point p2 = route.remaining_route[i + 1];
     for (size_t j = 0; j < route.regulatory_elements.size(); j++) {
       if (route.regulatory_elements[j].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
-      if (route.regulatory_elements[j].value != route_planning_msgs::msg::RegulatoryElement::MOVEMENT_ALLOWED) continue;
+      if (route.regulatory_elements[j].value == route_planning_msgs::msg::RegulatoryElement::MOVEMENT_ALLOWED) continue;
       geometry_msgs::msg::Point p3 = route.regulatory_elements[j].effect_line[0];
       geometry_msgs::msg::Point p4 = route.regulatory_elements[j].effect_line[1];
       double lambda;
