@@ -196,11 +196,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   double next_stop_line = getNextRefLineS(tf_route);
   double next_breaking_point = std::min(s_start_break_, next_stop_line - distance_to_stop_);
+  // make sure to stop with the front of the vehicle at the stop line
+  next_breaking_point = next_breaking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
 
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
   if (path[0].x < 0.0)
-    RCLCPP_WARN(this->get_logger(), "Path starts %f m behind %s. Could cause unintended behavior.", path[0].x, trajectory_frame_id_.c_str());
+    RCLCPP_DEBUG(this->get_logger(), "Path starts %f m behind %s. Could cause unintended behavior.", path[0].x, trajectory_frame_id_.c_str());
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
 
   // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
@@ -218,8 +220,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   for (size_t i = 0; i < path.size(); i++) {
     double v = v_ref_;
     if (path[i].z >= next_breaking_point) {
-      v = std::sqrt(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (path[i].z - s_start_break_));  // decelerate to stop at ref line
-      v = std::max(v, 0.0);
+      v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (path[i].z - next_breaking_point), 0.0));  // decelerate to stop at ref line
     }
     trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i) / v_ref_, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
