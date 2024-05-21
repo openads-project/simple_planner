@@ -46,9 +46,6 @@ class SimplePlannerNode : public rclcpp::Node {
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
 
-  double getNextRefLineS(const route_planning_msgs::msg::Route& route);
-  bool calcIntersection(const geometry_msgs::msg::Point p1, const geometry_msgs::msg::Point p2,
-                        const geometry_msgs::msg::Point p3, const geometry_msgs::msg::Point p4, double& lambda);
   bool checkForStandstill(const trajectory_planning_msgs::msg::Trajectory& trajectory);
 
   bool isDestinationReached(const geometry_msgs::msg::Point& destination);
