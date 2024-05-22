@@ -254,7 +254,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  v: %f, s: %f,  theta: %f", i,
                  calcDistance(path, i) / v_ref_, path[i].x, path[i].y, v, calcDistance(path, i), calcTheta(path, i));
   }
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, checkForStandstill(tra));
+  // trajectory_planning_msgs::trajectory_access::setStandstill(tra, checkForStandstill(tra));
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
 
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
   return tra;
