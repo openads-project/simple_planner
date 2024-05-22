@@ -7,3 +7,4 @@
     n_states: 51
     v_ref: 13.89
     a_max_decel: -2.5
+    offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)

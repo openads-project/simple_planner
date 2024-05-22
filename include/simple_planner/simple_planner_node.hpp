@@ -35,6 +35,7 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kNStatesParam;
   static const std::string kVRefParam;
   static const std::string kAMaxDecelParam;
+  static const std::string kOffsetToStopLineParam;
 
  private:
   void loadParameters();
@@ -73,13 +74,14 @@ class SimplePlannerNode : public rclcpp::Node {
   int n_states_ = 51;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
+  double offset_to_stop_line_ = 0.0;
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
-  double s_start_break_ = std::numeric_limits<double>::infinity();
+  double s_start_brake_ = std::numeric_limits<double>::infinity();
   double distance_to_stop_ = 0.0;
 };
 
