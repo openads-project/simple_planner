@@ -35,6 +35,7 @@ class SimplePlannerNode : public rclcpp::Node {
   static const std::string kNStatesParam;
   static const std::string kVRefParam;
   static const std::string kAMaxDecelParam;
+  static const std::string kConsiderTrafficLightsParam;
   static const std::string kOffsetToStopLineParam;
 
  private:
@@ -72,6 +73,7 @@ class SimplePlannerNode : public rclcpp::Node {
   int n_states_ = 51;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
+  bool consider_traffic_lights_ = false;
   double offset_to_stop_line_ = 0.0;
 
   perception_msgs::msg::EgoData ego_data_;
