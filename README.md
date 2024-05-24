@@ -42,6 +42,8 @@
 | `n_states` | `int` | defines the (maximum) number of states of the published trajectory |
 | `v_ref` | `double` | defines the constant velocity of the published trajectory |
 | `a_max_decel` | `double` | defines the maximum deceleration for the braking maneuver before the end of the route (has to be `<= 0.0`; if `= 0.0`, no braking) |
+| `consider_traffic_lights` | `bool` | consider traffic lights for trajectory planning (stop at red traffic lights or not) |
+| `offset_to_stop_line` | `double` | additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
 
 ## Usage of docker-ros Images
 
