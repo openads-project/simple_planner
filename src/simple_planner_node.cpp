@@ -77,6 +77,43 @@ void SimplePlannerNode::loadParameters() {
 }
 
 /**
+ * @brief Handles reconfiguration when a parameter value is changed
+ *
+ * @param parameters parameters
+ * @return parameter change result
+ */
+rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(
+    const std::vector<rclcpp::Parameter>& parameters) {
+  for (const auto& param : parameters) {
+    for (auto& nodeParam : nodeParams_) {
+      if (param.get_name() == std::get<0>(nodeParam)) {
+        void* memberParamPtr = std::get<1>(nodeParam);
+        rclcpp::ParameterType paramType = std::get<2>(nodeParam);
+
+        if (paramType == rclcpp::ParameterType::PARAMETER_STRING) {
+          *static_cast<std::string*>(memberParamPtr) = param.as_string();
+        } else if (paramType == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+          *static_cast<double*>(memberParamPtr) = param.as_double();
+        } else if (paramType == rclcpp::ParameterType::PARAMETER_BOOL) {
+          *static_cast<bool*>(memberParamPtr) = param.as_bool();
+        } else if (paramType == rclcpp::ParameterType::PARAMETER_INTEGER) {
+          *static_cast<int*>(memberParamPtr) = param.as_int();
+        } else {
+          RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
+        }
+      }
+    }
+  }
+
+  // mark parameter change successful
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  result.reason = "success";
+
+  return result;
+}
+
+/**
  * @brief Sets up subscribers, publishers, and more.
  *
  */

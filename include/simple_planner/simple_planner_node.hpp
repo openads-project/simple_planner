@@ -31,6 +31,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
  private:
   void loadParameters();
+  rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters);
 
   void setup();
 
