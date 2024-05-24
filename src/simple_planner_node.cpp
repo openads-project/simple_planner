@@ -35,11 +35,32 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
 template <typename T>
 void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& member_param,
                                                  const rclcpp::ParameterType& type, const std::string& description,
-                                                 const bool& add_to_reconfigurable_node_params) {
-  
+                                                 const bool& add_to_reconfigurable_node_params, const bool& read_only,
+                                                 const std::optional<double>& from_value,
+                                                 const std::optional<double>& to_value,
+                                                 const std::optional<double>& step_value) {
   rcl_interfaces::msg::ParameterDescriptor param_desc;
   param_desc.description = description;
-  
+  param_desc.read_only = read_only;
+
+  if (from_value.has_value() && to_value.has_value() && step_value.has_value()) {
+    if (type == rclcpp::ParameterType::PARAMETER_INTEGER) {
+      rcl_interfaces::msg::IntegerRange param_range;
+      param_range.from_value = static_cast<int>(from_value.value());
+      param_range.to_value = static_cast<int>(to_value.value());
+      param_range.step = static_cast<int>(step_value.value());
+      param_desc.integer_range = {param_range};
+    } else if (type == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+      rcl_interfaces::msg::FloatingPointRange param_range;
+      param_range.from_value = from_value.value();
+      param_range.to_value = to_value.value();
+      param_range.step = step_value.value();
+      param_desc.floating_point_range = {param_range};
+    } else {
+      RCLCPP_WARN(this->get_logger(), "Parameter type does not support range.");
+    }
+  }
+
   this->declare_parameter(name, type, param_desc);
 
   try {
@@ -62,7 +83,7 @@ void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& mem
   } catch (rclcpp::exceptions::InvalidParameterValueException&) {
     RCLCPP_WARN_STREAM(this->get_logger(),
                        "Invalid parameter value for '" << name << "'. Using default value: " << member_param);
-  }  
+  }
 
   if (add_to_reconfigurable_node_params) {
     nodeParams_.push_back(std::make_tuple(name, &member_param, type, description));
