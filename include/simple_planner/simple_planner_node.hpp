@@ -30,7 +30,9 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kOutputTopic = "~/trajectory";
 
  private:
-  void loadParameters();
+  template <typename T>
+  void declareAndLoadParameters(const std::string &name, T &member_param, const rclcpp::ParameterType &type,
+                                const std::string &description, const bool &add_to_reconfigurable_node_params);
   rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters);
 
   void setup();
@@ -59,7 +61,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   // Parameters
   std::vector<std::tuple<std::string, void*, rclcpp::ParameterType, std::string>> nodeParams_;
-  std::string trajectory_frame_id_ = "base_link"; 
+  std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
   bool drivable_mode_ = false;

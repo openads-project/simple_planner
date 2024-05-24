@@ -17,62 +17,52 @@ namespace simple_planner {
  */
 SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
 
-  nodeParams_ = {
-    {"trajectory_frame_id", &trajectory_frame_id_, rclcpp::ParameterType::PARAMETER_STRING, "Frame ID of published reference trajectory"},
-    {"fixed_over_time_frame_id", &fixed_over_time_frame_id_, rclcpp::ParameterType::PARAMETER_STRING, "Frame ID of frame that is fixed over time for finding temporal transforms"},
-    {"frequency", &freq_, rclcpp::ParameterType::PARAMETER_DOUBLE, "frequency of publishing trajectory"},
-    {"drivable_mode", &drivable_mode_, rclcpp::ParameterType::PARAMETER_BOOL, "true: creating drivable trajectory; false: creating reference trajectory"},
-    {"n_states", &n_states_, rclcpp::ParameterType::PARAMETER_INTEGER, "number of states in the trajectory"},
-    {"v_ref", &v_ref_, rclcpp::ParameterType::PARAMETER_DOUBLE, "reference velocity (m/s); set for all states in the trajectory"},
-    {"a_max_decel", &a_max_decel_, rclcpp::ParameterType::PARAMETER_DOUBLE, "maximum deceleration (m/s^2) - must be < 0.0"},
-    {"consider_traffic_lights", &consider_traffic_lights_, rclcpp::ParameterType::PARAMETER_BOOL, "true: planner will consider traffic lights; false: planner will ignore traffic lights"},
-    {"offset_to_stop_line", &offset_to_stop_line_, rclcpp::ParameterType::PARAMETER_DOUBLE, "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)"}
-  };
+  this->declareAndLoadParameters("trajectory_frame_id", trajectory_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
+                                 "Frame ID of published reference trajectory", true);
+  this->declareAndLoadParameters("fixed_over_time_frame_id", fixed_over_time_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
+                                  "Frame ID of frame that is fixed over time for finding temporal transforms", true);
+  this->declareAndLoadParameters("frequency", freq_, rclcpp::ParameterType::PARAMETER_DOUBLE, "frequency of publishing trajectory", true);
+  this->declareAndLoadParameters("drivable_mode", drivable_mode_, rclcpp::ParameterType::PARAMETER_BOOL, "true: creating drivable trajectory; false: creating reference trajectory", true);
+  this->declareAndLoadParameters("n_states", n_states_, rclcpp::ParameterType::PARAMETER_INTEGER, "number of states in the trajectory", true);
+  this->declareAndLoadParameters("v_ref", v_ref_, rclcpp::ParameterType::PARAMETER_DOUBLE, "reference velocity (m/s); set for all states in the trajectory", true);
+  this->declareAndLoadParameters("a_max_decel", a_max_decel_, rclcpp::ParameterType::PARAMETER_DOUBLE, "maximum deceleration (m/s^2) - must be < 0.0", true);
+  this->declareAndLoadParameters("consider_traffic_lights", consider_traffic_lights_, rclcpp::ParameterType::PARAMETER_BOOL, "true: planner will consider traffic lights; false: planner will ignore traffic lights", true);
+  this->declareAndLoadParameters("offset_to_stop_line", offset_to_stop_line_, rclcpp::ParameterType::PARAMETER_DOUBLE, "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)", true);
 
-  this->loadParameters();
   this->setup();
 }
 
-/**
- * @brief Loads ROS parameters used in the node.
- *
- */
-void SimplePlannerNode::loadParameters() {
-  for (auto& param : nodeParams_) {
-    std::string paramName = std::get<0>(param);
-    void* memberParamPtr = std::get<1>(param);
-    rclcpp::ParameterType paramType = std::get<2>(param);
+template <typename T>
+void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& member_param,
+                                                 const rclcpp::ParameterType& type, const std::string& description,
+                                                 const bool& add_to_reconfigurable_node_params) {
+  
+  rcl_interfaces::msg::ParameterDescriptor param_desc;
+  param_desc.description = description;
+  
+  this->declare_parameter(name, type, param_desc);
     
-    rcl_interfaces::msg::ParameterDescriptor param_desc;
-    param_desc.description = std::get<3>(param);
-
-    this->declare_parameter(paramName, paramType, param_desc);
-
-    try {
-      if (paramType == rclcpp::ParameterType::PARAMETER_STRING) {
-        *static_cast<std::string*>(memberParamPtr) = this->get_parameter(paramName).as_string();
-      } else if (paramType == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-        *static_cast<double*>(memberParamPtr) = this->get_parameter(paramName).as_double();
-      } else if (paramType == rclcpp::ParameterType::PARAMETER_BOOL) {
-        *static_cast<bool*>(memberParamPtr) = this->get_parameter(paramName).as_bool();
-      } else if (paramType == rclcpp::ParameterType::PARAMETER_INTEGER) {
-        *static_cast<int*>(memberParamPtr) = this->get_parameter(paramName).as_int();
-      } else {
-        RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
-      }
-    } catch (rclcpp::exceptions::ParameterUninitializedException&) {
-      if (paramType == rclcpp::ParameterType::PARAMETER_STRING) {
-        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %s", paramName.c_str(), *static_cast<std::string*>(memberParamPtr));
-      } else if (paramType == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %f", paramName.c_str(), *static_cast<double*>(memberParamPtr));
-      } else if (paramType == rclcpp::ParameterType::PARAMETER_BOOL) {
-        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %d", paramName.c_str(), *static_cast<bool*>(memberParamPtr));
-      } else if (paramType == rclcpp::ParameterType::PARAMETER_INTEGER) {
-        RCLCPP_WARN(this->get_logger(), "Parameter '%s' not set. Using default value: %d", paramName.c_str(), *static_cast<int*>(memberParamPtr));
-      } else {
-        RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
-      }
+  try {
+    if (type == rclcpp::ParameterType::PARAMETER_STRING) {
+      member_param = this->get_parameter(name).as_string();
+    } else if (type == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+      member_param = this->get_parameter(name).as_double();
+    } else if (type == rclcpp::ParameterType::PARAMETER_BOOL) {
+      member_param = this->get_parameter(name).as_bool();
+    } else if (type == rclcpp::ParameterType::PARAMETER_INTEGER) {
+      member_param = this->get_parameter(name).as_int();
+    } else {
+      RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
     }
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_WARN_STREAM(this->get_logger(), "Parameter '" << name << "' not set. Using default value: " << member_param);
+  } catch (rclcpp::exceptions::InvalidParameterValueException&) {
+    RCLCPP_WARN_STREAM(this->get_logger(),
+                       "Invalid parameter value for '" << name << "'. Using default value: " << member_param);
+  }
+
+  if (add_to_reconfigurable_node_params) {
+    nodeParams_.push_back(std::make_tuple(name, &member_param, type, description));
   }
 }
 
