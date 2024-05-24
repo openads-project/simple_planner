@@ -41,29 +41,35 @@ void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& mem
   param_desc.description = description;
   
   this->declare_parameter(name, type, param_desc);
-    
+
   try {
-    if (type == rclcpp::ParameterType::PARAMETER_STRING) {
-      member_param = this->get_parameter(name).as_string();
-    } else if (type == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-      member_param = this->get_parameter(name).as_double();
-    } else if (type == rclcpp::ParameterType::PARAMETER_BOOL) {
-      member_param = this->get_parameter(name).as_bool();
-    } else if (type == rclcpp::ParameterType::PARAMETER_INTEGER) {
-      member_param = this->get_parameter(name).as_int();
-    } else {
-      RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
-    }
+    loadParameters(name, member_param);
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_WARN_STREAM(this->get_logger(), "Parameter '" << name << "' not set. Using default value: " << member_param);
   } catch (rclcpp::exceptions::InvalidParameterValueException&) {
     RCLCPP_WARN_STREAM(this->get_logger(),
                        "Invalid parameter value for '" << name << "'. Using default value: " << member_param);
-  }
+  }  
 
   if (add_to_reconfigurable_node_params) {
     nodeParams_.push_back(std::make_tuple(name, &member_param, type, description));
   }
+}
+
+void SimplePlannerNode::loadParameters(const std::string& name, std::string& member_param) {
+  member_param = this->get_parameter(name).as_string();
+}
+
+void SimplePlannerNode::loadParameters(const std::string& name, double& member_param) {
+  member_param = this->get_parameter(name).as_double();
+}
+
+void SimplePlannerNode::loadParameters(const std::string& name, int& member_param) {
+  member_param = this->get_parameter(name).as_int();
+}
+
+void SimplePlannerNode::loadParameters(const std::string& name, bool& member_param) {
+  member_param = this->get_parameter(name).as_bool();
 }
 
 /**
