@@ -43,9 +43,22 @@ void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& mem
   this->declare_parameter(name, type, param_desc);
 
   try {
-    loadParameters(name, member_param);
+    if constexpr (std::is_same_v<T, std::string>) {
+      member_param = this->get_parameter(name).as_string();
+    } else if constexpr (std::is_same_v<T, double>) {
+      member_param = this->get_parameter(name).as_double();
+    } else if constexpr (std::is_same_v<T, bool>) {
+      member_param = this->get_parameter(name).as_bool();
+    } else if constexpr (std::is_same_v<T, int>) {
+      member_param = this->get_parameter(name).as_int();
+    } else {
+      RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
+    }
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_WARN_STREAM(this->get_logger(), "Parameter '" << name << "' not set. Using default value: " << member_param);
+  } catch (rclcpp::exceptions::InvalidParameterTypeException&) {
+    RCLCPP_WARN_STREAM(this->get_logger(),
+                       "Invalid parameter type for '" << name << "'. Using default value: " << member_param);
   } catch (rclcpp::exceptions::InvalidParameterValueException&) {
     RCLCPP_WARN_STREAM(this->get_logger(),
                        "Invalid parameter value for '" << name << "'. Using default value: " << member_param);
@@ -54,22 +67,6 @@ void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& mem
   if (add_to_reconfigurable_node_params) {
     nodeParams_.push_back(std::make_tuple(name, &member_param, type, description));
   }
-}
-
-void SimplePlannerNode::loadParameters(const std::string& name, std::string& member_param) {
-  member_param = this->get_parameter(name).as_string();
-}
-
-void SimplePlannerNode::loadParameters(const std::string& name, double& member_param) {
-  member_param = this->get_parameter(name).as_double();
-}
-
-void SimplePlannerNode::loadParameters(const std::string& name, int& member_param) {
-  member_param = this->get_parameter(name).as_int();
-}
-
-void SimplePlannerNode::loadParameters(const std::string& name, bool& member_param) {
-  member_param = this->get_parameter(name).as_bool();
 }
 
 /**

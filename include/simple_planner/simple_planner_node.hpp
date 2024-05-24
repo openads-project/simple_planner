@@ -33,10 +33,6 @@ class SimplePlannerNode : public rclcpp::Node {
   template <typename T>
   void declareAndLoadParameters(const std::string &name, T &member_param, const rclcpp::ParameterType &type,
                                 const std::string &description, const bool &add_to_reconfigurable_node_params);
-  void loadParameters(const std::string& name, std::string& member_param);
-  void loadParameters(const std::string& name, double& member_param);
-  void loadParameters(const std::string& name, int& member_param);
-  void loadParameters(const std::string& name, bool& member_param);
   rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters);
 
   void setup();
