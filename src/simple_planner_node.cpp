@@ -22,6 +22,8 @@ const std::string SimplePlannerNode::kDriveModeParam = "drivable_mode";
 const std::string SimplePlannerNode::kNStatesParam = "n_states";
 const std::string SimplePlannerNode::kVRefParam = "v_ref";
 const std::string SimplePlannerNode::kAMaxDecelParam = "a_max_decel";
+const std::string SimplePlannerNode::kConsiderTrafficLightsParam = "consider_traffic_lights";
+const std::string SimplePlannerNode::kOffsetToStopLineParam = "offset_to_stop_line";
 
 /**
  * @brief Creates a SimplePlannerNode node
@@ -52,6 +54,11 @@ void SimplePlannerNode::loadParameters() {
   vRef_param_desc.description = "reference velocity (m/s); set for all states in the trajectory";
   rcl_interfaces::msg::ParameterDescriptor aMaxDecel_param_desc;
   aMaxDecel_param_desc.description = "maximum deceleration (m/s^2) - must be < 0.0";
+  rcl_interfaces::msg::ParameterDescriptor considerTrafficLights_param_desc;
+  considerTrafficLights_param_desc.description = "true: planner will consider traffic lights; false: planner will ignore traffic lights";
+  rcl_interfaces::msg::ParameterDescriptor offsetToStopLine_param_desc;
+  offsetToStopLine_param_desc.description = "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)";
+
 
   // declare parameter
   this->declare_parameter(kTrajectoryFrameParam, rclcpp::ParameterType::PARAMETER_STRING, trajectory_frame_param_desc);
@@ -61,6 +68,8 @@ void SimplePlannerNode::loadParameters() {
   this->declare_parameter(kNStatesParam, rclcpp::ParameterType::PARAMETER_INTEGER, nStates_param_desc);
   this->declare_parameter(kVRefParam, rclcpp::ParameterType::PARAMETER_DOUBLE, vRef_param_desc);
   this->declare_parameter(kAMaxDecelParam, rclcpp::ParameterType::PARAMETER_DOUBLE, aMaxDecel_param_desc);
+  this->declare_parameter(kConsiderTrafficLightsParam, rclcpp::ParameterType::PARAMETER_BOOL, considerTrafficLights_param_desc);
+  this->declare_parameter(kOffsetToStopLineParam, rclcpp::ParameterType::PARAMETER_DOUBLE, offsetToStopLine_param_desc);
 
   // load parameter
   try {
@@ -100,6 +109,18 @@ void SimplePlannerNode::loadParameters() {
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kAMaxDecelParam.c_str(),
                 a_max_decel_);
+  }
+  try {
+    consider_traffic_lights_ = this->get_parameter(kConsiderTrafficLightsParam).as_bool();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %d", kConsiderTrafficLightsParam.c_str(),
+                consider_traffic_lights_);
+  }
+  try {
+    offset_to_stop_line_ = this->get_parameter(kOffsetToStopLineParam).as_double();
+  } catch (rclcpp::exceptions::ParameterUninitializedException&) {
+    RCLCPP_WARN(this->get_logger(), "Parameter '%s' is not set. Using default value: %f", kOffsetToStopLineParam.c_str(),
+                offset_to_stop_line_);
   }
 }
 
@@ -162,8 +183,8 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
 
   if (!route_init_) {
     route_init_ = true;
-    s_start_break_ = route_.remaining_route.back().z - distance_to_stop_;
-    RCLCPP_INFO(this->get_logger(), "Received first route message, start beak s: %f", s_start_break_);
+    s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
+    RCLCPP_INFO(this->get_logger(), "Received first route message, start beak s: %f", s_start_brake_);
   }
 }
 
@@ -194,10 +215,28 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
 
+  // find next traffic light stop line and calculate braking point
+  double next_stop_line = std::numeric_limits<double>::infinity();
+  if (consider_traffic_lights_){
+    for(size_t j = 0; j < tf_route.regulatory_elements.size(); ++j) {
+      if (tf_route.regulatory_elements[j].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
+      if (tf_route.regulatory_elements[j].value == route_planning_msgs::msg::RegulatoryElement::MOVEMENT_ALLOWED) continue;
+      if (tf_route.regulatory_elements[j].effect_line[0].z >= 0.0 && tf_route.regulatory_elements[j].effect_line[0].z < next_stop_line) {
+        next_stop_line = tf_route.regulatory_elements[j].effect_line[0].z;
+      }
+    }
+    next_stop_line = next_stop_line - offset_to_stop_line_;
+    RCLCPP_DEBUG(this->get_logger(), "Next stop line at s: %f (global)", next_stop_line);
+  }
+  
+  double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
+  // make sure to stop with the front of the vehicle at the stop line
+  next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
+
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
   if (path[0].x < 0.0)
-    RCLCPP_WARN(this->get_logger(), "Path starts %f m behind %s. Could cause unintended behavior.", path[0].x, trajectory_frame_id_.c_str());
+    RCLCPP_DEBUG(this->get_logger(), "Path starts %f m behind %s. Could cause unintended behavior.", path[0].x, trajectory_frame_id_.c_str());
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
 
   // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
@@ -206,7 +245,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // double current_speed_limit = tf_route.current_speed_limit/3.6;
 
   // keep maximum the first n_states_ in path (and therefore in trajectory)
-  if (n_states_ < path.size()) {
+  if ((size_t) n_states_ < path.size()) {
     path.erase(path.begin() + n_states_, path.end());
   }
 
@@ -214,9 +253,9 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
   for (size_t i = 0; i < path.size(); i++) {
     double v = v_ref_;
-    if (path[i].z >= s_start_break_)
-      v = std::sqrt(std::pow(v_ref_, 2) +
-                    2 * a_max_decel_ * (path[i].z - s_start_break_));  // decelerate to stop at end of route
+    if (path[i].z >= next_braking_point) {
+      v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (path[i].z - next_braking_point), 0.0));  // decelerate to stop at ref line
+    }
     trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i) / v_ref_, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
