@@ -65,6 +65,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   // Parameters
   std::vector<std::tuple<std::string, void*, rclcpp::ParameterType, std::string>> nodeParams_;
+  OnSetParametersCallbackHandle::SharedPtr parameters_callback_;
   std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;

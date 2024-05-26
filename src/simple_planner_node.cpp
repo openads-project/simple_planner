@@ -20,7 +20,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameters("trajectory_frame_id", trajectory_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
                                  "Frame ID of published reference trajectory", true);
   this->declareAndLoadParameters("fixed_over_time_frame_id", fixed_over_time_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
-                                  "Frame ID of frame that is fixed over time for finding temporal transforms", true);
+                                 "Frame ID of frame that is fixed over time for finding temporal transforms", true);
   this->declareAndLoadParameters("frequency", freq_, rclcpp::ParameterType::PARAMETER_DOUBLE, "frequency of publishing trajectory", true);
   this->declareAndLoadParameters("drivable_mode", drivable_mode_, rclcpp::ParameterType::PARAMETER_BOOL, "true: creating drivable trajectory; false: creating reference trajectory", true);
   this->declareAndLoadParameters("n_states", n_states_, rclcpp::ParameterType::PARAMETER_INTEGER, "number of states in the trajectory", true);
@@ -161,6 +161,11 @@ void SimplePlannerNode::setup() {
   sub_route_ = this->create_subscription<route_planning_msgs::msg::Route>(
       kRouteTopic, 10, std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
+
+  // create a callback for dynamic parameter configuration
+  parameters_callback_ = this->add_on_set_parameters_callback(
+      std::bind(&SimplePlannerNode::parametersCallback, this, std::placeholders::_1));
+
 }
 
 /**
@@ -233,7 +238,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     next_stop_line = next_stop_line - offset_to_stop_line_;
     RCLCPP_DEBUG(this->get_logger(), "Next stop line at s: %f (global)", next_stop_line);
   }
-  
+
   double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
   // make sure to stop with the front of the vehicle at the stop line
   next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
