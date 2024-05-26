@@ -35,27 +35,28 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
 template <typename T>
 void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& member_param,
                                                  const rclcpp::ParameterType& type, const std::string& description,
-                                                 const bool& add_to_reconfigurable_node_params, const bool& read_only,
+                                                 const bool& add_to_reconfigurable_node_params,
+                                                 const std::string& additional_constraints, const bool& read_only,
                                                  const std::optional<double>& from_value,
                                                  const std::optional<double>& to_value,
                                                  const std::optional<double>& step_value) {
   rcl_interfaces::msg::ParameterDescriptor param_desc;
   param_desc.description = description;
+  param_desc.additional_constraints = additional_constraints;
   param_desc.read_only = read_only;
 
-  if (from_value.has_value() && to_value.has_value() && step_value.has_value()) {
-    if (type == rclcpp::ParameterType::PARAMETER_INTEGER) {
-      rcl_interfaces::msg::IntegerRange param_range;
-      param_range.from_value = static_cast<int>(from_value.value());
-      param_range.to_value = static_cast<int>(to_value.value());
-      param_range.step = static_cast<int>(step_value.value());
-      param_desc.integer_range = {param_range};
-    } else if (type == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-      rcl_interfaces::msg::FloatingPointRange param_range;
-      param_range.from_value = from_value.value();
-      param_range.to_value = to_value.value();
-      param_range.step = step_value.value();
-      param_desc.floating_point_range = {param_range};
+  if (from_value.has_value() && to_value.has_value()) {
+    double step = step_value.has_value() ? step_value.value() : 0.0;
+    if constexpr (std::is_same_v<T, int>) {
+      rcl_interfaces::msg::IntegerRange range;
+      range.set__from_value(static_cast<int>(from_value.value()))
+          .set__to_value(static_cast<int>(to_value.value()))
+          .set__step(static_cast<int>(step));
+      param_desc.integer_range = {range};
+    } else if constexpr (std::is_same_v<T, double>) {
+      rcl_interfaces::msg::FloatingPointRange range;
+      range.set__from_value(from_value.value()).set__to_value(to_value.value()).set__step(step);
+      param_desc.floating_point_range = {range};
     } else {
       RCLCPP_WARN(this->get_logger(), "Parameter type does not support range.");
     }
