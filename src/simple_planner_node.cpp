@@ -16,30 +16,40 @@ namespace simple_planner {
  *
  */
 SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
-
-  this->declareAndLoadParameters("trajectory_frame_id", trajectory_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
-                                 "Frame ID of published reference trajectory", true);
-  this->declareAndLoadParameters("fixed_over_time_frame_id", fixed_over_time_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
-                                 "Frame ID of frame that is fixed over time for finding temporal transforms", true);
-  this->declareAndLoadParameters("frequency", freq_, rclcpp::ParameterType::PARAMETER_DOUBLE, "frequency of publishing trajectory", true);
-  this->declareAndLoadParameters("drivable_mode", drivable_mode_, rclcpp::ParameterType::PARAMETER_BOOL, "true: creating drivable trajectory; false: creating reference trajectory", true);
-  this->declareAndLoadParameters("n_states", n_states_, rclcpp::ParameterType::PARAMETER_INTEGER, "number of states in the trajectory", true);
-  this->declareAndLoadParameters("v_ref", v_ref_, rclcpp::ParameterType::PARAMETER_DOUBLE, "reference velocity (m/s); set for all states in the trajectory", true);
-  this->declareAndLoadParameters("a_max_decel", a_max_decel_, rclcpp::ParameterType::PARAMETER_DOUBLE, "maximum deceleration (m/s^2) - must be < 0.0", true);
-  this->declareAndLoadParameters("consider_traffic_lights", consider_traffic_lights_, rclcpp::ParameterType::PARAMETER_BOOL, "true: planner will consider traffic lights; false: planner will ignore traffic lights", true);
-  this->declareAndLoadParameters("offset_to_stop_line", offset_to_stop_line_, rclcpp::ParameterType::PARAMETER_DOUBLE, "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)", true);
+  this->declareAndLoadParameter("trajectory_frame_id", trajectory_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
+                                "Frame ID of published reference trajectory", true);
+  this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
+                                rclcpp::ParameterType::PARAMETER_STRING,
+                                "Frame ID of frame that is fixed over time for finding temporal transforms", true);
+  this->declareAndLoadParameter("frequency", freq_, rclcpp::ParameterType::PARAMETER_DOUBLE,
+                                "frequency of publishing trajectory", true);
+  this->declareAndLoadParameter("drivable_mode", drivable_mode_, rclcpp::ParameterType::PARAMETER_BOOL,
+                                "true: creating drivable trajectory; false: creating reference trajectory", true);
+  this->declareAndLoadParameter("n_states", n_states_, rclcpp::ParameterType::PARAMETER_INTEGER,
+                                "number of states in the trajectory", true);
+  this->declareAndLoadParameter("v_ref", v_ref_, rclcpp::ParameterType::PARAMETER_DOUBLE,
+                                "reference velocity (m/s); set for all states in the trajectory", true);
+  this->declareAndLoadParameter("a_max_decel", a_max_decel_, rclcpp::ParameterType::PARAMETER_DOUBLE,
+                                "maximum deceleration (m/s^2) - must be < 0.0", true);
+  this->declareAndLoadParameter(
+      "consider_traffic_lights", consider_traffic_lights_, rclcpp::ParameterType::PARAMETER_BOOL,
+      "true: planner will consider traffic lights; false: planner will ignore traffic lights", true);
+  this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_, rclcpp::ParameterType::PARAMETER_DOUBLE,
+                                "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
+                                "front of vehicle at stop line)",
+                                true);
 
   this->setup();
 }
 
 template <typename T>
-void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& member_param,
-                                                 const rclcpp::ParameterType& type, const std::string& description,
-                                                 const bool& add_to_reconfigurable_node_params,
-                                                 const std::string& additional_constraints, const bool& read_only,
-                                                 const std::optional<double>& from_value,
-                                                 const std::optional<double>& to_value,
-                                                 const std::optional<double>& step_value) {
+void SimplePlannerNode::declareAndLoadParameter(const std::string& name, T& member_param,
+                                                const rclcpp::ParameterType& type, const std::string& description,
+                                                const bool add_to_auto_reconfigurable_params, const bool read_only,
+                                                const std::optional<double>& from_value,
+                                                const std::optional<double>& to_value,
+                                                const std::optional<double>& step_value,
+                                                const std::string& additional_constraints) {
   rcl_interfaces::msg::ParameterDescriptor param_desc;
   param_desc.description = description;
   param_desc.additional_constraints = additional_constraints;
@@ -86,8 +96,8 @@ void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& mem
                        "Invalid parameter value for '" << name << "'. Using default value: " << member_param);
   }
 
-  if (add_to_reconfigurable_node_params) {
-    nodeParams_.push_back(std::make_tuple(name, &member_param, type, description));
+  if (add_to_auto_reconfigurable_params) {
+    auto_reconfigurable_params_.push_back(std::make_tuple(name, &member_param, type, description));
   }
 }
 
@@ -100,19 +110,19 @@ void SimplePlannerNode::declareAndLoadParameters(const std::string& name, T& mem
 rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(
     const std::vector<rclcpp::Parameter>& parameters) {
   for (const auto& param : parameters) {
-    for (auto& nodeParam : nodeParams_) {
-      if (param.get_name() == std::get<0>(nodeParam)) {
-        void* memberParamPtr = std::get<1>(nodeParam);
-        rclcpp::ParameterType paramType = std::get<2>(nodeParam);
+    for (auto& auto_reconfigurable_param : auto_reconfigurable_params_) {
+      if (param.get_name() == std::get<0>(auto_reconfigurable_param)) {
+        void* member_param_ptr = std::get<1>(auto_reconfigurable_param);
+        rclcpp::ParameterType paramType = std::get<2>(auto_reconfigurable_param);
 
         if (paramType == rclcpp::ParameterType::PARAMETER_STRING) {
-          *static_cast<std::string*>(memberParamPtr) = param.as_string();
+          *static_cast<std::string*>(member_param_ptr) = param.as_string();
         } else if (paramType == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-          *static_cast<double*>(memberParamPtr) = param.as_double();
+          *static_cast<double*>(member_param_ptr) = param.as_double();
         } else if (paramType == rclcpp::ParameterType::PARAMETER_BOOL) {
-          *static_cast<bool*>(memberParamPtr) = param.as_bool();
+          *static_cast<bool*>(member_param_ptr) = param.as_bool();
         } else if (paramType == rclcpp::ParameterType::PARAMETER_INTEGER) {
-          *static_cast<int*>(memberParamPtr) = param.as_int();
+          *static_cast<int*>(member_param_ptr) = param.as_int();
         } else {
           RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
         }
@@ -123,7 +133,6 @@ rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(
   // mark parameter change successful
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
-  result.reason = "success";
 
   return result;
 }
