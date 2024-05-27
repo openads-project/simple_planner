@@ -33,7 +33,8 @@ class SimplePlannerNode : public rclcpp::Node {
   template <typename T>
   void declareAndLoadParameter(const std::string& name, T& member_param, const rclcpp::ParameterType& type,
                                const std::string& description, const bool add_to_auto_reconfigurable_params = true,
-                               const bool read_only = false, const std::optional<double>& from_value = std::nullopt,
+                               const std::optional<T>& default_value = std::nullopt, const bool read_only = false,
+                               const std::optional<double>& from_value = std::nullopt,
                                const std::optional<double>& to_value = std::nullopt,
                                const std::optional<double>& step_value = std::nullopt,
                                const std::string& additional_constraints = "");
@@ -68,13 +69,13 @@ class SimplePlannerNode : public rclcpp::Node {
   OnSetParametersCallbackHandle::SharedPtr parameters_callback_;
   std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
-  double freq_ = 10.0;
-  bool drivable_mode_ = false;
-  int n_states_ = 51;
-  double v_ref_ = 13.89;
-  double a_max_decel_ = -2.5;
-  bool consider_traffic_lights_ = false;
-  double offset_to_stop_line_ = 0.0;
+  double freq_;
+  bool drivable_mode_;
+  int n_states_;
+  double v_ref_;
+  double a_max_decel_;
+  bool consider_traffic_lights_;
+  double offset_to_stop_line_;
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;
