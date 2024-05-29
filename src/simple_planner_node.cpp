@@ -16,55 +16,49 @@ namespace simple_planner {
  *
  */
 SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
-  this->declareAndLoadParameter("trajectory_frame_id", trajectory_frame_id_, rclcpp::ParameterType::PARAMETER_STRING,
-                                "Frame ID of published reference trajectory", true);
+  this->declareAndLoadParameter("trajectory_frame_id", trajectory_frame_id_,
+                                "Frame ID of published reference trajectory");
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
-                                rclcpp::ParameterType::PARAMETER_STRING,
-                                "Frame ID of frame that is fixed over time for finding temporal transforms", true);
-  this->declareAndLoadParameter("frequency", freq_, rclcpp::ParameterType::PARAMETER_DOUBLE,
-                                "frequency of publishing trajectory", true);
-  this->declareAndLoadParameter("drivable_mode", drivable_mode_, rclcpp::ParameterType::PARAMETER_BOOL,
-                                "true: creating drivable trajectory; false: creating reference trajectory", true);
-  this->declareAndLoadParameter("n_states", n_states_, rclcpp::ParameterType::PARAMETER_INTEGER,
-                                "number of states in the trajectory", true);
-  this->declareAndLoadParameter("v_ref", v_ref_, rclcpp::ParameterType::PARAMETER_DOUBLE,
-                                "reference velocity (m/s); set for all states in the trajectory", true);
-  this->declareAndLoadParameter("a_max_decel", a_max_decel_, rclcpp::ParameterType::PARAMETER_DOUBLE,
-                                "maximum deceleration (m/s^2) - must be < 0.0", true);
+                                "Frame ID of frame that is fixed over time for finding temporal transforms");
+  this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
+  this->declareAndLoadParameter("drivable_mode", drivable_mode_,
+                                "true: creating drivable trajectory; false: creating reference trajectory");
+  this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
+  this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory");
+  this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter(
-      "consider_traffic_lights", consider_traffic_lights_, rclcpp::ParameterType::PARAMETER_BOOL,
-      "true: planner will consider traffic lights; false: planner will ignore traffic lights", true);
-  this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_, rclcpp::ParameterType::PARAMETER_DOUBLE,
+      "consider_traffic_lights", consider_traffic_lights_,
+      "true: planner will consider traffic lights; false: planner will ignore traffic lights");
+  this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
-                                "front of vehicle at stop line)",
-                                true);
+                                "front of vehicle at stop line)");
 
   this->setup();
 }
 
 template <typename T>
 void SimplePlannerNode::declareAndLoadParameter(const std::string& name, T& member_param,
-                                                const rclcpp::ParameterType& type, const std::string& description,
+                                                const std::string& description,
                                                 const bool add_to_auto_reconfigurable_params, const bool is_required,
-                                                const bool read_only, const std::optional<double>& from_value,
-                                                const std::optional<double>& to_value,
-                                                const std::optional<double>& step_value,
+                                                const bool read_only, const std::optional<T>& from_value,
+                                                const std::optional<T>& to_value, const std::optional<T>& step_value,
                                                 const std::string& additional_constraints) {
   rcl_interfaces::msg::ParameterDescriptor param_desc;
   param_desc.description = description;
   param_desc.additional_constraints = additional_constraints;
   param_desc.read_only = read_only;
 
+  auto param_type = rclcpp::ParameterValue(member_param).get_type();
+
   if (from_value.has_value() && to_value.has_value()) {
-    double step = step_value.has_value() ? step_value.value() : 0.0;
-    if constexpr (std::is_same_v<T, int>) {
+    if constexpr (std::is_integral_v<T>) {
       rcl_interfaces::msg::IntegerRange range;
-      range.set__from_value(static_cast<int>(from_value.value()))
-          .set__to_value(static_cast<int>(to_value.value()))
-          .set__step(static_cast<int>(step));
+      T step = step_value.has_value() ? step_value.value() : 0;
+      range.set__from_value(from_value.value()).set__to_value(to_value.value()).set__step(step);
       param_desc.integer_range = {range};
-    } else if constexpr (std::is_same_v<T, double>) {
+    } else if constexpr (std::is_floating_point_v<T>) {
       rcl_interfaces::msg::FloatingPointRange range;
+      T step = step_value.has_value() ? step_value.value() : 0.0;
       range.set__from_value(from_value.value()).set__to_value(to_value.value()).set__step(step);
       param_desc.floating_point_range = {range};
     } else {
@@ -72,32 +66,32 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name, T& memb
     }
   }
 
-  this->declare_parameter(name, type, param_desc);
+  this->declare_parameter(name, param_type, param_desc);
 
   try {
-    if constexpr (std::is_same_v<T, std::string>) {
-      member_param = this->get_parameter(name).as_string();
-    } else if constexpr (std::is_same_v<T, double>) {
-      member_param = this->get_parameter(name).as_double();
-    } else if constexpr (std::is_same_v<T, bool>) {
-      member_param = this->get_parameter(name).as_bool();
-    } else if constexpr (std::is_same_v<T, int>) {
-      member_param = this->get_parameter(name).as_int();
-    } else {
-      RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
-    }
+    member_param = this->get_parameter(name).get_value<T>();
   } catch (rclcpp::exceptions::ParameterUninitializedException&) {
     if (is_required) {
       RCLCPP_FATAL_STREAM(this->get_logger(), "Parameter '" << name << "' not set but required. Exiting.");
       exit(EXIT_FAILURE);
     } else {
-      RCLCPP_WARN_STREAM(this->get_logger(),
-                         "Parameter '" << name << "' not set. Using default value: " << member_param);
+      std::stringstream ss;
+      ss << "Parameter '" << name << "' not set. Using default value: ";
+      if constexpr (is_vector_v<T>) {
+        ss << "[";
+        for (const auto& element : member_param) ss << element << (&element != &member_param.back() ? ", " : "]");
+      } else {
+        ss << member_param;
+      }
+      RCLCPP_WARN_STREAM(this->get_logger(), ss.str());
     }
   }
 
   if (add_to_auto_reconfigurable_params) {
-    auto_reconfigurable_params_.push_back(std::make_tuple(name, &member_param, type, description));
+    std::function<void(const rclcpp::Parameter&)> setter = [&member_param](const rclcpp::Parameter& param) {
+      member_param = param.get_value<T>();
+    };
+    auto_reconfigurable_params_.push_back(std::make_tuple(name, setter));
   }
 }
 
@@ -112,20 +106,7 @@ rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(
   for (const auto& param : parameters) {
     for (auto& auto_reconfigurable_param : auto_reconfigurable_params_) {
       if (param.get_name() == std::get<0>(auto_reconfigurable_param)) {
-        void* member_param_ptr = std::get<1>(auto_reconfigurable_param);
-        rclcpp::ParameterType paramType = std::get<2>(auto_reconfigurable_param);
-
-        if (paramType == rclcpp::ParameterType::PARAMETER_STRING) {
-          *static_cast<std::string*>(member_param_ptr) = param.as_string();
-        } else if (paramType == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-          *static_cast<double*>(member_param_ptr) = param.as_double();
-        } else if (paramType == rclcpp::ParameterType::PARAMETER_BOOL) {
-          *static_cast<bool*>(member_param_ptr) = param.as_bool();
-        } else if (paramType == rclcpp::ParameterType::PARAMETER_INTEGER) {
-          *static_cast<int*>(member_param_ptr) = param.as_int();
-        } else {
-          RCLCPP_ERROR(this->get_logger(), "Parameter type not supported.");
-        }
+        std::get<1>(auto_reconfigurable_param)(param);
       }
     }
   }

@@ -20,6 +20,11 @@
 
 namespace simple_planner {
 
+// only required for parameter handling
+template <typename C> struct is_vector : std::false_type {};    
+template <typename T,typename A> struct is_vector< std::vector<T,A> > : std::true_type {};    
+template <typename C> inline constexpr bool is_vector_v = is_vector<C>::value;
+
 class SimplePlannerNode : public rclcpp::Node {
  public:
   SimplePlannerNode();
@@ -31,14 +36,13 @@ class SimplePlannerNode : public rclcpp::Node {
 
  private:
   template <typename T>
-  void declareAndLoadParameter(const std::string& name, T& member_param, const rclcpp::ParameterType& type,
-                               const std::string& description, const bool add_to_auto_reconfigurable_params = true,
-                               const bool is_required = false, const bool read_only = false,
-                               const std::optional<double>& from_value = std::nullopt,
-                               const std::optional<double>& to_value = std::nullopt,
-                               const std::optional<double>& step_value = std::nullopt,
-                               const std::string& additional_constraints = "");
-  rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter>& parameters);
+  void declareAndLoadParameter(const std::string &name, T &member_param, const std::string &description,
+                               const bool add_to_auto_reconfigurable_params = true, const bool is_required = false,
+                               const bool read_only = false, const std::optional<T> &from_value = std::nullopt,
+                               const std::optional<T> &to_value = std::nullopt,
+                               const std::optional<T> &step_value = std::nullopt,
+                               const std::string &additional_constraints = "");
+  rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters);
 
   void setup();
 
@@ -47,9 +51,9 @@ class SimplePlannerNode : public rclcpp::Node {
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
 
-  bool isDestinationReached(const geometry_msgs::msg::Point& destination);
-  double calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
-  double calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint);
+  bool isDestinationReached(const geometry_msgs::msg::Point &destination);
+  double calcDistance(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
+  double calcTheta(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
 
   void publishTimerCallback();
 
@@ -65,7 +69,7 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // Parameters
-  std::vector<std::tuple<std::string, void*, rclcpp::ParameterType, std::string>> auto_reconfigurable_params_;
+  std::vector<std::tuple<std::string, std::function<void(const rclcpp::Parameter &)>>> auto_reconfigurable_params_;
   OnSetParametersCallbackHandle::SharedPtr parameters_callback_;
   std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
