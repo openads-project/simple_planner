@@ -173,17 +173,13 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
 
 /**
  * @brief This callback is invoked when the subscriber receives a new route message
- * 
+ *
  * @param[in] msg   route
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
-
-  if (!route_init_) {
-    route_init_ = true;
-    s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
-    RCLCPP_INFO(this->get_logger(), "Received first route message, start beak s: %f", s_start_brake_);
-  }
+  s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
+  if (!route_init_) route_init_ = true;
 }
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
