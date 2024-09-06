@@ -4,7 +4,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 
 
 def generate_launch_description():
@@ -19,6 +19,8 @@ def generate_launch_description():
     ego_data_topic_arg = DeclareLaunchArgument('ego_data_topic', default_value='~/ego_data')
     route_topic_arg = DeclareLaunchArgument('route_topic', default_value='~/route')
     trajectory_topic_arg = DeclareLaunchArgument('trajectory_topic', default_value='~/trajectory')
+  
+    use_sim_time_arg = DeclareLaunchArgument('use_sim_time', default_value='False')
 
     node = Node(
         name=LaunchConfiguration('node_name'),
@@ -40,5 +42,7 @@ def generate_launch_description():
         ego_data_topic_arg,
         route_topic_arg,
         trajectory_topic_arg,
+        use_sim_time_arg,
+        SetParameter(name='use_sim_time', value=LaunchConfiguration('use_sim_time')),
         node
     ])
