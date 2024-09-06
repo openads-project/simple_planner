@@ -23,6 +23,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
   this->declareAndLoadParameter("drivable_mode", drivable_mode_,
                                 "true: creating drivable trajectory; false: creating reference trajectory");
+  this->declareAndLoadParameter("static_route", static_route_,
+                                "true: incoming route/path is static; false: incoming route/path is dynamic");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
@@ -209,6 +211,14 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
+  // Currently doesn't work
+  // route_planning_msgs::msg::Route tf_route;
+  // try {
+  //   tf_route = tf2_buffer_->transform(route_, tra.header.frame_id, tf2_ros::fromMsg(tra.header.stamp),
+  //                                     fixed_over_time_frame_id_, tf2::durationFromSec(0.01));
+  // } catch (tf2::TransformException& ex) {
+  //   RCLCPP_WARN(this->get_logger(), "Could not transform route: %s", ex.what());
+  // }
 
   // find next traffic light stop line and calculate braking point
   double next_stop_line = std::numeric_limits<double>::infinity();
@@ -230,8 +240,33 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
-  if (path[0].x < 0.0)
-    RCLCPP_DEBUG(this->get_logger(), "Path starts %f m behind %s. Could cause unintended behavior.", path[0].x, trajectory_frame_id_.c_str());
+  // search for closest point index in route to ego vehicle
+  size_t closest_index = 0;
+  double min_distance = std::numeric_limits<double>::infinity();
+  for (size_t i = 0; i < path.size(); i++) {
+    double distance = std::sqrt(std::pow(path[i].x, 2) + std::pow(path[i].y, 2));
+    if (distance < min_distance) {
+      min_distance = distance;
+      closest_index = i;
+      if (distance < 0.2) break; // TODO: magic number
+    }
+  }
+
+  // remove all points before closest point with x < 0
+  for (size_t i = closest_index; i > 0; i--) {
+    if (path[i].x < 0.0) {
+      path.erase(path.begin(), path.begin() + i);
+      // TODO: maybe add a (0,0) point to front of path or especially keep one point behind ego vehicle
+      break;
+    }
+  }
+
+  // save updated path in member variable
+  if (static_route_) {
+    route_.header = tra.header;
+    route_.remaining_route = path;
+  }
+
   if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
 
   // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
