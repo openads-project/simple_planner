@@ -38,7 +38,7 @@
 | `trajectory_frame_id` | `string` | Frame ID of published reference trajectory |
 | `fixed_over_time_frame_id` | `string` | Frame ID of frame that is fixed over time for finding temporal transforms |
 | `frequency` | `double` | frequency for publishing output trajectory |
-| `drivable_mode` | `bool` | publish trajectory in `drivable` (true, recommended) or `reference` format (false) |
+| `static_route` | `bool` | true: incoming route/path is static; false: incoming route/path is dynamic |
 | `n_states` | `int` | defines the (maximum) number of states of the published trajectory |
 | `v_ref` | `double` | defines the constant velocity of the published trajectory |
 | `a_max_decel` | `double` | defines the maximum deceleration for the braking maneuver before the end of the route (has to be `<= 0.0`; if `= 0.0`, no braking) |

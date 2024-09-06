@@ -21,8 +21,6 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
-  this->declareAndLoadParameter("drivable_mode", drivable_mode_,
-                                "true: creating drivable trajectory; false: creating reference trajectory");
   this->declareAndLoadParameter("static_route", static_route_,
                                 "true: incoming route/path is static; false: incoming route/path is dynamic");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
@@ -186,8 +184,7 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
   // define trajectory message and set header
-  int type_id =
-      drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
+  int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
   trajectory_planning_msgs::msg::Trajectory tra;
   tra.header.stamp = now();
   tra.header.frame_id = trajectory_frame_id_;
@@ -267,8 +264,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     route_.remaining_route = path;
   }
 
-  if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
-
   // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
   // geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
   // double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
@@ -290,11 +285,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
     trajectory_planning_msgs::trajectory_access::setV(tra, v, i);
-    if (drivable_mode_) {
-      trajectory_planning_msgs::trajectory_access::setS(tra, calcDistance(path, i), i);
-      trajectory_planning_msgs::trajectory_access::setTheta(tra, calcTheta(path, i), i);
-      // TODO: setA, setKappa, setDkappa
-    }
     RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  v: %f, s: %f,  theta: %f", i,
                  calcDistance(path, i) / v_ref_, path[i].x, path[i].y, v, calcDistance(path, i), calcTheta(path, i));
   }

@@ -7,8 +7,7 @@
     frequency: 10.0
     
     #### trajectory generation parameters
-    drivable_mode: False            # true: planner will generate drivable trajectories; false: planner will generate reference trajectories
-    static_route: True             # true: incoming route/path is static; false: incoming route/path is dynamic
+    static_route: False             # true: incoming route/path is static; false: incoming route/path is dynamic
     n_states: 51                    # number of states in trajectory
     v_ref: 13.89                    # constant reference velocity (m/s)
     a_max_decel: -2.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
