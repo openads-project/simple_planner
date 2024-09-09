@@ -55,6 +55,8 @@ class SimplePlannerNode : public rclcpp::Node {
   double calcDistance(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
   double calcTheta(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
 
+  void resampleRoute(route_planning_msgs::msg::Route &route);
+
   void publishTimerCallback();
 
  private:
@@ -75,6 +77,7 @@ class SimplePlannerNode : public rclcpp::Node {
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
   bool static_route_ = false;
+  double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
@@ -83,11 +86,13 @@ class SimplePlannerNode : public rclcpp::Node {
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;
+  std::vector<double> v_profile_;
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
   double s_start_brake_ = std::numeric_limits<double>::infinity();
-  double distance_to_stop_ = 0.0;
+  double distance_to_stop_;
+  double dt_;
 };
 
 }  // namespace simple_planner
