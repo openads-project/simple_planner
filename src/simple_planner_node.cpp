@@ -302,27 +302,28 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   v_profile_.clear();
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
-  for (int i = 0; i < n_states_; ++i) {
-    if (s > route.remaining_route.back().z) {
-      path.push_back(path.back());
-      v_profile_.push_back(v_profile_.back());
-      // TODO: is this the correct way to handle this case?
-      continue;
+  while (s<route.remaining_route.back().z) {
+    double v_const;
+    if (route.remaining_route.back().z < v_ref_ * trajectory_horizon_) {
+      v_const = route.remaining_route.back().z / trajectory_horizon_;
     }
-    double v = v_ref_; // case 1: constant velocity
-    double ds = v_ref_ * dt_; // case 1: constant velocityv_ref: 3.0                    # constant reference velocity (m/s)
+    else {
+      v_const = v_ref_;
+    }
+    double v = v_const; // case 1: constant velocity
+    double ds = v_const * dt_; // case 1: constant velocityv_ref: 3.0                    # constant reference velocity (m/s)
     int idx = -1;
     if (s + ds > s_start_brake_) { // TODO: what aboute next_braking_point?
       if (s < s_start_brake_) { // special case: braking point is between two states
         double ds_1 = s_start_brake_ - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
-        double dt_2 = dt_ - dt_1; // remaining time with deceleration
-        v = std::max(v_ref_ + a_max_decel_ * dt_2, 0.0);
-        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_ref_ * dt_2, 0.0);
+        double dt_2 = trajectory_horizon_ - dt_1; // remaining time with deceleration
+        v = std::max(v_const + a_max_decel_ * dt_2, 0.0);
+        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_const * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        v = std::max(v_ref_ + a_max_decel_ * dt_, 0.0); // case 2: deceleration
-        ds = std::max(0.5 * a_max_decel_ * std::pow(dt_, 2) + v_ref_ * dt_, 0.0); // case 2: deceleration
+        v = std::max(v_const + a_max_decel_ * dt_, 0.0); // case 2: deceleration
+        ds = std::max(0.5 * a_max_decel_ * std::pow(dt_, 2) + v_const * dt_, 0.0); // case 2: deceleration
       }
     }
     // find index of segment in route
@@ -344,6 +345,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     s = s + ds; // increment s for next iteration
     RCLCPP_WARN(this->get_logger(), "s: %f, v: %f", s, v);
   }
+
   route.remaining_route = path;
 }
 
