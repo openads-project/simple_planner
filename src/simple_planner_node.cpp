@@ -248,7 +248,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
   // make sure to stop with the front of the vehicle at the stop line
-  next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
+  next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);// TODO: not used? 
 
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
@@ -256,6 +256,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   size_t closest_index = 0;
   double min_distance = std::numeric_limits<double>::infinity();
   for (size_t i = 0; i < path.size(); i++) {
+
+    
+    if (path[i].z - s_ > 2.0) break; // ignore points in front of ego vehicle
+
     double distance = std::sqrt(std::pow(path[i].x, 2) + std::pow(path[i].y, 2));
     if (distance < min_distance) {
       min_distance = distance;
@@ -274,6 +278,9 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       break;
     }
   }
+
+  // update s_ with closest point
+  s_ = path[closest_index].z;
 
   // save updated path in member variable
   if (static_route_) {

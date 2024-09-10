@@ -90,6 +90,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
+  double s_ = 0.0;
   double s_start_brake_ = std::numeric_limits<double>::infinity();
   double distance_to_stop_;
   double dt_;
