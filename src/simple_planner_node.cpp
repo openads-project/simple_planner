@@ -183,6 +183,7 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
   s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
+  RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
   RCLCPP_ERROR(this->get_logger(), "s_start_brake_: %f, end of route: %f", s_start_brake_, route_.remaining_route.back().z);
   resampleRoute(route_);
   if (!route_init_) route_init_ = true;
@@ -256,6 +257,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
 
   // remove all points before closest point with x < 0
+  // TODO: what happens if closest index is 0 and point is behind ego vehicle?
   for (size_t i = closest_index; i > 0; i--) {
     if (path[i].x < 0.0) {
       path.erase(path.begin(), path.begin() + i);
@@ -308,7 +310,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
       continue;
     }
     double v = v_ref_; // case 1: constant velocity
-    double ds = v_ref_ * dt_; // case 1: constant velocity
+    double ds = v_ref_ * dt_; // case 1: constant velocityv_ref: 3.0                    # constant reference velocity (m/s)
     int idx = -1;
     if (s + ds > s_start_brake_) { // TODO: what aboute next_braking_point?
       if (s < s_start_brake_) { // special case: braking point is between two states
@@ -383,6 +385,7 @@ double SimplePlannerNode::calcTheta(const std::vector<geometry_msgs::msg::Point>
 void SimplePlannerNode::publishTimerCallback() {
   // if route and ego data are not received, do nothing
   if (!route_init_ || !ego_data_init_) {
+    RCLCPP_INFO(this->get_logger(), "Waiting for route and ego data...");
     return;
   }
 
