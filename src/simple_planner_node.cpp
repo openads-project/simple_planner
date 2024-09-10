@@ -322,21 +322,23 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   }
   double v = v_const; // case 1: constant velocity
   while (s<route.remaining_route.back().z) {
-    double ds = v_const * dt_; // case 1: constant velocityv_ref: 3.0                    # constant reference velocity (m/s)
+    double ds = v_const * dt_; // case 1: constant velocityv_ref: 3.0  
+    double dv = 0.0;         
     int idx = -1;
     if (s + ds > s_start_brake_) { // TODO: what aboute next_braking_point?
       if (s < s_start_brake_) { // special case: braking point is between two states
         double ds_1 = s_start_brake_ - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
         double dt_2 = dt_ - dt_1; // remaining time with deceleration
-        v = std::max(v + a_max_decel_ * dt_2, 0.0);
+        dv = a_max_decel_ * dt_2;
         double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_const * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        v = std::max(v + a_max_decel_ * dt_, 0.0); // case 2: deceleration
+        dv = a_max_decel_ * dt_; // case 2: deceleration
         ds = std::max(0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_, 0.0); // case 2: deceleration
       }
     }
+    
     // find index of segment in route
     for (size_t j = 0; j < route.remaining_route.size() - 1; ++j) {
       if (s >= route.remaining_route[j].z && s <= route.remaining_route[j+1].z) {
@@ -344,6 +346,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
         break;
       }
     }
+    
     // interpolate point at s
     geometry_msgs::msg::Point point;
     // TODO: spline interpolation instead of linear interpolation
@@ -353,7 +356,11 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     path.push_back(point);
     v_profile_.push_back(v);
 
-    s = s + ds; // increment s for next iteration
+    // increment s and v for next iteration 
+    s = s + ds;
+    v = std::max(v + dv, 0.0);
+
+
     RCLCPP_WARN(this->get_logger(), "s: %f, v: %f, v_const: %f", s, v, v_const);
     if (v == 0.0) break; // stop if vehicle is standing
   }
