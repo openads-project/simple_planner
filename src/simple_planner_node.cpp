@@ -269,6 +269,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   for (size_t i = closest_index; i > 0; i--) {
     if (path[i].x < 0.0) {
       path.erase(path.begin(), path.begin() + i);
+      v_profile_.erase(v_profile_.begin(), v_profile_.begin() + i);
       // TODO: maybe add a (0,0) point to front of path or especially keep one point behind ego vehicle
       break;
     }
