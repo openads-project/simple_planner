@@ -314,6 +314,9 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     double v_const;
     if (route.remaining_route.back().z < v_ref_ * trajectory_horizon_) {
       v_const = route.remaining_route.back().z / trajectory_horizon_;
+      // s_start_brake has to be adapted to new constant velocity
+      // TODO: maybe in own function?
+      s_start_brake_ = route.remaining_route.back().z + 0.5 * std::pow(v_const, 2) / a_max_decel_;
     }
     else {
       v_const = v_ref_;
@@ -330,8 +333,8 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
         double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_const * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        v = std::max(v_const + a_max_decel_ * dt_, 0.0); // case 2: deceleration
-        ds = std::max(0.5 * a_max_decel_ * std::pow(dt_, 2) + v_const * dt_, 0.0); // case 2: deceleration
+        v = std::max(v + a_max_decel_ * dt_, 0.0); // case 2: deceleration
+        ds = std::max(0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_, 0.0); // case 2: deceleration
       }
     }
     // find index of segment in route
@@ -351,7 +354,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     v_profile_.push_back(v);
 
     s = s + ds; // increment s for next iteration
-    RCLCPP_WARN(this->get_logger(), "s: %f, v: %f", s, v);
+    RCLCPP_WARN(this->get_logger(), "s: %f, v: %f, v_const: %f", s, v, v_const);
   }
 
   route.remaining_route = path;
