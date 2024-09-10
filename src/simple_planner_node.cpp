@@ -203,6 +203,14 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     RCLCPP_WARN(this->get_logger(), "Remaining route empty -> destination reached. Publishing standstill trajectory.");
     return tra;
   }
+  else if (isDestinationReached(route_.remaining_route.back()))
+  {
+    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
+    route_init_ = false;
+    RCLCPP_WARN(this->get_logger(), "Destination reached. Publishing standstill trajectory.");
+    return tra;
+  }
+  
 
   // time-transform route to current trajectory_frame_id_ frame
   geometry_msgs::msg::TransformStamped tf;
@@ -318,7 +326,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
         double ds_1 = s_start_brake_ - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
         double dt_2 = dt_ - dt_1; // remaining time with deceleration
-        v = std::max(v_const + a_max_decel_ * dt_2, 0.0);
+        v = std::max(v + a_max_decel_ * dt_2, 0.0);
         double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_const * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
