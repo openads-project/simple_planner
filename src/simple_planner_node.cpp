@@ -317,7 +317,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
       if (s < s_start_brake_) { // special case: braking point is between two states
         double ds_1 = s_start_brake_ - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
-        double dt_2 = trajectory_horizon_ - dt_1; // remaining time with deceleration
+        double dt_2 = dt_ - dt_1; // remaining time with deceleration
         v = std::max(v_const + a_max_decel_ * dt_2, 0.0);
         double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_const * dt_2, 0.0);
         ds = ds_1 + ds_2;
