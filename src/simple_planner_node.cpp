@@ -310,18 +310,18 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   v_profile_.clear();
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
+  double v_const;
+  if (route.remaining_route.back().z < v_ref_ * trajectory_horizon_) {
+    v_const = route.remaining_route.back().z / trajectory_horizon_;
+    // s_start_brake has to be adapted to new constant velocity
+    // TODO: maybe in own function?
+    s_start_brake_ = route.remaining_route.back().z + 0.5 * std::pow(v_const, 2) / a_max_decel_;
+  }
+  else {
+    v_const = v_ref_;
+  }
+  double v = v_const; // case 1: constant velocity
   while (s<route.remaining_route.back().z) {
-    double v_const;
-    if (route.remaining_route.back().z < v_ref_ * trajectory_horizon_) {
-      v_const = route.remaining_route.back().z / trajectory_horizon_;
-      // s_start_brake has to be adapted to new constant velocity
-      // TODO: maybe in own function?
-      s_start_brake_ = route.remaining_route.back().z + 0.5 * std::pow(v_const, 2) / a_max_decel_;
-    }
-    else {
-      v_const = v_ref_;
-    }
-    double v = v_const; // case 1: constant velocity
     double ds = v_const * dt_; // case 1: constant velocityv_ref: 3.0                    # constant reference velocity (m/s)
     int idx = -1;
     if (s + ds > s_start_brake_) { // TODO: what aboute next_braking_point?
@@ -355,6 +355,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
 
     s = s + ds; // increment s for next iteration
     RCLCPP_WARN(this->get_logger(), "s: %f, v: %f, v_const: %f", s, v, v_const);
+    if (v == 0.0) break; // stop if vehicle is standing
   }
 
   route.remaining_route = path;
@@ -398,7 +399,6 @@ double SimplePlannerNode::calcTheta(const std::vector<geometry_msgs::msg::Point>
 void SimplePlannerNode::publishTimerCallback() {
   // if route and ego data are not received, do nothing
   if (!route_init_ || !ego_data_init_) {
-    RCLCPP_INFO(this->get_logger(), "Waiting for route and ego data...");
     return;
   }
 
