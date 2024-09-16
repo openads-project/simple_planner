@@ -196,21 +196,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.stamp = now();
   tra.header.frame_id = trajectory_frame_id_;
 
-  // TODO: additionally check if destination is reached or if route is outdated?
+  // TODO: additionally check if destination is reached or route is outdated?
   if (route_.remaining_route.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
     RCLCPP_WARN(this->get_logger(), "Remaining route empty -> destination reached. Publishing standstill trajectory.");
     return tra;
   }
-  else if (isDestinationReached(route_.remaining_route.back()))
-  {
-    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
-    route_init_ = false;
-    RCLCPP_WARN(this->get_logger(), "Destination reached. Publishing standstill trajectory.");
-    return tra;
-  }
-  
 
   // time-transform route to current trajectory_frame_id_ frame
   geometry_msgs::msg::TransformStamped tf;
@@ -258,7 +250,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   for (size_t i = 0; i < path.size(); i++) {
 
     
-    if (path[i].z - s_ > 2.0) break; // ignore points in front of ego vehicle
+    if (path[i].z - s_ > 2.0) break; // ignore points in front of ego vehicle, TODO: magic number
 
     double distance = std::sqrt(std::pow(path[i].x, 2) + std::pow(path[i].y, 2));
     if (distance < min_distance) {
@@ -316,6 +308,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
 void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   v_profile_.clear();
+  s_ = 0.0;
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
   double v_const;
