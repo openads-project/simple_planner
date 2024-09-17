@@ -2,6 +2,9 @@
 #include <cmath>
 #include <functional>
 #include <thread>
+#include <vector>
+
+#include "spline.h"
 
 #include <simple_planner/simple_planner_node.hpp>
 
@@ -312,6 +315,16 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
   double v_const;
+  std::vector<double> z_vector;
+  std::vector<double> x_vector;
+  std::vector<double> y_vector;
+  if (use_spline_interpolation_) {
+    for (size_t j = 0; j < route.remaining_route.size(); ++j) {
+      z_vector.push_back(route.remaining_route[j].z);
+      x_vector.push_back(route.remaining_route[j].x);
+      y_vector.push_back(route.remaining_route[j].y);
+    }
+  }
   if (route.remaining_route.back().z < v_ref_ * trajectory_horizon_) {
     v_const = route.remaining_route.back().z / trajectory_horizon_;
     // s_start_brake has to be adapted to new constant velocity
@@ -351,9 +364,18 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     // interpolate point at s
     geometry_msgs::msg::Point point;
     // TODO: spline interpolation instead of linear interpolation
-    point.x = route.remaining_route[idx].x + (route.remaining_route[idx+1].x - route.remaining_route[idx].x) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
-    point.y = route.remaining_route[idx].y + (route.remaining_route[idx+1].y - route.remaining_route[idx].y) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
-    point.z = s;
+    if (use_spline_interpolation_){
+      tk::spline s1(z_vector, x_vector);
+      point.x = s1(s);
+      tk::spline s2(z_vector, y_vector);
+      point.y = s2(s);
+      point.z = s;
+    }
+    else {
+      point.x = route.remaining_route[idx].x + (route.remaining_route[idx+1].x - route.remaining_route[idx].x) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
+      point.y = route.remaining_route[idx].y + (route.remaining_route[idx+1].y - route.remaining_route[idx].y) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
+      point.z = s;
+    }
     path.push_back(point);
     v_profile_.push_back(v);
 
