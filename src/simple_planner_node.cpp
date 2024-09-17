@@ -250,7 +250,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // search for closest point index in route to ego vehicle
   size_t closest_index = 0;
   double min_distance = std::numeric_limits<double>::infinity();
-  for (size_t i = 0; i < path.size(); i++) {
+  for (size_t i = 1; i < path.size(); i++) {
 
     
     if (path[i].z - s_ > max_distance_of_interest_) break; // ignore points in front of ego vehicle, TODO: magic number
@@ -266,8 +266,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // remove all points but one before closest point with x < 0
   for (size_t i = closest_index; i > 0; i--) {
     if (path[i].x < 0.0) {
-      path.erase(path.begin(), path.begin() + i);
-      v_profile_.erase(v_profile_.begin(), v_profile_.begin() + i);
+      path.erase(path.begin(), path.begin() + i + 1);
+      v_profile_.erase(v_profile_.begin(), v_profile_.begin() + i + 1);
       break;
     }
   }
