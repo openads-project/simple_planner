@@ -12,6 +12,9 @@
     n_states: 61                    # number of states in trajectory
     v_ref: 3.0                      # reference velocity (m/s)
 
+    min_distance_of_interest: 0.2   # minimum distance to consider for trajectory generation (m)
+    max_distance_of_interest: 2.0   # maximum distance to consider for trajectory generation (m)
+
     a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 
     #### traffic light parameters

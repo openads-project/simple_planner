@@ -83,6 +83,8 @@ class SimplePlannerNode : public rclcpp::Node {
   double a_max_decel_ = -2.5;
   bool consider_traffic_lights_ = false;
   double offset_to_stop_line_ = 0.0;
+  double min_distance_of_interest_ = 0.2;
+  double max_distance_of_interest_ = 2.0;
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;

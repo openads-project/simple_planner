@@ -250,13 +250,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   for (size_t i = 0; i < path.size(); i++) {
 
     
-    if (path[i].z - s_ > 2.0) break; // ignore points in front of ego vehicle, TODO: magic number
+    if (path[i].z - s_ > max_distance_of_interest_) break; // ignore points in front of ego vehicle, TODO: magic number
 
     double distance = std::sqrt(std::pow(path[i].x, 2) + std::pow(path[i].y, 2));
     if (distance < min_distance) {
       min_distance = distance;
       closest_index = i;
-      if (distance < 0.2) break; // TODO: magic number
+      if (distance < min_distance_of_interest_) break; // TODO: magic number
     }
   }
 
