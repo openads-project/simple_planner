@@ -34,7 +34,6 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
 
- private:
   template <typename T>
   void declareAndLoadParameter(const std::string &name, T &member_param, const std::string &description,
                                const bool add_to_auto_reconfigurable_params = true, const bool is_required = false,
@@ -59,7 +58,6 @@ class SimplePlannerNode : public rclcpp::Node {
 
   void publishTimerCallback();
 
- private:
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 

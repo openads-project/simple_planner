@@ -292,12 +292,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
 
   // init trajectory and fill with path (route) and velocity (const from param) data
-  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
   for (size_t i = 0; i < path.size(); i++) {
     trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
     trajectory_planning_msgs::trajectory_access::setV(tra, v_profile_[i], i);
+    // TODO: maybe add last point multiple times to reach n_states_
     RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
                  dt_ * i, path[i].x, path[i].y, v_profile_[i], path[i].z);
   }
@@ -312,7 +313,6 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   s_ = 0.0;
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
-  double v_const;
   std::vector<double> z_vector;
   std::vector<double> x_vector;
   std::vector<double> y_vector;
@@ -322,32 +322,22 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
       x_vector.push_back(route.remaining_route[j].x);
       y_vector.push_back(route.remaining_route[j].y);
     }
-  }
-  if (route.remaining_route.back().z < v_ref_ * trajectory_horizon_) {
-    v_const = route.remaining_route.back().z / trajectory_horizon_;
-    // s_start_brake has to be adapted to new constant velocity
-    // TODO: maybe in own function?
-    s_start_brake_ = route.remaining_route.back().z + 0.5 * std::pow(v_const, 2) / a_max_decel_;
-  }
-  else {
-    v_const = v_ref_;
-  }
-  double v = v_const; // case 1: constant velocity
-  while (s<route.remaining_route.back().z) {
-    double ds = v_const * dt_; // case 1: constant velocityv_ref: 3.0  
-    double dv = 0.0;         
+  }        
+  double v = v_ref_; // case 1: constant velocity
+  while (s<=route.remaining_route.back().z) {
+    double ds = v_ref_ * dt_; // case 1: constant velocityv_ref: 3.0  
     int idx = -1;
     if (s + ds > s_start_brake_) { // TODO: what aboute next_braking_point?
       if (s < s_start_brake_) { // special case: braking point is between two states
         double ds_1 = s_start_brake_ - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
         double dt_2 = dt_ - dt_1; // remaining time with deceleration
-        dv = a_max_decel_ * dt_2;
-        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_const * dt_2, 0.0);
+        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_ref_ * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        dv = a_max_decel_ * dt_; // case 2: deceleration
-        ds = std::max(0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_, 0.0); // case 2: deceleration
+        v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (s - s_start_brake_), 0.0)); // case 2: deceleration (v(s))
+        ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
+        if (ds < 0.0) ds = route.remaining_route.back().z - s; // only add rest of route instead of driving backwards
       }
     }
     
@@ -378,11 +368,9 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
 
     // increment s and v for next iteration 
     s = s + ds;
-    v = std::max(v + dv, 0.0);
 
-
-    RCLCPP_WARN(this->get_logger(), "s: %f, v: %f, v_const: %f", s, v, v_const);
-    if (v == 0.0) break; // stop if vehicle is standing
+    RCLCPP_WARN(this->get_logger(), "s: %f, v: %f, v_ref_: %f", s, v, v_ref_);
+    if (s == route.remaining_route.back().z && v == 0.0) break; // stop at end of route
   }
 
   route.remaining_route = path;
