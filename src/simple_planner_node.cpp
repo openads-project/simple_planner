@@ -4,7 +4,7 @@
 #include <thread>
 #include <vector>
 
-#include "spline.h"
+#include <tk/spline.h>
 
 #include <simple_planner/simple_planner_node.hpp>
 
@@ -313,16 +313,16 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   s_ = 0.0;
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
-  std::vector<double> z_vector;
-  std::vector<double> x_vector;
-  std::vector<double> y_vector;
+  std::vector<double> z_vector, x_vector, y_vector;
   if (use_spline_interpolation_) {
     for (size_t j = 0; j < route.remaining_route.size(); ++j) {
       z_vector.push_back(route.remaining_route[j].z);
       x_vector.push_back(route.remaining_route[j].x);
       y_vector.push_back(route.remaining_route[j].y);
     }
-  }        
+  }
+  tk::spline x_spline(z_vector, x_vector);
+  tk::spline y_spline(z_vector, y_vector);
   double v = v_ref_; // case 1: constant velocity
   while (s<=route.remaining_route.back().z) {
     double ds = v_ref_ * dt_; // case 1: constant velocityv_ref: 3.0  
@@ -352,10 +352,8 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     // interpolate point at s
     geometry_msgs::msg::Point point;
     if (use_spline_interpolation_){
-      tk::spline s1(z_vector, x_vector);
-      point.x = s1(s);
-      tk::spline s2(z_vector, y_vector);
-      point.y = s2(s);
+      point.x = x_spline(s);
+      point.y = y_spline(s);
       point.z = s;
     }
     else {
