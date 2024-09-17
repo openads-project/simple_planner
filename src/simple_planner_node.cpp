@@ -263,13 +263,11 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     }
   }
 
-  // remove all points before closest point with x < 0
-  // TODO: what happens if closest index is 0 and point is behind ego vehicle?
+  // remove all points but one before closest point with x < 0
   for (size_t i = closest_index; i > 0; i--) {
     if (path[i].x < 0.0) {
       path.erase(path.begin(), path.begin() + i);
       v_profile_.erase(v_profile_.begin(), v_profile_.begin() + i);
-      // TODO: maybe add a (0,0) point to front of path or especially keep one point behind ego vehicle
       break;
     }
   }
@@ -363,7 +361,6 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     
     // interpolate point at s
     geometry_msgs::msg::Point point;
-    // TODO: spline interpolation instead of linear interpolation
     if (use_spline_interpolation_){
       tk::spline s1(z_vector, x_vector);
       point.x = s1(s);
