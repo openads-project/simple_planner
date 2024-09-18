@@ -17,8 +17,3 @@
     #### traffic light parameters
     consider_traffic_lights: False  # true: planner will consider traffic lights; false: planner will ignore traffic lights
     offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)
-
-    use_sim_time: True
-
-
-    # ros2 launch simple_planner simple_planner.launch.py ego_data_topic:=/carla_its_adapter/ego_data route_topic:=/route_planning/route trajectory_topic:=/planning/reference_trajectory

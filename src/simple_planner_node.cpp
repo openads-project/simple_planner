@@ -187,7 +187,6 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
-  v_profile_.clear();
   s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
   RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
   resampleRoute(route_, v_profile_, s_start_brake_);
@@ -201,7 +200,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.stamp = now();
   tra.header.frame_id = trajectory_frame_id_;
 
-  // TODO: additionally check if destination is reached or route is outdated?
+  // TODO: additionally check if route is outdated?
   if (route_.remaining_route.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
@@ -220,7 +219,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
-  // Currently doesn't work
+  // Currently doesn't work -> buf in tf2_route_planning_msgs
   // route_planning_msgs::msg::Route tf_route;
   // try {
   //   tf_route = tf2_buffer_->transform(route_, tra.header.frame_id, tf2_ros::fromMsg(tra.header.stamp),
@@ -246,11 +245,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
 
-  // resample route if braking point has changed
-  if (next_braking_point != s_start_brake_) {
-    v_profile_.clear();
-    resampleRoute(tf_route, v_profile_, next_braking_point);
-  }
+  // resample route if braking point has changed (TODO: has this to be done every time?)
+  if (next_braking_point != s_start_brake_) resampleRoute(tf_route, v_profile_, next_braking_point);
 
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
@@ -266,11 +262,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     route_.header = tra.header;
     route_.remaining_route = path;
   }
-
-  // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
-  // geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
-  // double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-  // double current_speed_limit = tf_route.current_speed_limit/3.6;
 
   // keep maximum the first n_states_ in path (and therefore in trajectory)
   if ((size_t) n_states_ < path.size()) {
@@ -301,10 +292,11 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
     return;
   }
 
-  double end_of_route = brake_point + distance_to_stop_;
-
   std::vector<geometry_msgs::msg::Point> path;
+  v_profile.clear();
+  double end_of_route = brake_point + distance_to_stop_;
   double s = 0.0;
+
   tk::spline x_spline, y_spline;
   if (use_spline_interpolation_ && route.remaining_route.size() > 2) {
     std::vector<double> z_vector, x_vector, y_vector;
@@ -346,11 +338,11 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
     // interpolate point at s
     geometry_msgs::msg::Point point;
     point.z = s;
-    if (use_spline_interpolation_ && route.remaining_route.size() > 2){
+    if (use_spline_interpolation_ && route.remaining_route.size() > 2){ // spline interpolation
       point.x = x_spline(s);
       point.y = y_spline(s);
     }
-    else { // linear interpolation
+    else { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
       point.x = route.remaining_route[idx].x + (route.remaining_route[idx+1].x - route.remaining_route[idx].x) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
       point.y = route.remaining_route[idx].y + (route.remaining_route[idx+1].y - route.remaining_route[idx].y) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
     }
@@ -363,37 +355,6 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
   }
 
   route.remaining_route = path;
-}
-
-bool SimplePlannerNode::isDestinationReached(const geometry_msgs::msg::Point& destination) {
-  double distance = std::sqrt(std::pow(destination.x, 2) + std::pow(destination.y, 2));
-  RCLCPP_DEBUG(this->get_logger(), "Distance to goal: %f", distance);
-  return distance < 0.2;
-}
-
-double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint) {
-  double distance = 0.0;
-  for (int i = 0; i <= nPoint; i++) {
-    if (i == 0) {
-      distance += std::sqrt(std::pow(points[i].x - 0.0, 2) + std::pow(points[i].y - 0.0, 2));
-    } else {
-      distance += std::sqrt(std::pow(points[i].x - points[i - 1].x, 2) + std::pow(points[i].y - points[i - 1].y, 2));
-    }
-  }
-  return distance;
-}
-
-double SimplePlannerNode::calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint) {
-  double theta = 0.0;
-  for (int i = 0; i <= nPoint; i++) {
-    if (i == 0) {
-      // theta += atan2(points[i].y - 0.0, points[i].x - 0.0);
-      theta += 0.0;
-    } else {
-      theta += atan2(points[i].y - points[i - 1].y, points[i].x - points[i - 1].x);
-    }
-  }
-  return theta;
 }
 
 /**

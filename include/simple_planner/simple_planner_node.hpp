@@ -49,11 +49,6 @@ class SimplePlannerNode : public rclcpp::Node {
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
-
-  bool isDestinationReached(const geometry_msgs::msg::Point &destination);
-  double calcDistance(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
-  double calcTheta(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
-
   void resampleRoute(route_planning_msgs::msg::Route &route, std::vector<double> &v_profile, const double brake_point);
 
   void publishTimerCallback();
@@ -77,6 +72,7 @@ class SimplePlannerNode : public rclcpp::Node {
   bool static_route_ = false;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
+  bool use_spline_interpolation_ = true;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
   bool consider_traffic_lights_ = false;
@@ -88,7 +84,6 @@ class SimplePlannerNode : public rclcpp::Node {
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
-  bool use_spline_interpolation_ = true;
   double s_start_brake_ = std::numeric_limits<double>::infinity();
   double distance_to_stop_;
   double dt_;
