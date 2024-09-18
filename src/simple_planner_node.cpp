@@ -188,7 +188,7 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
   v_profile_.clear();
   s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
   RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
-  resampleRoute(route_, v_profile_);
+  resampleRoute(route_, v_profile_, s_start_brake_);
   if (!route_init_) route_init_ = true;
 }
 
@@ -243,7 +243,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
   // make sure to stop with the front of the vehicle at the stop line
-  next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);// TODO: not used? 
+  next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
+
+  // resample route if braking point has changed
+  if (next_braking_point != s_start_brake_) {
+    v_profile_.clear();
+    resampleRoute(tf_route, v_profile_, next_braking_point);
+  }
 
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
@@ -288,11 +294,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   return tra;
 }
 
-void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, std::vector<double>& v_profile) {
+void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, std::vector<double>& v_profile, const double brake_point) {
   if (route.remaining_route.size() < 2) {
     RCLCPP_WARN(this->get_logger(), "Route has less than 2 points. No resampling possible.");
     return;
   }
+
+  double end_of_route = brake_point + distance_to_stop_;
 
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
@@ -306,21 +314,22 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
   }
   tk::spline x_spline(z_vector, x_vector);
   tk::spline y_spline(z_vector, y_vector);
-  while (s<=route.remaining_route.back().z) {
+
+  while (s<=end_of_route) {
     double v = v_ref_; // case 1: constant velocity
     double ds = v_ref_ * dt_; // case 1: constant velocityv_ref: 3.0  
     int idx = -1;
-    if (s + ds > s_start_brake_) { // TODO: what aboute next_braking_point?
-      if (s < s_start_brake_) { // special case: braking point is between two states
-        double ds_1 = s_start_brake_ - s; // distance with constant velocity to braking point
+    if (s + ds > brake_point) {
+      if (s < brake_point) { // special case: braking point is between two states
+        double ds_1 = brake_point - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
         double dt_2 = dt_ - dt_1; // remaining time with deceleration
         double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_ref_ * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (s - s_start_brake_), 0.0)); // case 2: deceleration (v(s))
+        v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
         ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
-        if (ds < 0.0) ds = route.remaining_route.back().z - s; // only add rest of route instead of driving backwards
+        if (ds < 0.0) ds = end_of_route - s; // only add rest of route instead of driving backwards
       }
     }
     
@@ -348,7 +357,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
 
     // increment s and v for next iteration 
     s = s + ds;
-    if (s == route.remaining_route.back().z && v == 0.0) break; // stop at end of route
+    if (s == end_of_route && v == 0.0) break; // stop at end of route
   }
 
   route.remaining_route = path;

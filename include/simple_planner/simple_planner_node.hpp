@@ -54,7 +54,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double calcDistance(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
   double calcTheta(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
 
-  void resampleRoute(route_planning_msgs::msg::Route &route, std::vector<double> &v_profile);
+  void resampleRoute(route_planning_msgs::msg::Route &route, std::vector<double> &v_profile, const double brake_point);
 
   void publishTimerCallback();
 
