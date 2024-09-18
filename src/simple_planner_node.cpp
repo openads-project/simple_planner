@@ -185,10 +185,10 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
+  v_profile_.clear();
   s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
   RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
-  RCLCPP_ERROR(this->get_logger(), "s_start_brake_: %f, end of route: %f", s_start_brake_, route_.remaining_route.back().z);
-  resampleRoute(route_);
+  resampleRoute(route_, v_profile_);
   if (!route_init_) route_init_ = true;
 }
 
@@ -247,33 +247,12 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
-  // search for closest point index in route to ego vehicle
-  size_t closest_index = 0;
-  double min_distance = std::numeric_limits<double>::infinity();
-  for (size_t i = 1; i < path.size(); i++) {
 
-    
-    if (path[i].z - s_ > max_distance_of_interest_) break; // ignore points in front of ego vehicle
-
-    double distance = std::sqrt(std::pow(path[i].x, 2) + std::pow(path[i].y, 2));
-    if (distance < min_distance) {
-      min_distance = distance;
-      closest_index = i;
-      if (distance < min_distance_of_interest_) break;
-    }
+  // remove first point of path as long as it is behind the ego vehicle
+  while (!path.empty() && path[0].x < 0.0) {
+    path.erase(path.begin());
+    v_profile_.erase(v_profile_.begin());
   }
-
-  // remove all points but one before closest point with x < 0
-  for (size_t i = closest_index; i > 0; i--) {
-    if (path[i].x < 0.0) {
-      path.erase(path.begin(), path.begin() + i + 1);
-      v_profile_.erase(v_profile_.begin(), v_profile_.begin() + i + 1);
-      break;
-    }
-  }
-
-  // update s_ with closest point
-  s_ = path[closest_index].z;
 
   // save updated path in member variable
   if (static_route_) {
@@ -292,33 +271,33 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
 
   // init trajectory and fill with path (route) and velocity (const from param) data
-  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
-  for (size_t i = 0; i < path.size(); i++) {
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
+  for (int i = 0; i < n_states_; i++) {
+    if (path.empty()) break; // do nothing if path is empty
+    int idx = (size_t)i < path.size() ? i : path.size() - 1; // multiple points at end of path if n_states_ > path.size()
     trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
-    trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
-    trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
-    trajectory_planning_msgs::trajectory_access::setV(tra, v_profile_[i], i);
-    // TODO: maybe add last point multiple times to reach n_states_
-    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
+    trajectory_planning_msgs::trajectory_access::setX(tra, path[idx].x, i);
+    trajectory_planning_msgs::trajectory_access::setY(tra, path[idx].y, i);
+    trajectory_planning_msgs::trajectory_access::setV(tra, v_profile_[idx], i);
+    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
                  dt_ * i, path[i].x, path[i].y, v_profile_[i], path[i].z);
   }
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, path.empty());
 
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
   return tra;
 }
 
-void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
+void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, std::vector<double>& v_profile) {
   if (route.remaining_route.size() < 2) {
-    RCLCPP_WARN(this->get_logger(), "Route has less than 2 points. Cannot resample.");
+    RCLCPP_WARN(this->get_logger(), "Route has less than 2 points. No resampling possible.");
     return;
   }
-  v_profile_.clear();
-  s_ = 0.0;
+
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
   std::vector<double> z_vector, x_vector, y_vector;
-  if (use_spline_interpolation_) {
+  if (use_spline_interpolation_ && route.remaining_route.size() > 2) {
     for (size_t j = 0; j < route.remaining_route.size(); ++j) {
       z_vector.push_back(route.remaining_route[j].z);
       x_vector.push_back(route.remaining_route[j].x);
@@ -327,8 +306,8 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
   }
   tk::spline x_spline(z_vector, x_vector);
   tk::spline y_spline(z_vector, y_vector);
-  double v = v_ref_; // case 1: constant velocity
   while (s<=route.remaining_route.back().z) {
+    double v = v_ref_; // case 1: constant velocity
     double ds = v_ref_ * dt_; // case 1: constant velocityv_ref: 3.0  
     int idx = -1;
     if (s + ds > s_start_brake_) { // TODO: what aboute next_braking_point?
@@ -355,23 +334,20 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route) {
     
     // interpolate point at s
     geometry_msgs::msg::Point point;
-    if (use_spline_interpolation_){
+    point.z = s;
+    if (use_spline_interpolation_ && route.remaining_route.size() > 2){
       point.x = x_spline(s);
       point.y = y_spline(s);
-      point.z = s;
     }
-    else {
+    else { // linear interpolation
       point.x = route.remaining_route[idx].x + (route.remaining_route[idx+1].x - route.remaining_route[idx].x) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
       point.y = route.remaining_route[idx].y + (route.remaining_route[idx+1].y - route.remaining_route[idx].y) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
-      point.z = s;
     }
     path.push_back(point);
-    v_profile_.push_back(v);
+    v_profile.push_back(v);
 
     // increment s and v for next iteration 
     s = s + ds;
-
-    RCLCPP_WARN(this->get_logger(), "s: %f, v: %f, v_ref_: %f", s, v, v_ref_);
     if (s == route.remaining_route.back().z && v == 0.0) break; // stop at end of route
   }
 
