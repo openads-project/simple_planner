@@ -10,6 +10,7 @@
     static_route: True              # true: incoming route/path is static; false: incoming route/path is dynamic
     trajectory_horizon: 6.0         # planning horizon (s)
     n_states: 61                    # number of states in trajectory
+    use_spline_interpolation: True  # true: use spline interpolation for route resampling; false: use linear interpolation
     v_ref: 3.0                      # reference velocity (m/s)
     a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 

@@ -28,6 +28,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "true: incoming route/path is static; false: incoming route/path is dynamic");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
+  this->declareAndLoadParameter("use_spline_interpolation", use_spline_interpolation_,
+                                "true: use spline interpolation for route resampling; false: use linear interpolation");
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter(
@@ -303,16 +305,17 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
 
   std::vector<geometry_msgs::msg::Point> path;
   double s = 0.0;
-  std::vector<double> z_vector, x_vector, y_vector;
+  tk::spline x_spline, y_spline;
   if (use_spline_interpolation_ && route.remaining_route.size() > 2) {
+    std::vector<double> z_vector, x_vector, y_vector;
     for (size_t j = 0; j < route.remaining_route.size(); ++j) {
       z_vector.push_back(route.remaining_route[j].z);
       x_vector.push_back(route.remaining_route[j].x);
       y_vector.push_back(route.remaining_route[j].y);
     }
+    x_spline.set_points(z_vector, x_vector);
+    y_spline.set_points(z_vector, y_vector);
   }
-  tk::spline x_spline(z_vector, x_vector);
-  tk::spline y_spline(z_vector, y_vector);
 
   while (s<=end_of_route) {
     double v = v_ref_; // case 1: constant velocity
