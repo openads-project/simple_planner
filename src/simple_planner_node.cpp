@@ -237,13 +237,12 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
         next_stop_line = tf_route.regulatory_elements[j].effect_line[0].z;
       }
     }
-    next_stop_line = next_stop_line - offset_to_stop_line_;
+    // make sure to stop with the front of the vehicle at the stop line
+    next_stop_line = next_stop_line - offset_to_stop_line_ - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
     RCLCPP_DEBUG(this->get_logger(), "Next stop line at s: %f (global)", next_stop_line);
   }
 
   double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
-  // make sure to stop with the front of the vehicle at the stop line
-  next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
 
   // resample route if braking point has changed
   if (next_braking_point != s_start_brake_) {
