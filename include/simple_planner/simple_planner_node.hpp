@@ -30,6 +30,8 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePlannerNode();
 
  private:
+  enum InterpolationType { LINEAR = 0, SPLINE = 1 };
+
   const std::string kEgoDataTopic = "~/ego_data";
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
@@ -72,7 +74,7 @@ class SimplePlannerNode : public rclcpp::Node {
   bool static_route_ = false;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
-  bool use_spline_interpolation_ = true;
+  uint8_t interpolation_type_ = InterpolationType::SPLINE;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
   bool consider_traffic_lights_ = false;

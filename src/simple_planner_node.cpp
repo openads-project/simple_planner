@@ -28,8 +28,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "true: incoming route/path is static; false: incoming route/path is dynamic");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
-  this->declareAndLoadParameter("use_spline_interpolation", use_spline_interpolation_,
-                                "true: use spline interpolation for route resampling; false: use linear interpolation");
+  this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
+                                true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter(
@@ -194,6 +194,8 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
 }
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
+  rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+
   // define trajectory message and set header
   int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
   trajectory_planning_msgs::msg::Trajectory tra;
@@ -283,10 +285,14 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, path.empty());
 
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
+
+  rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+  RCLCPP_DEBUG(this->get_logger(), "Trajectory creation took %f ms", (end - begin).seconds() * 1e3);
   return tra;
 }
 
 void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, std::vector<double>& v_profile, const double brake_point) {
+  rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   if (route.remaining_route.size() < 2) {
     RCLCPP_WARN(this->get_logger(), "Route has less than 2 points. No resampling possible.");
     return;
@@ -298,7 +304,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
   double s = 0.0;
 
   tk::spline x_spline, y_spline;
-  if (use_spline_interpolation_ && route.remaining_route.size() > 2) {
+  if (interpolation_type_ == InterpolationType::SPLINE && route.remaining_route.size() > 2) {
     std::vector<double> z_vector, x_vector, y_vector;
     for (size_t j = 0; j < route.remaining_route.size(); ++j) {
       z_vector.push_back(route.remaining_route[j].z);
@@ -311,7 +317,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
 
   while (s<=end_of_route) {
     double v = v_ref_; // case 1: constant velocity
-    double ds = v_ref_ * dt_; // case 1: constant velocityv_ref: 3.0  
+    double ds = v_ref_ * dt_; // case 1: constant velocity
     int idx = -1;
     if (s + ds > brake_point) {
       if (s < brake_point) { // special case: braking point is between two states
@@ -338,13 +344,17 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
     // interpolate point at s
     geometry_msgs::msg::Point point;
     point.z = s;
-    if (use_spline_interpolation_ && route.remaining_route.size() > 2){ // spline interpolation
+    if (interpolation_type_ == InterpolationType::SPLINE && route.remaining_route.size() > 2){ // spline interpolation
       point.x = x_spline(s);
       point.y = y_spline(s);
     }
-    else { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
+    else if (interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
       point.x = route.remaining_route[idx].x + (route.remaining_route[idx+1].x - route.remaining_route[idx].x) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
       point.y = route.remaining_route[idx].y + (route.remaining_route[idx+1].y - route.remaining_route[idx].y) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
+    }
+    else { // unsupported interpolation type
+      RCLCPP_ERROR(this->get_logger(), "Unsupported interpolation type value %d", interpolation_type_);
+      return;
     }
     path.push_back(point);
     v_profile.push_back(v);
@@ -355,6 +365,8 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
   }
 
   route.remaining_route = path;
+  rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+  RCLCPP_DEBUG(this->get_logger(), "Resampling route took %f ms", (end - begin).seconds() * 1e3);
 }
 
 /**

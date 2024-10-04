@@ -7,10 +7,10 @@
     frequency: 10.0
     
     #### trajectory generation parameters
-    static_route: True              # true: incoming route/path is static; false: incoming route/path is dynamic
+    static_route: False             # true: incoming route/path is static; false: incoming route/path is dynamic
     trajectory_horizon: 6.0         # planning horizon (s)
     n_states: 61                    # number of states in trajectory
-    use_spline_interpolation: True  # true: use spline interpolation for route resampling; false: use linear interpolation
+    interpolation_type: 1           # 0: linear, 1: cubic spline
     v_ref: 3.0                      # reference velocity (m/s)
     a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 
