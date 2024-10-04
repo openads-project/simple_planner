@@ -221,14 +221,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
-  // Currently doesn't work -> buf in tf2_route_planning_msgs
-  // route_planning_msgs::msg::Route tf_route;
-  // try {
-  //   tf_route = tf2_buffer_->transform(route_, tra.header.frame_id, tf2_ros::fromMsg(tra.header.stamp),
-  //                                     fixed_over_time_frame_id_, tf2::durationFromSec(0.01));
-  // } catch (tf2::TransformException& ex) {
-  //   RCLCPP_WARN(this->get_logger(), "Could not transform route: %s", ex.what());
-  // }
 
   // find next traffic light stop line and calculate braking point
   double next_stop_line = std::numeric_limits<double>::infinity();
