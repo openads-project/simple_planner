@@ -15,5 +15,5 @@
     a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 
     #### traffic light parameters
-    consider_traffic_lights: False  # true: planner will consider traffic lights; false: planner will ignore traffic lights
+    consider_traffic_lights: True   # true: planner will consider traffic lights; false: planner will ignore traffic lights
     offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)

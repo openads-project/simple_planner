@@ -340,7 +340,7 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
       point.x = x_spline(s);
       point.y = y_spline(s);
     }
-    else if (interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
+    else if ((interpolation_type_ == InterpolationType::SPLINE && route.remaining_route.size() <= 2) || interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
       point.x = route.remaining_route[idx].x + (route.remaining_route[idx+1].x - route.remaining_route[idx].x) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
       point.y = route.remaining_route[idx].y + (route.remaining_route[idx+1].y - route.remaining_route[idx].y) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
     }
