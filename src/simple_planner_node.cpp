@@ -24,10 +24,10 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
-  this->declareAndLoadParameter("static_route", static_route_,
-                                "true: incoming route/path is static; false: incoming route/path is dynamic");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
+  this->declareAndLoadParameter("internal_route_update", internal_route_update_,
+                                "true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory");
@@ -252,7 +252,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
 
   // save updated path in member variable
-  if (static_route_) {
+  if (internal_route_update_) {
     route_.header = tra.header;
     route_.remaining_route = path;
   }
