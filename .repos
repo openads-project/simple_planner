@@ -6,4 +6,4 @@ repositories:
   planning_interfaces:
     type: git
     url: https://gitlab.ika.rwth-aachen.de/fb-fi/definitions/planning_interfaces.git
-    version: feature/trajectory_tool
+    version: main

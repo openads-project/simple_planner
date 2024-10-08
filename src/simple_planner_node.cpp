@@ -264,15 +264,16 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   // init trajectory and fill with path (route) and velocity (const from param) data
   trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
-  for (int i = 0; i < n_states_; i++) {
-    if (path.empty()) break; // do nothing if path is empty
-    int idx = (size_t)i < path.size() ? i : path.size() - 1; // multiple points at end of path if n_states_ > path.size()
-    trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
-    trajectory_planning_msgs::trajectory_access::setX(tra, path[idx].x, i);
-    trajectory_planning_msgs::trajectory_access::setY(tra, path[idx].y, i);
-    trajectory_planning_msgs::trajectory_access::setV(tra, v_profile_[idx], i);
-    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
-                 dt_ * i, path[i].x, path[i].y, v_profile_[i], path[i].z);
+  if (!path.empty()) { // only fill trajectory if path is not empty
+    for (int i = 0; i < n_states_; i++) {
+      int idx = (size_t)i < path.size() ? i : path.size() - 1; // multiple points at end of path if n_states_ > path.size()
+      trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
+      trajectory_planning_msgs::trajectory_access::setX(tra, path[idx].x, i);
+      trajectory_planning_msgs::trajectory_access::setY(tra, path[idx].y, i);
+      trajectory_planning_msgs::trajectory_access::setV(tra, v_profile_[idx], i);
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
+                  dt_ * i, path[i].x, path[i].y, v_profile_[i], path[i].z);
+    }
   }
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, path.empty());
 
