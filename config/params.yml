@@ -7,10 +7,12 @@
     frequency: 10.0
     
     #### trajectory generation parameters
-    drivable_mode: False            # true: planner will generate drivable trajectories; false: planner will generate reference trajectories
-    n_states: 51                    # number of states in trajectory
-    v_ref: 13.89                    # constant reference velocity (m/s)
-    a_max_decel: -2.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
+    trajectory_horizon: 6.0         # covered time horizon of the published trajectory (s)
+    n_states: 61                    # number of states in published trajectory
+    internal_route_update: False    # true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).
+    interpolation_type: 1           # 0: linear, 1: cubic spline
+    v_ref: 3.0                      # reference velocity (m/s)
+    a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 
     #### traffic light parameters
     consider_traffic_lights: True   # true: planner will consider traffic lights; false: planner will ignore traffic lights

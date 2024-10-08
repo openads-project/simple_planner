@@ -30,11 +30,12 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePlannerNode();
 
  private:
+  enum InterpolationType { LINEAR = 0, SPLINE = 1 };
+
   const std::string kEgoDataTopic = "~/ego_data";
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
 
- private:
   template <typename T>
   void declareAndLoadParameter(const std::string &name, T &member_param, const std::string &description,
                                const bool add_to_auto_reconfigurable_params = true, const bool is_required = false,
@@ -50,14 +51,10 @@ class SimplePlannerNode : public rclcpp::Node {
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
-
-  bool isDestinationReached(const geometry_msgs::msg::Point &destination);
-  double calcDistance(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
-  double calcTheta(const std::vector<geometry_msgs::msg::Point> &points, const int &nPoint);
+  void resampleRoute(route_planning_msgs::msg::Route &route, std::vector<double> &v_profile, const double brake_point);
 
   void publishTimerCallback();
 
- private:
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
@@ -74,8 +71,10 @@ class SimplePlannerNode : public rclcpp::Node {
   std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
-  bool drivable_mode_ = false;
+  double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
+  bool internal_route_update_ = false;
+  uint8_t interpolation_type_ = InterpolationType::SPLINE;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
   bool consider_traffic_lights_ = false;
@@ -83,11 +82,13 @@ class SimplePlannerNode : public rclcpp::Node {
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;
+  std::vector<double> v_profile_;
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
   double s_start_brake_ = std::numeric_limits<double>::infinity();
-  double distance_to_stop_ = 0.0;
+  double distance_to_stop_;
+  double dt_;
 };
 
 }  // namespace simple_planner

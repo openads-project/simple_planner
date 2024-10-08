@@ -38,8 +38,10 @@
 | `trajectory_frame_id` | `string` | Frame ID of published reference trajectory |
 | `fixed_over_time_frame_id` | `string` | Frame ID of frame that is fixed over time for finding temporal transforms |
 | `frequency` | `double` | frequency for publishing output trajectory |
-| `drivable_mode` | `bool` | publish trajectory in `drivable` (true, recommended) or `reference` format (false) |
-| `n_states` | `int` | defines the (maximum) number of states of the published trajectory |
+| `trajectory_horizon` | `double` | covered time horizon of the published trajectory (s) |
+| `n_states` | `int` | defines the number of states in the published trajectory |
+| `internal_route_update` | `bool` | true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally). |
+| `interpolation_type` | `int` | defines the interpolation type of the received route, which is important for sampling it time equidistantly (0: linear, 1: spline) |
 | `v_ref` | `double` | defines the constant velocity of the published trajectory |
 | `a_max_decel` | `double` | defines the maximum deceleration for the braking maneuver before the end of the route (has to be `<= 0.0`; if `= 0.0`, no braking) |
 | `consider_traffic_lights` | `bool` | consider traffic lights for trajectory planning (stop at red traffic lights or not) |

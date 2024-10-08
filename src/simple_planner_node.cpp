@@ -2,6 +2,9 @@
 #include <cmath>
 #include <functional>
 #include <thread>
+#include <vector>
+
+#include <tk/spline.h>
 
 #include <simple_planner/simple_planner_node.hpp>
 
@@ -21,9 +24,12 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
-  this->declareAndLoadParameter("drivable_mode", drivable_mode_,
-                                "true: creating drivable trajectory; false: creating reference trajectory");
+  this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
+  this->declareAndLoadParameter("internal_route_update", internal_route_update_,
+                                "true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).");
+  this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
+                                true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter(
@@ -133,6 +139,9 @@ void SimplePlannerNode::setup() {
     distance_to_stop_ = 0.0;
   }
 
+  // calculate dt
+  dt_ = trajectory_horizon_ / (n_states_ - 1);
+
   // create a publisher for publishing output trajectory
   pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(kOutputTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
@@ -179,18 +188,21 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
   s_start_brake_ = route_.remaining_route.back().z - distance_to_stop_;
+  RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
+  resampleRoute(route_, v_profile_, s_start_brake_);
   if (!route_init_) route_init_ = true;
 }
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
+  rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+
   // define trajectory message and set header
-  int type_id =
-      drivable_mode_ ? trajectory_planning_msgs::DRIVABLE::TYPE_ID : trajectory_planning_msgs::REFERENCE::TYPE_ID;
+  int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
   trajectory_planning_msgs::msg::Trajectory tra;
   tra.header.stamp = now();
   tra.header.frame_id = trajectory_frame_id_;
 
-  // TODO: additionally check if destination is reached or if route is outdated?
+  // TODO: additionally check if route is outdated?
   if (route_.remaining_route.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
@@ -220,24 +232,30 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
         next_stop_line = tf_route.regulatory_elements[j].effect_line[0].z;
       }
     }
-    next_stop_line = next_stop_line - offset_to_stop_line_;
+    // make sure to stop with the front of the vehicle at the stop line
+    next_stop_line = next_stop_line - offset_to_stop_line_ - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
     RCLCPP_DEBUG(this->get_logger(), "Next stop line at s: %f (global)", next_stop_line);
   }
 
   double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
-  // make sure to stop with the front of the vehicle at the stop line
-  next_braking_point = next_braking_point - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
+
+  // resample route if braking point has changed (TODO: has this to be done every time?)
+  if (next_braking_point != s_start_brake_) resampleRoute(tf_route, v_profile_, next_braking_point);
 
   // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
   std::vector<geometry_msgs::msg::Point> path = tf_route.remaining_route;
-  if (path[0].x < 0.0)
-    RCLCPP_DEBUG(this->get_logger(), "Path starts %f m behind %s. Could cause unintended behavior.", path[0].x, trajectory_frame_id_.c_str());
-  if (drivable_mode_) path.insert(path.begin(), geometry_msgs::msg::Point());
 
-  // currently unused - might be useful for publishing drivable trajectories -> only point where ego_data_ is used
-  // geometry_msgs::msg::Pose current_pose = perception_msgs::object_access::getPose(ego_data_);
-  // double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-  // double current_speed_limit = tf_route.current_speed_limit/3.6;
+  // remove first point of path as long as it is behind the ego vehicle
+  while (!path.empty() && path[0].x < 0.0) {
+    path.erase(path.begin());
+    v_profile_.erase(v_profile_.begin());
+  }
+
+  // save updated path in member variable
+  if (internal_route_update_) {
+    route_.header = tra.header;
+    route_.remaining_route = path;
+  }
 
   // keep maximum the first n_states_ in path (and therefore in trajectory)
   if ((size_t) n_states_ < path.size()) {
@@ -245,59 +263,103 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   }
 
   // init trajectory and fill with path (route) and velocity (const from param) data
-  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, path.size());
-  for (size_t i = 0; i < path.size(); i++) {
-    double v = v_ref_;
-    if (path[i].z >= next_braking_point) {
-      v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (path[i].z - next_braking_point), 0.0));  // decelerate to stop at ref line
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
+  if (!path.empty()) { // only fill trajectory if path is not empty
+    for (int i = 0; i < n_states_; i++) {
+      int idx = (size_t)i < path.size() ? i : path.size() - 1; // multiple points at end of path if n_states_ > path.size()
+      trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
+      trajectory_planning_msgs::trajectory_access::setX(tra, path[idx].x, i);
+      trajectory_planning_msgs::trajectory_access::setY(tra, path[idx].y, i);
+      trajectory_planning_msgs::trajectory_access::setV(tra, v_profile_[idx], i);
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
+                  dt_ * i, path[i].x, path[i].y, v_profile_[i], path[i].z);
     }
-    trajectory_planning_msgs::trajectory_access::setT(tra, calcDistance(path, i) / v_ref_, i);
-    trajectory_planning_msgs::trajectory_access::setX(tra, path[i].x, i);
-    trajectory_planning_msgs::trajectory_access::setY(tra, path[i].y, i);
-    trajectory_planning_msgs::trajectory_access::setV(tra, v, i);
-    if (drivable_mode_) {
-      trajectory_planning_msgs::trajectory_access::setS(tra, calcDistance(path, i), i);
-      trajectory_planning_msgs::trajectory_access::setTheta(tra, calcTheta(path, i), i);
-      // TODO: setA, setKappa, setDkappa
-    }
-    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %ld,  t: %f,  x: %f,  y: %f,  v: %f, s: %f,  theta: %f", i,
-                 calcDistance(path, i) / v_ref_, path[i].x, path[i].y, v, calcDistance(path, i), calcTheta(path, i));
   }
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, path.empty());
 
   RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
+
+  rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+  RCLCPP_DEBUG(this->get_logger(), "Trajectory creation took %f ms", (end - begin).seconds() * 1e3);
   return tra;
 }
 
-bool SimplePlannerNode::isDestinationReached(const geometry_msgs::msg::Point& destination) {
-  double distance = std::sqrt(std::pow(destination.x, 2) + std::pow(destination.y, 2));
-  RCLCPP_DEBUG(this->get_logger(), "Distance to goal: %f", distance);
-  return distance < 0.2;
-}
-
-double SimplePlannerNode::calcDistance(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint) {
-  double distance = 0.0;
-  for (int i = 0; i <= nPoint; i++) {
-    if (i == 0) {
-      distance += std::sqrt(std::pow(points[i].x - 0.0, 2) + std::pow(points[i].y - 0.0, 2));
-    } else {
-      distance += std::sqrt(std::pow(points[i].x - points[i - 1].x, 2) + std::pow(points[i].y - points[i - 1].y, 2));
-    }
+void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, std::vector<double>& v_profile, const double brake_point) {
+  rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+  if (route.remaining_route.size() < 2) {
+    RCLCPP_WARN(this->get_logger(), "Route has less than 2 points. No resampling possible.");
+    return;
   }
-  return distance;
-}
 
-double SimplePlannerNode::calcTheta(const std::vector<geometry_msgs::msg::Point>& points, const int& nPoint) {
-  double theta = 0.0;
-  for (int i = 0; i <= nPoint; i++) {
-    if (i == 0) {
-      // theta += atan2(points[i].y - 0.0, points[i].x - 0.0);
-      theta += 0.0;
-    } else {
-      theta += atan2(points[i].y - points[i - 1].y, points[i].x - points[i - 1].x);
+  std::vector<geometry_msgs::msg::Point> path;
+  v_profile.clear();
+  double end_of_route = brake_point + distance_to_stop_;
+  double s = 0.0;
+
+  tk::spline x_spline, y_spline;
+  if (interpolation_type_ == InterpolationType::SPLINE && route.remaining_route.size() > 2) {
+    std::vector<double> z_vector, x_vector, y_vector;
+    for (size_t j = 0; j < route.remaining_route.size(); ++j) {
+      z_vector.push_back(route.remaining_route[j].z);
+      x_vector.push_back(route.remaining_route[j].x);
+      y_vector.push_back(route.remaining_route[j].y);
     }
+    x_spline.set_points(z_vector, x_vector);
+    y_spline.set_points(z_vector, y_vector);
   }
-  return theta;
+
+  while (s<=end_of_route) {
+    double v = v_ref_; // case 1: constant velocity
+    double ds = v_ref_ * dt_; // case 1: constant velocity
+    int idx = -1;
+    if (s + ds > brake_point) {
+      if (s < brake_point) { // special case: braking point is between two states
+        double ds_1 = brake_point - s; // distance with constant velocity to braking point
+        double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
+        double dt_2 = dt_ - dt_1; // remaining time with deceleration
+        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_ref_ * dt_2, 0.0);
+        ds = ds_1 + ds_2;
+      } else {
+        v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
+        ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
+        if (ds < 0.0) ds = end_of_route - s; // only add rest of route instead of driving backwards
+      }
+    }
+    
+    // find index of segment in route
+    for (size_t j = 0; j < route.remaining_route.size() - 1; ++j) {
+      if (s >= route.remaining_route[j].z && s <= route.remaining_route[j+1].z) {
+        idx = j;
+        break;
+      }
+    }
+    
+    // interpolate point at s
+    geometry_msgs::msg::Point point;
+    point.z = s;
+    if (interpolation_type_ == InterpolationType::SPLINE && route.remaining_route.size() > 2){ // spline interpolation
+      point.x = x_spline(s);
+      point.y = y_spline(s);
+    }
+    else if ((interpolation_type_ == InterpolationType::SPLINE && route.remaining_route.size() <= 2) || interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
+      point.x = route.remaining_route[idx].x + (route.remaining_route[idx+1].x - route.remaining_route[idx].x) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
+      point.y = route.remaining_route[idx].y + (route.remaining_route[idx+1].y - route.remaining_route[idx].y) / (route.remaining_route[idx+1].z - route.remaining_route[idx].z) * (s - route.remaining_route[idx].z);
+    }
+    else { // unsupported interpolation type
+      RCLCPP_ERROR(this->get_logger(), "Unsupported interpolation type value %d", interpolation_type_);
+      return;
+    }
+    path.push_back(point);
+    v_profile.push_back(v);
+
+    // increment s and v for next iteration 
+    s = s + ds;
+    if (s == end_of_route && v == 0.0) break; // stop at end of route
+  }
+
+  route.remaining_route = path;
+  rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+  RCLCPP_DEBUG(this->get_logger(), "Resampling route took %f ms", (end - begin).seconds() * 1e3);
 }
 
 /**
