@@ -5,5 +5,4 @@ variables:
   TARGET: dev,run
   PLATFORM: arm64,amd64
   BASE_IMAGE: rwthika/ros2:jazzy
-  RMW_IMPLEMENTATION: rmw_zenoh_cpp
   COMMAND: ros2 launch simple_planner simple_planner.launch.py
