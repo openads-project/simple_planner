@@ -2,7 +2,8 @@ include:
   - remote: https://raw.githubusercontent.com/ika-rwth-aachen/docker-ros/main/.gitlab-ci/docker-ros.yml
 
 variables:
+  BASE_IMAGE: rwthika/ros2:jazzy
+  RMW_IMPLEMENTATION: rmw_zenoh_cpp
   TARGET: dev,run
   PLATFORM: arm64,amd64
-  BASE_IMAGE: rwthika/ros2:humble
   COMMAND: ros2 launch simple_planner simple_planner.launch.py
