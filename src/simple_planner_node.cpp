@@ -202,8 +202,11 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.stamp = now();
   tra.header.frame_id = trajectory_frame_id_;
 
-  // TODO: additionally check if route is outdated?
-  if (route_.remaining_route.empty()) {
+  // handle special cases
+  if (tra.header.stamp - route_.header.stamp > rclcpp::Duration::from_seconds(1.0)) {
+    route_init_ = false;
+    throw std::runtime_error("Route is older than 1s. Resetting route.");
+  } else if (route_.remaining_route.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
     RCLCPP_WARN(this->get_logger(), "Remaining route empty -> destination reached. Publishing standstill trajectory.");
@@ -372,10 +375,13 @@ void SimplePlannerNode::publishTimerCallback() {
     return;
   }
 
-  trajectory_planning_msgs::msg::Trajectory msg = createTrajectory();
-
-  pub_->publish(msg);
-  RCLCPP_DEBUG(this->get_logger(), "Published Trajectory!");
+  try {
+    trajectory_planning_msgs::msg::Trajectory msg = createTrajectory();
+    pub_->publish(msg);
+    RCLCPP_DEBUG(this->get_logger(), "Published Trajectory!");
+  } catch (const std::runtime_error& e) {
+    RCLCPP_ERROR(this->get_logger(), "Error while creating trajectory, do not publish trajectory: %s", e.what());
+  }
 }
 
 }  // namespace simple_planner
