@@ -203,7 +203,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.frame_id = trajectory_frame_id_;
 
   // handle special cases
-  if (tra.header.stamp - route_.header.stamp > rclcpp::Duration::from_seconds(1.0)) {
+  if ((rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp)) > rclcpp::Duration::from_seconds(1.0)) {
     route_init_ = false;
     throw std::runtime_error("Route is older than 1s. Resetting route.");
   } else if (route_.remaining_route.empty()) {
