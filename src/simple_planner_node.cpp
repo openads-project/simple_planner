@@ -24,6 +24,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
+  this->declareAndLoadParameter("route_timeout", route_timeout_, "Time after which a received route is considered invalid (s)");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
   this->declareAndLoadParameter("internal_route_update", internal_route_update_,
@@ -203,9 +204,9 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.frame_id = trajectory_frame_id_;
 
   // handle special cases
-  if ((rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp)) > rclcpp::Duration::from_seconds(1.0)) {
+  if ((rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp)) > rclcpp::Duration::from_seconds(route_timeout_)) {
     route_init_ = false;
-    throw std::runtime_error("Route is older than 1s. Resetting route.");
+    throw std::runtime_error("Route is older than " + std::to_string(route_timeout_) + ". Publishing standstill trajectory.");
   } else if (route_.remaining_route.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;

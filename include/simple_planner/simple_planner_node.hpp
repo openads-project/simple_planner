@@ -71,6 +71,7 @@ class SimplePlannerNode : public rclcpp::Node {
   std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
+  double route_timeout_ = 1.0;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
   bool internal_route_update_ = false;
