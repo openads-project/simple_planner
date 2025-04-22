@@ -204,7 +204,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.frame_id = trajectory_frame_id_;
 
   // handle special cases
-  if ((route_timeout_ != -1.0) && (std::abs(rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp))) > rclcpp::Duration::from_seconds(route_timeout_)) {
+  if ((route_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp)) > rclcpp::Duration::from_seconds(route_timeout_)) {
     route_init_ = false;
     throw std::runtime_error("Route is older than " + std::to_string(route_timeout_) + ". Publishing standstill trajectory.");
   } else if (route_.remaining_route.empty()) {
