@@ -9,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <route_planning_msgs/msg/route.hpp>
+#include <route_planning_msgs_utils/route_access.hpp>
 
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
