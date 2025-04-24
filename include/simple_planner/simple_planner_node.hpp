@@ -26,6 +26,12 @@ template <typename C> struct is_vector : std::false_type {};
 template <typename T,typename A> struct is_vector< std::vector<T,A> > : std::true_type {};
 template <typename C> inline constexpr bool is_vector_v = is_vector<C>::value;
 
+struct SimplePathPoint {
+  geometry_msgs::msg::Point point;
+  double s;
+  double v;
+};
+
 class SimplePlannerNode : public rclcpp::Node {
  public:
   SimplePlannerNode();
@@ -52,7 +58,7 @@ class SimplePlannerNode : public rclcpp::Node {
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
-  void resampleRoute(route_planning_msgs::msg::Route &route, std::vector<double> &v_profile, const double brake_point);
+  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end);
 
   void publishTimerCallback();
 

@@ -188,9 +188,7 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
-  s_start_brake_ = route_.remaining_route_elements.back().s - distance_to_stop_;
   RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
-  resampleRoute(route_, v_profile_, s_start_brake_);
   if (!route_init_) route_init_ = true;
 }
 
@@ -226,56 +224,36 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
 
-  // find next traffic light stop line and calculate braking point
-  double next_stop_line = std::numeric_limits<double>::infinity();
-  if (consider_traffic_lights_){
-    for (size_t j = 0; j < tf_route.remaining_route_elements.size(); ++j) {
-      const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(tf_route.remaining_route_elements[j]);
-      const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementOfLaneElement(suggested_lane, tf_route.remaining_route_elements[j].regulatory_elements);
-      for (size_t k = 0; k < reg_elems.size(); ++k) {
-        if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
-        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
-        // TODO: hold in front of reference_line, not in front of route element
-        if (tf_route.remaining_route_elements[j].s >= 0.0 && tf_route.remaining_route_elements[j].s < next_stop_line) {
-          next_stop_line = tf_route.remaining_route_elements[j].s;
+  // convert route to simple path
+  bool stop_at_end = false;
+  std::vector<SimplePathPoint> path;
+  RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.remaining_route_elements.size());
+  for (size_t j = 0; j < tf_route.remaining_route_elements.size(); ++j) {
+    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(tf_route.remaining_route_elements[j]);
+    SimplePathPoint spp;
+    spp.point = suggested_lane.reference_pose.position;
+    spp.s = tf_route.remaining_route_elements[j].s;
+    if (tf_route.remaining_route_elements[j].is_enriched) {
+      spp.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
+      if (consider_traffic_lights_) {
+        const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementOfLaneElement(suggested_lane, tf_route.remaining_route_elements[j].regulatory_elements);
+        for (size_t k = 0; k < reg_elems.size(); ++k) {
+          if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
+          if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
+          stop_at_end = true;
+          break;
         }
       }
     }
-    // make sure to stop with the front of the vehicle at the stop line
-    next_stop_line = next_stop_line - offset_to_stop_line_ - (ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x);
-    RCLCPP_DEBUG(this->get_logger(), "Next stop line at s: %f (global)", next_stop_line);
+    path.push_back(spp);
+    if (j == tf_route.remaining_route_elements.size() - 1) stop_at_end = true;
+    if (stop_at_end) break;
   }
 
-  double next_braking_point = std::min(s_start_brake_, next_stop_line - distance_to_stop_);
+  // TODO: if lane change -> sinus
 
-  // resample route if braking point has changed (TODO: has this to be done every time?)
-  if (next_braking_point != s_start_brake_) resampleRoute(tf_route, v_profile_, next_braking_point);
-
-  // saving remaining route in path and checking if path starts behind trajectory_frame_id_, which could cause unintended behavior for drivable trajectories
-  std::vector<geometry_msgs::msg::Point> path;
-  for (size_t j = 0; j < tf_route.remaining_route_elements.size(); ++j) {
-    geometry_msgs::msg::Point point;
-    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(tf_route.remaining_route_elements[j]);
-    point.x = suggested_lane.reference_pose.position.x;
-    point.y = suggested_lane.reference_pose.position.y;
-    point.z = tf_route.remaining_route_elements[j].s; // hack: use s as z coordinate
-    path.push_back(point);
-  }
-
-  // remove first point of path as long as it is behind the ego vehicle (TODO: do we need this?)
-  while (!path.empty() && path[0].x < 0.0) {
-    path.erase(path.begin());
-    v_profile_.erase(v_profile_.begin());
-    tf_route.traveled_route_elements.push_back(tf_route.remaining_route_elements.front());
-    tf_route.remaining_route_elements.erase(tf_route.remaining_route_elements.begin());
-  }
-
-  // save updated path in member variable
-  if (internal_route_update_) {
-    route_.header = tra.header;
-    route_.remaining_route_elements = tf_route.remaining_route_elements;
-    route_.traveled_route_elements = tf_route.traveled_route_elements;
-  }
+  // resample path over time
+  // std::vector<SimplePathPoint> resampled_path = resamplePath(path, stop_at_end);
 
   // keep maximum the first n_states_ in path (and therefore in trajectory)
   if ((size_t) n_states_ < path.size()) {
@@ -288,11 +266,11 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     for (int i = 0; i < n_states_; i++) {
       int idx = (size_t)i < path.size() ? i : path.size() - 1; // multiple points at end of path if n_states_ > path.size()
       trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
-      trajectory_planning_msgs::trajectory_access::setX(tra, path[idx].x, i);
-      trajectory_planning_msgs::trajectory_access::setY(tra, path[idx].y, i);
-      trajectory_planning_msgs::trajectory_access::setV(tra, v_profile_[idx], i);
+      trajectory_planning_msgs::trajectory_access::setX(tra, path[idx].point.x, i);
+      trajectory_planning_msgs::trajectory_access::setY(tra, path[idx].point.y, i);
+      trajectory_planning_msgs::trajectory_access::setV(tra, path[idx].v, i);
       RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
-                  dt_ * i, path[i].x, path[i].y, v_profile_[i], path[i].z);
+                  dt_ * i, path[i].point.x, path[i].point.y, path[i].v, path[i].s);
     }
   }
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, path.empty());
@@ -304,32 +282,31 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   return tra;
 }
 
-void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, std::vector<double>& v_profile, const double brake_point) {
+std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end) {
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
-  if (route.remaining_route_elements.size() < 2) {
+  if (path.size() < 2) {
     RCLCPP_WARN(this->get_logger(), "Route has less than 2 route elements. No resampling possible.");
-    return;
+    return path;
   }
 
-  std::vector<geometry_msgs::msg::Point> path;
-  v_profile.clear();
-  double end_of_route = brake_point + distance_to_stop_;
+  std::vector<SimplePathPoint> resampled_path;
   double s = 0.0;
 
   tk::spline x_spline, y_spline;
-  if (interpolation_type_ == InterpolationType::SPLINE && route.remaining_route_elements.size() > 2) {
-    std::vector<double> z_vector, x_vector, y_vector;
-    for (size_t j = 0; j < route.remaining_route_elements.size(); ++j) {
-      const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route.remaining_route_elements[j]);
-      z_vector.push_back(route.remaining_route_elements[j].s);
-      x_vector.push_back(suggested_lane.reference_pose.position.x);
-      y_vector.push_back(suggested_lane.reference_pose.position.y);
+  if (interpolation_type_ == InterpolationType::SPLINE && path.size() > 2) {
+    std::vector<double> s_vector, x_vector, y_vector;
+    for (size_t j = 0; j < path.size(); ++j) {
+      s_vector.push_back(path[j].s);
+      x_vector.push_back(path[j].point.x);
+      y_vector.push_back(path[j].point.y);
     }
-    x_spline.set_points(z_vector, x_vector);
-    y_spline.set_points(z_vector, y_vector);
+    x_spline.set_points(s_vector, x_vector);
+    y_spline.set_points(s_vector, y_vector);
   }
 
-  while (s<=end_of_route) {
+  double brake_point = path.back().s; //- distance_to_stop_;
+
+  while (s<=brake_point) {
     double v = v_ref_; // case 1: constant velocity
     double ds = v_ref_ * dt_; // case 1: constant velocity
     int idx = -1;
@@ -343,51 +320,45 @@ void SimplePlannerNode::resampleRoute(route_planning_msgs::msg::Route& route, st
       } else {
         v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
         ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
-        if (ds < 0.0) ds = end_of_route - s; // only add rest of route instead of driving backwards
+        if (ds < 0.0) ds = brake_point - s; // only add rest of route instead of driving backwards
       }
     }
 
     // find index of segment in route
-    for (size_t j = 0; j < route.remaining_route_elements.size() - 1; ++j) {
-      if (s >= route.remaining_route_elements[j].s && s <= route.remaining_route_elements[j+1].s) {
+    for (size_t j = 0; j < path.size() - 1; ++j) {
+      if (s >= path[j].s && s <= path[j+1].s) {
         idx = j;
         break;
       }
     }
-    
+
     // interpolate point at s
-    geometry_msgs::msg::Point point;
-    point.z = s;
-    if (interpolation_type_ == InterpolationType::SPLINE && route.remaining_route_elements.size() > 2){ // spline interpolation
-      point.x = x_spline(s);
-      point.y = y_spline(s);
+    SimplePathPoint simple_path_point;
+    if (interpolation_type_ == InterpolationType::SPLINE && path.size() > 2){ // spline interpolation
+      simple_path_point.point.x = x_spline(s);
+      simple_path_point.point.y = y_spline(s);
     }
-    else if ((interpolation_type_ == InterpolationType::SPLINE && route.remaining_route_elements.size() <= 2) || interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
-      const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route.remaining_route_elements[idx]);
-      const auto& next_suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route.remaining_route_elements[idx+1]);
-      point.x = suggested_lane.reference_pose.position.x + (next_suggested_lane.reference_pose.position.x - suggested_lane.reference_pose.position.x) / (route.remaining_route_elements[idx+1].s - route.remaining_route_elements[idx].s) * (s - route.remaining_route_elements[idx].s);
-      point.y = suggested_lane.reference_pose.position.y + (next_suggested_lane.reference_pose.position.y - suggested_lane.reference_pose.position.y) / (route.remaining_route_elements[idx+1].s - route.remaining_route_elements[idx].s) * (s - route.remaining_route_elements[idx].s);
+    else if ((interpolation_type_ == InterpolationType::SPLINE && path.size() <= 2) || interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
+      simple_path_point.point.x = path[idx].point.x + (path[idx+1].point.x - path[idx].point.x) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
+      simple_path_point.point.y = path[idx].point.y + (path[idx+1].point.y - path[idx].point.y) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
     }
     else { // unsupported interpolation type
       RCLCPP_ERROR(this->get_logger(), "Unsupported interpolation type value %d", interpolation_type_);
-      return;
+      throw std::runtime_error("Unsupported interpolation type value");
     }
-    path.push_back(point);
-    v_profile.push_back(v);
+    simple_path_point.s = s;
+    simple_path_point.v = v;
+    resampled_path.push_back(simple_path_point);
 
-    // increment s and v for next iteration 
+    // increment s and v for next iteration
     s = s + ds;
-    if (s == end_of_route && v == 0.0) break; // stop at end of route
+    if (s == brake_point && v == 0.0) break; // stop at end of route
   }
 
-  // TODO: dont use route format for resampled path
-  for (size_t j = 0; j < path.size(); ++j) {
-    route.remaining_route_elements[j].s = path[j].z;
-    route.remaining_route_elements[j].lane_elements[route.remaining_route_elements[j].suggested_lane_idx].reference_pose.position.x = path[j].x;
-    route.remaining_route_elements[j].lane_elements[route.remaining_route_elements[j].suggested_lane_idx].reference_pose.position.y = path[j].y;
-  }
   rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   RCLCPP_DEBUG(this->get_logger(), "Resampling route took %f ms", (end - begin).seconds() * 1e3);
+
+  return resampled_path;
 }
 
 /**
