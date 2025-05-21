@@ -204,11 +204,11 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // handle special cases
   if ((route_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp)) > rclcpp::Duration::from_seconds(route_timeout_)) {
     route_init_ = false;
-    throw std::runtime_error("Route is older than " + std::to_string(route_timeout_) + ". Publishing standstill trajectory.");
-  } else if (route_.remaining_route_elements.empty()) {
+    throw std::runtime_error("Route is older than " + std::to_string(route_timeout_) + ".");
+  } else if (route_.route_elements.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
-    RCLCPP_WARN(this->get_logger(), "Remaining route empty -> destination reached. Publishing standstill trajectory.");
+    RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory."); // TODO: just do nothing?
     return tra;
   }
 
@@ -227,16 +227,16 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // convert route to simple path
   bool stop_at_end = false;
   std::vector<SimplePathPoint> path;
-  RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.remaining_route_elements.size());
-  for (size_t j = 0; j < tf_route.remaining_route_elements.size(); ++j) {
-    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(tf_route.remaining_route_elements[j]);
+  RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
+  for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
+    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(tf_route.route_elements[j]);
     SimplePathPoint simple_path_point;
     simple_path_point.point = suggested_lane.reference_pose.position;
-    simple_path_point.s = tf_route.remaining_route_elements[j].s;
-    if (tf_route.remaining_route_elements[j].is_enriched) {
+    simple_path_point.s = tf_route.route_elements[j].s;
+    if (tf_route.route_elements[j].is_enriched) {
       simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
       if (consider_traffic_lights_) {
-        const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementOfLaneElement(suggested_lane, tf_route.remaining_route_elements[j].regulatory_elements);
+        const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementOfLaneElement(suggested_lane, tf_route.route_elements[j].regulatory_elements);
         for (size_t k = 0; k < reg_elems.size(); ++k) {
           if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
           if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
@@ -246,7 +246,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       }
     }
     path.push_back(simple_path_point);
-    if (j == tf_route.remaining_route_elements.size() - 1) stop_at_end = true;
+    if (j == tf_route.destination_route_element_idx - 1) stop_at_end = true;
     if (stop_at_end) break;
   }
 
