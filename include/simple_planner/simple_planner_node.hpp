@@ -27,9 +27,17 @@ template <typename T,typename A> struct is_vector< std::vector<T,A> > : std::tru
 template <typename C> inline constexpr bool is_vector_v = is_vector<C>::value;
 
 struct SimplePathPoint {
-  geometry_msgs::msg::Point point;
+  Eigen::Vector2d position;
+  double yaw;
   double s;
   double v;
+
+  // custom constructor
+  SimplePathPoint(const Eigen::Vector2d& pos, double yaw, double s = -1.0, double v = -1.0)
+  : position(pos), yaw(yaw), s(s), v(v) {}
+
+  // default constructor
+  SimplePathPoint() = default;
 };
 
 class SimplePlannerNode : public rclcpp::Node {
@@ -61,6 +69,10 @@ class SimplePlannerNode : public rclcpp::Node {
   std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end);
 
   void publishTimerCallback();
+
+  std::vector<SimplePathPoint> generateSinusoidalPoseConnection(const SimplePathPoint& start, const SimplePathPoint& end);
+  void recalculateS(std::vector<SimplePathPoint>& path);
+  double getYawFromQuaternion(const geometry_msgs::msg::Quaternion& msg);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;

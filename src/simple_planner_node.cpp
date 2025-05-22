@@ -4,6 +4,8 @@
 #include <thread>
 #include <vector>
 
+#include <Eigen/Dense>
+
 #include <tk/spline.h>
 
 #include <simple_planner/simple_planner_node.hpp>
@@ -227,12 +229,18 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // convert route to simple path
   bool stop_at_end = false;
   std::vector<SimplePathPoint> path;
+  std::vector<uint64_t> lane_change_indices;
   RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
   for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
     const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(tf_route.route_elements[j]);
     SimplePathPoint simple_path_point;
-    simple_path_point.point = suggested_lane.reference_pose.position;
+    simple_path_point.position = Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
+    simple_path_point.yaw = getYawFromQuaternion(suggested_lane.reference_pose.orientation);
     simple_path_point.s = tf_route.route_elements[j].s;
+    if (tf_route.route_elements[j].will_change_suggested_lane) {
+      uint64_t path_idx = j - tf_route.current_route_element_idx;
+      lane_change_indices.push_back(path_idx);
+    }
     if (tf_route.route_elements[j].is_enriched) {
       simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
       if (consider_traffic_lights_) {
@@ -250,7 +258,31 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     if (stop_at_end) break;
   }
 
-  // TODO: if lane change -> sinus
+  RCLCPP_INFO(this->get_logger(), "Number of lane change indices: %zu", lane_change_indices.size());
+  if (lane_change_indices.size() > 0) {
+    RCLCPP_INFO(this->get_logger(), "Lane change indices: ");
+    for (size_t i = 0; i < lane_change_indices.size(); ++i) {
+      RCLCPP_INFO(this->get_logger(), "%lu", lane_change_indices[i]);
+    }
+  }
+
+  // generate lane change segments and insert them into path
+  size_t current = 0;
+  std::vector<SimplePathPoint> merged_path;
+  for (size_t i = 0; i < lane_change_indices.size(); ++i) {
+    uint64_t idx = lane_change_indices[i];
+    if (idx < path.size() - 1) {
+      merged_path.insert(merged_path.end(), path.begin() + current, path.begin() + idx);
+      std::vector<SimplePathPoint> pose_connection = generateSinusoidalPoseConnection(path[idx], path[idx + 1]);
+      merged_path.insert(merged_path.end(), pose_connection.begin(), pose_connection.end());
+      current = idx + 2; // skip idx+1 in the next slice
+    } else {
+      RCLCPP_WARN(this->get_logger(), "Lane change index %lu is out of bounds for path size %zu", idx, path.size());
+    }
+  }
+  merged_path.insert(merged_path.end(), path.begin() + current, path.end()); // add remaining tail
+  recalculateS(merged_path); // recalculate s values for merged path
+  path = std::move(merged_path); // replace path with merged_path
 
   // resample path over time
   std::vector<SimplePathPoint> resampled_path = resamplePath(path, stop_at_end);
@@ -266,11 +298,11 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     for (int i = 0; i < n_states_; i++) {
       int idx = (size_t)i < resampled_path.size() ? i : resampled_path.size() - 1; // multiple points at end of resampled_path if n_states_ > resampled_path.size()
       trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
-      trajectory_planning_msgs::trajectory_access::setX(tra, resampled_path[idx].point.x, i);
-      trajectory_planning_msgs::trajectory_access::setY(tra, resampled_path[idx].point.y, i);
+      trajectory_planning_msgs::trajectory_access::setX(tra, resampled_path[idx].position.x(), i);
+      trajectory_planning_msgs::trajectory_access::setY(tra, resampled_path[idx].position.y(), i);
       trajectory_planning_msgs::trajectory_access::setV(tra, resampled_path[idx].v, i);
       RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
-                  dt_ * i, resampled_path[i].point.x, resampled_path[i].point.y, resampled_path[i].v, resampled_path[i].s);
+                  dt_ * i, resampled_path[i].position.x(), resampled_path[i].position.y(), resampled_path[i].v, resampled_path[i].s);
     }
   }
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, resampled_path.empty());
@@ -280,6 +312,56 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   RCLCPP_DEBUG(this->get_logger(), "Trajectory creation took %f ms", (end - begin).seconds() * 1e3);
   return tra;
+}
+
+std::vector<SimplePathPoint> SimplePlannerNode::generateSinusoidalPoseConnection(const SimplePathPoint& start, const SimplePathPoint& end) {
+
+  double amplitude = 1.0; // amplitude of the sinusoidal offset
+  int num_points = 50; // number of points to interpolate between start and end
+
+  Eigen::Vector2d delta = start.position - end.position;
+  double length = delta.norm();
+
+  std::vector<SimplePathPoint> result;
+
+  for (int i = 0; i <= num_points; ++i) {
+    double t = static_cast<double>(i) / num_points;
+
+    // Interpolate position linearly
+    Eigen::Vector2d pos = start.position + t * delta;
+
+    // Direction along the straight line
+    Eigen::Vector2d dir = delta.normalized();
+
+    // Get normal vector (perpendicular)
+    Eigen::Vector2d normal(-dir.y(), dir.x());
+
+    // Apply sinusoidal offset in the lateral direction
+    double lateralOffset = amplitude * std::sin(M_PI * t);
+    pos += lateralOffset * normal;
+
+    // Interpolate yaw smoothly (ensure minimal angle difference)
+    double dyaw = end.yaw - start.yaw;
+    // Wrap to [-pi, pi]
+    while (dyaw > M_PI) dyaw -= 2 * M_PI;
+    while (dyaw < -M_PI) dyaw += 2 * M_PI;
+
+    double yaw = start.yaw + t * dyaw;
+
+    result.push_back(SimplePathPoint(pos, yaw));
+  }
+
+  return result;
+}
+
+void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
+  if (path.empty()) return;
+
+  path[0].s = 0.0;
+  for (size_t i = 1; i < path.size(); ++i) {
+    double ds = (path[i].position - path[i - 1].position).norm();
+    path[i].s = path[i - 1].s + ds;
+  }
 }
 
 std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end) {
@@ -297,8 +379,8 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     std::vector<double> s_vector, x_vector, y_vector;
     for (size_t j = 0; j < path.size(); ++j) {
       s_vector.push_back(path[j].s);
-      x_vector.push_back(path[j].point.x);
-      y_vector.push_back(path[j].point.y);
+      x_vector.push_back(path[j].position.x());
+      y_vector.push_back(path[j].position.y());
     }
     x_spline.set_points(s_vector, x_vector);
     y_spline.set_points(s_vector, y_vector);
@@ -336,15 +418,15 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     // interpolate point at s
     SimplePathPoint simple_path_point;
     if (path.size() == 1) {
-      simple_path_point.point = path[0].point;
+      simple_path_point.position = path[0].position;
     }
     else if (interpolation_type_ == InterpolationType::SPLINE && path.size() > 2){ // spline interpolation
-      simple_path_point.point.x = x_spline(s);
-      simple_path_point.point.y = y_spline(s);
+      simple_path_point.position.x() = x_spline(s);
+      simple_path_point.position.y() = y_spline(s);
     }
     else if ((interpolation_type_ == InterpolationType::SPLINE && path.size() <= 2) || interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
-      simple_path_point.point.x = path[idx].point.x + (path[idx+1].point.x - path[idx].point.x) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
-      simple_path_point.point.y = path[idx].point.y + (path[idx+1].point.y - path[idx].point.y) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
+      simple_path_point.position.x() = path[idx].position.x() + (path[idx+1].position.x() - path[idx].position.x()) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
+      simple_path_point.position.y() = path[idx].position.y() + (path[idx+1].position.y() - path[idx].position.y()) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
     }
     else { // unsupported interpolation type
       RCLCPP_ERROR(this->get_logger(), "Unsupported interpolation type value %d", interpolation_type_);
@@ -382,6 +464,14 @@ void SimplePlannerNode::publishTimerCallback() {
   } catch (const std::runtime_error& e) {
     RCLCPP_ERROR(this->get_logger(), "Error while creating trajectory, do not publish trajectory: %s", e.what());
   }
+}
+
+double SimplePlannerNode::getYawFromQuaternion(const geometry_msgs::msg::Quaternion& msg) {
+  tf2::Quaternion q;
+  tf2::fromMsg(msg, q);
+  double roll, pitch, yaw;
+  tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+  return yaw;
 }
 
 }  // namespace simple_planner
