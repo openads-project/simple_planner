@@ -384,7 +384,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
     Eigen::Vector2d adjacent_lane_pos(adjacent_lane.reference_pose.position.x, adjacent_lane.reference_pose.position.y);
     double suggested_lane_yaw = getYawFromQuaternion(suggested_lane.reference_pose.orientation);
     double adjacent_lane_yaw = getYawFromQuaternion(adjacent_lane.reference_pose.orientation);
-    double alpha = 1.0 - (static_cast<double>(i - start_idx) / (end_idx - start_idx));
+    double alpha = 0.5 * (1.0 + std::cos(M_PI * static_cast<double>(i - start_idx) / (end_idx - start_idx)));
     Eigen::Vector2d interpolated_pos = alpha * suggested_lane_pos + (1.0 - alpha) * adjacent_lane_pos;
     double interpolated_yaw = alpha * suggested_lane_yaw + (1.0 - alpha) * adjacent_lane_yaw;
     lane_change_path.push_back(SimplePathPoint(interpolated_pos, interpolated_yaw));
