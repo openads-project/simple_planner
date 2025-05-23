@@ -70,7 +70,8 @@ class SimplePlannerNode : public rclcpp::Node {
 
   void publishTimerCallback();
 
-  std::vector<SimplePathPoint> generateSinusoidalPoseConnection(const SimplePathPoint& start, const SimplePathPoint& end);
+  std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int end_idx, const int turn_idx,
+                                                      const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
   double getYawFromQuaternion(const geometry_msgs::msg::Quaternion& msg);
 

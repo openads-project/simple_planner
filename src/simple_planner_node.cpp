@@ -229,28 +229,84 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // convert route to simple path
   bool stop_at_end = false;
   std::vector<SimplePathPoint> path;
-  std::vector<uint64_t> lane_change_indices;
+  std::unordered_map<uint64_t, std::vector<uint64_t>> lane_change_indices_map; // maps lane change idx (j) to i_min and i_max
   RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
   for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
-    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(tf_route.route_elements[j]);
+    const auto& route_element = tf_route.route_elements[j];
+    if (!route_element.is_enriched) {
+      RCLCPP_WARN(this->get_logger(), "Route element %zu is not enriched. Skipping.", j);
+      continue;
+    }
+
+    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
     SimplePathPoint simple_path_point;
     simple_path_point.position = Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     simple_path_point.yaw = getYawFromQuaternion(suggested_lane.reference_pose.orientation);
-    simple_path_point.s = tf_route.route_elements[j].s;
-    if (tf_route.route_elements[j].will_change_suggested_lane) {
-      uint64_t path_idx = j - tf_route.current_route_element_idx;
-      lane_change_indices.push_back(path_idx);
-    }
-    if (tf_route.route_elements[j].is_enriched) {
-      simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
-      if (consider_traffic_lights_) {
-        const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementOfLaneElement(suggested_lane, tf_route.route_elements[j].regulatory_elements);
-        for (size_t k = 0; k < reg_elems.size(); ++k) {
-          if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
-          if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
-          stop_at_end = true;
+    simple_path_point.s = route_element.s;
+
+    // get lane change indices
+    if (route_element.will_change_suggested_lane) {
+      if (j+1 >= tf_route.route_elements.size()) {
+        RCLCPP_WARN(this->get_logger(), "Route element %zu is the last element. Cannot change lane.", j);
+        break;
+      }
+
+      // size_t i_min = route_planning_msgs::route_access::getRouteElementIdxClosestToS(tf_route, route_element.s - 20.0);
+      // size_t i_max = route_planning_msgs::route_access::getRouteElementIdxClosestToS(tf_route, route_element.s + 20.0);
+
+      size_t current_lane_idx = route_element.suggested_lane_idx;
+      int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
+      
+      double ds = 0.0;
+      int i_min = j;
+      while (ds < 20.0 && i_min > 0) {
+        if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_min-1])) {
+          current_lane_idx = *result;
+        } else {
+          RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_min);
           break;
         }
+        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_min-1], current_lane_idx, lane_change_direction)) {
+          RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_min-1);
+          break;
+        }
+        ds = ds + std::abs(tf_route.route_elements[i_min].s - tf_route.route_elements[i_min-1].s);
+        i_min--;
+      }
+      ds = 0.0;
+      int i_max = j;
+      current_lane_idx = route_element.suggested_lane_idx;
+      while (ds < 20.0 && i_max < tf_route.destination_route_element_idx) { // TODO: should also include overshoot?
+        if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_max+1])) {
+          current_lane_idx = *result;
+        } else {
+          RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_max);
+          break;
+        }
+        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_max+1], current_lane_idx, -lane_change_direction)) {
+          RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_max+1);
+          break;
+        }
+        ds = ds + std::abs(tf_route.route_elements[i_max].s - tf_route.route_elements[i_max+1].s);
+        i_max++;
+      }
+
+      if (!tf_route.route_elements[i_min].is_enriched || !tf_route.route_elements[i_max].is_enriched) {
+        RCLCPP_WARN(this->get_logger(), "Not enough enriched route elements (%u, %u) for lane change.", i_min, i_max);
+        break; // TODO: does this make sense?
+      }
+
+      lane_change_indices_map[j].push_back(i_min);
+      lane_change_indices_map[j].push_back(i_max);
+    }
+    simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
+    if (consider_traffic_lights_) {
+      const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementOfLaneElement(suggested_lane, route_element.regulatory_elements);
+      for (size_t k = 0; k < reg_elems.size(); ++k) {
+        if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
+        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
+        stop_at_end = true;
+        break;
       }
     }
     path.push_back(simple_path_point);
@@ -258,27 +314,19 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     if (stop_at_end) break;
   }
 
-  RCLCPP_INFO(this->get_logger(), "Number of lane change indices: %zu", lane_change_indices.size());
-  if (lane_change_indices.size() > 0) {
-    RCLCPP_INFO(this->get_logger(), "Lane change indices: ");
-    for (size_t i = 0; i < lane_change_indices.size(); ++i) {
-      RCLCPP_INFO(this->get_logger(), "%lu", lane_change_indices[i]);
-    }
-  }
-
   // generate lane change segments and insert them into path
   size_t current = 0;
   std::vector<SimplePathPoint> merged_path;
-  for (size_t i = 0; i < lane_change_indices.size(); ++i) {
-    uint64_t idx = lane_change_indices[i];
-    if (idx < path.size() - 1) {
-      merged_path.insert(merged_path.end(), path.begin() + current, path.begin() + idx);
-      std::vector<SimplePathPoint> pose_connection = generateSinusoidalPoseConnection(path[idx], path[idx + 1]);
-      merged_path.insert(merged_path.end(), pose_connection.begin(), pose_connection.end());
-      current = idx + 2; // skip idx+1 in the next slice
-    } else {
-      RCLCPP_WARN(this->get_logger(), "Lane change index %lu is out of bounds for path size %zu", idx, path.size());
-    }
+  for (const auto& lane_change_indices : lane_change_indices_map) {
+    int lane_change_idx_route = lane_change_indices.first;
+    int start_idx_route = lane_change_indices.second[0];
+    int end_idx_route = lane_change_indices.second[1];
+    int start_idx = std::max(start_idx_route - static_cast<int>(tf_route.current_route_element_idx), 0);
+    int end_idx = end_idx_route - tf_route.current_route_element_idx;
+    merged_path.insert(merged_path.end(), path.begin() + current, path.begin() + start_idx);
+    std::vector<SimplePathPoint> lane_change_path = generateLaneChangePath(start_idx_route, end_idx_route, lane_change_idx_route, tf_route);
+    merged_path.insert(merged_path.end(), lane_change_path.begin(), lane_change_path.end());
+    current = end_idx+1;
   }
   merged_path.insert(merged_path.end(), path.begin() + current, path.end()); // add remaining tail
   recalculateS(merged_path); // recalculate s values for merged path
@@ -314,44 +362,35 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   return tra;
 }
 
-std::vector<SimplePathPoint> SimplePlannerNode::generateSinusoidalPoseConnection(const SimplePathPoint& start, const SimplePathPoint& end) {
-
-  double amplitude = 1.0; // amplitude of the sinusoidal offset
-  int num_points = 50; // number of points to interpolate between start and end
-
-  Eigen::Vector2d delta = start.position - end.position;
-  double length = delta.norm();
-
-  std::vector<SimplePathPoint> result;
-
-  for (int i = 0; i <= num_points; ++i) {
-    double t = static_cast<double>(i) / num_points;
-
-    // Interpolate position linearly
-    Eigen::Vector2d pos = start.position + t * delta;
-
-    // Direction along the straight line
-    Eigen::Vector2d dir = delta.normalized();
-
-    // Get normal vector (perpendicular)
-    Eigen::Vector2d normal(-dir.y(), dir.x());
-
-    // Apply sinusoidal offset in the lateral direction
-    double lateralOffset = amplitude * std::sin(M_PI * t);
-    pos += lateralOffset * normal;
-
-    // Interpolate yaw smoothly (ensure minimal angle difference)
-    double dyaw = end.yaw - start.yaw;
-    // Wrap to [-pi, pi]
-    while (dyaw > M_PI) dyaw -= 2 * M_PI;
-    while (dyaw < -M_PI) dyaw += 2 * M_PI;
-
-    double yaw = start.yaw + t * dyaw;
-
-    result.push_back(SimplePathPoint(pos, yaw));
+std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int start_idx, const int end_idx, const int turn_idx,
+                                                                       const route_planning_msgs::msg::Route& route) {
+  std::vector<SimplePathPoint> lane_change_path;
+  if (start_idx >= end_idx || start_idx < 0 || end_idx >= route.route_elements.size()) {
+    RCLCPP_WARN(this->get_logger(), "Invalid lane change indices: %d, %d", start_idx, end_idx);
+    return lane_change_path;
   }
 
-  return result;
+  int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route.route_elements[turn_idx], route.route_elements[turn_idx + 1]);
+
+  // Interpolate between the two elements
+  for (int i = start_idx; i <= end_idx; ++i) {
+    if ((i - route.current_route_element_idx) < 0) continue;
+
+    const auto& route_element = route.route_elements[i];
+    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
+    if (i > turn_idx) lane_change_direction = -1 * lane_change_direction;
+    const auto& adjacent_lane = route_planning_msgs::route_access::getAdjacentLane(route_element, route.route_elements[i].suggested_lane_idx, lane_change_direction);
+    Eigen::Vector2d suggested_lane_pos(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
+    Eigen::Vector2d adjacent_lane_pos(adjacent_lane.reference_pose.position.x, adjacent_lane.reference_pose.position.y);
+    double suggested_lane_yaw = getYawFromQuaternion(suggested_lane.reference_pose.orientation);
+    double adjacent_lane_yaw = getYawFromQuaternion(adjacent_lane.reference_pose.orientation);
+    double alpha = 1.0 - (static_cast<double>(i - start_idx) / (end_idx - start_idx));
+    Eigen::Vector2d interpolated_pos = alpha * suggested_lane_pos + (1.0 - alpha) * adjacent_lane_pos;
+    double interpolated_yaw = alpha * suggested_lane_yaw + (1.0 - alpha) * adjacent_lane_yaw;
+    lane_change_path.push_back(SimplePathPoint(interpolated_pos, interpolated_yaw));
+  }
+
+  return lane_change_path;
 }
 
 void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
