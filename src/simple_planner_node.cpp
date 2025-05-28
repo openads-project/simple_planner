@@ -229,7 +229,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   // convert route to simple path
   bool stop_at_end = false;
   std::vector<SimplePathPoint> path;
-  std::unordered_map<uint64_t, std::vector<uint64_t>> lane_change_indices_map; // maps lane change idx (j) to i_min and i_max
+  std::map<uint64_t, uint64_t> lane_change_indices_map; // maps lane change idx (j) to start lane change idx (i_start)
   RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
   for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
     const auto& route_element = tf_route.route_elements[j];
@@ -244,60 +244,42 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     simple_path_point.yaw = getYawFromQuaternion(suggested_lane.reference_pose.orientation);
     simple_path_point.s = route_element.s;
 
-    // get lane change indices
+    // get starting lane change index
     if (route_element.will_change_suggested_lane) {
       if (j+1 >= tf_route.route_elements.size()) {
         RCLCPP_WARN(this->get_logger(), "Route element %zu is the last element. Cannot change lane.", j);
         break;
       }
+      int i_end = j + 1; // lane change should end at the next route element
 
-      // size_t i_min = route_planning_msgs::route_access::getRouteElementIdxClosestToS(tf_route, route_element.s - 20.0);
-      // size_t i_max = route_planning_msgs::route_access::getRouteElementIdxClosestToS(tf_route, route_element.s + 20.0);
+      // size_t i_start = route_planning_msgs::route_access::getRouteElementIdxClosestToS(tf_route, route_element.s - 20.0);
 
       size_t current_lane_idx = route_element.suggested_lane_idx;
       int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
       
       double ds = 0.0;
-      int i_min = j;
-      while (ds < 20.0 && i_min > 0) {
-        if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_min-1])) {
+      int i_start = j;
+      while (ds < 30.0 && i_start > 0) {
+        if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_start-1])) {
           current_lane_idx = *result;
         } else {
-          RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_min);
+          RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_start);
           break;
         }
-        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_min-1], current_lane_idx, lane_change_direction)) {
-          RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_min-1);
+        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
+          RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_start-1);
           break;
         }
-        ds = ds + std::abs(tf_route.route_elements[i_min].s - tf_route.route_elements[i_min-1].s);
-        i_min--;
-      }
-      ds = 0.0;
-      int i_max = j;
-      current_lane_idx = route_element.suggested_lane_idx;
-      while (ds < 20.0 && i_max < tf_route.destination_route_element_idx) { // TODO: should also include overshoot?
-        if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_max+1])) {
-          current_lane_idx = *result;
-        } else {
-          RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_max);
-          break;
-        }
-        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_max+1], current_lane_idx, -lane_change_direction)) {
-          RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_max+1);
-          break;
-        }
-        ds = ds + std::abs(tf_route.route_elements[i_max].s - tf_route.route_elements[i_max+1].s);
-        i_max++;
+        ds = ds + std::abs(tf_route.route_elements[i_start].s - tf_route.route_elements[i_start-1].s);
+        i_start--;
       }
 
-      if (!tf_route.route_elements[i_min].is_enriched || !tf_route.route_elements[i_max].is_enriched) {
-        RCLCPP_WARN(this->get_logger(), "Not enough enriched route elements (%u, %u) for lane change.", i_min, i_max);
+      if (!tf_route.route_elements[i_start].is_enriched || !tf_route.route_elements[i_end].is_enriched) {
+        RCLCPP_WARN(this->get_logger(), "Not enough enriched route elements (%u, %u) for lane change.", i_start, i_end);
         break; // TODO: does this make sense?
       }
 
-      lane_change_indices_map[j].push_back(i_min);
-      lane_change_indices_map[j].push_back(i_max);
+      lane_change_indices_map[j] = i_start;
     }
     simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
     if (consider_traffic_lights_) {
@@ -318,13 +300,12 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   size_t current = 0;
   std::vector<SimplePathPoint> merged_path;
   for (const auto& lane_change_indices : lane_change_indices_map) {
-    int lane_change_idx_route = lane_change_indices.first;
-    int start_idx_route = lane_change_indices.second[0];
-    int end_idx_route = lane_change_indices.second[1];
-    int start_idx = std::max(start_idx_route - static_cast<int>(tf_route.current_route_element_idx), 0);
-    int end_idx = end_idx_route - tf_route.current_route_element_idx;
+    uint64_t lane_change_idx_route = lane_change_indices.first;
+    uint64_t start_idx_route = lane_change_indices.second;
+    int start_idx = std::max(static_cast<int>(start_idx_route - tf_route.current_route_element_idx), 0);
+    int end_idx = (lane_change_idx_route + 1) - tf_route.current_route_element_idx; // lane change should end at the next route element
     merged_path.insert(merged_path.end(), path.begin() + current, path.begin() + start_idx);
-    std::vector<SimplePathPoint> lane_change_path = generateLaneChangePath(start_idx_route, end_idx_route, lane_change_idx_route, tf_route);
+    std::vector<SimplePathPoint> lane_change_path = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
     merged_path.insert(merged_path.end(), lane_change_path.begin(), lane_change_path.end());
     current = end_idx+1;
   }
@@ -334,6 +315,11 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   // resample path over time
   std::vector<SimplePathPoint> resampled_path = resamplePath(path, stop_at_end);
+
+  // remove first point of path as long as it is behind the ego vehicle
+  while (!resampled_path.empty() && resampled_path[0].position.x() < 0.0) {
+    resampled_path.erase(resampled_path.begin());
+  }
 
   // keep maximum the first n_states_ in resampled_path (and therefore in trajectory)
   if ((size_t) n_states_ < resampled_path.size()) {
@@ -362,9 +348,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   return tra;
 }
 
-std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int start_idx, const int end_idx, const int turn_idx,
+std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int start_idx, const int turn_idx,
                                                                        const route_planning_msgs::msg::Route& route) {
   std::vector<SimplePathPoint> lane_change_path;
+  int end_idx = turn_idx + 1; // lane change should end at the next route element
   if (start_idx >= end_idx || start_idx < 0 || end_idx >= route.route_elements.size()) {
     RCLCPP_WARN(this->get_logger(), "Invalid lane change indices: %d, %d", start_idx, end_idx);
     return lane_change_path;
@@ -378,7 +365,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
 
     const auto& route_element = route.route_elements[i];
     const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
-    if (i > turn_idx) lane_change_direction = -1 * lane_change_direction;
+    if (i > turn_idx) lane_change_direction = 0; // -> i == turn_idx + 1 == end_idx
     const auto& adjacent_lane = route_planning_msgs::route_access::getAdjacentLane(route_element, route.route_elements[i].suggested_lane_idx, lane_change_direction);
     Eigen::Vector2d suggested_lane_pos(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     Eigen::Vector2d adjacent_lane_pos(adjacent_lane.reference_pose.position.x, adjacent_lane.reference_pose.position.y);
