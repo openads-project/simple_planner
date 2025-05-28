@@ -256,10 +256,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
       size_t current_lane_idx = route_element.suggested_lane_idx;
       int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
-      
+      double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+      double lane_change_distance = std::max(ego_data_.length * 2.0, 6.0 * ego_velocity); // 2x length of ego vehicle or 6x velocity, whichever is larger
+      RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
+
       double ds = 0.0;
       int i_start = j;
-      while (ds < 30.0 && i_start > 0) {
+      while (ds < lane_change_distance && i_start > 0) {
         if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_start-1])) {
           current_lane_idx = *result;
         } else {
