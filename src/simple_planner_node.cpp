@@ -33,7 +33,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
-  this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory");
+  this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter(
       "consider_traffic_lights", consider_traffic_lights_,
@@ -411,42 +411,47 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
 
   tk::spline x_spline, y_spline;
   if (interpolation_type_ == InterpolationType::SPLINE && path.size() > 2) {
-    std::vector<double> s_vector, x_vector, y_vector;
+    std::vector<double> s_vector, x_vector, y_vector, v_vector;
     for (size_t j = 0; j < path.size(); ++j) {
       s_vector.push_back(path[j].s);
       x_vector.push_back(path[j].position.x());
       y_vector.push_back(path[j].position.y());
+      v_vector.push_back(path[j].v);
     }
     x_spline.set_points(s_vector, x_vector);
     y_spline.set_points(s_vector, y_vector);
   }
 
-  while (s<=path.back().s) {
-    double v = v_ref_; // case 1: constant velocity (TODO: get from route)
-    double distance_to_stop = -0.5 * std::pow(v, 2) / a_max_decel_;
-    distance_to_stop = std::max(distance_to_stop, 0.0);
-    double brake_point = path.back().s - distance_to_stop;
-    double ds = v_ref_ * dt_; // case 1: constant velocity
+  while (s < path.back().s) {
+    // find index of segment in route (not required if using linearInterpolation from utils)
     int idx = -1;
-    if (s + ds > brake_point) {
-      if (s < brake_point) { // special case: braking point is between two states
-        double ds_1 = brake_point - s; // distance with constant velocity to braking point
-        double dt_1 = ds_1 / v_ref_; // time with constant velocity to braking point
-        double dt_2 = dt_ - dt_1; // remaining time with deceleration
-        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v_ref_ * dt_2, 0.0);
-        ds = ds_1 + ds_2;
-      } else {
-        v = std::sqrt(std::max(std::pow(v_ref_, 2) + 2 * a_max_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
-        ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
-        if (ds < 0.0) ds = path.back().s - s; // only add rest of route instead of driving backwards
-      }
-    }
-
-    // find index of segment in route
     for (size_t j = 0; j < path.size() - 1; ++j) {
       if (s >= path[j].s && s <= path[j+1].s) {
         idx = j;
         break;
+      }
+    }
+
+    double v = v_ref_; // case 1: constant velocity from params
+    if (v_ref_ < 0.0 && idx >= 0) {
+      v = path[idx].v + (path[idx+1].v - path[idx].v) / (path[idx+1].s - path[idx].s) * (s - path[idx].s); // case 1: override v_ref from route
+    }
+
+    double distance_to_stop = -0.5 * std::pow(v, 2) / a_max_decel_;
+    distance_to_stop = std::max(distance_to_stop, 0.0);
+    double brake_point = path.back().s - distance_to_stop;
+    double ds = v * dt_; // case 1: constant velocity
+    if (s + ds > brake_point) {
+      if (s < brake_point) { // special case: braking point is between two states
+        double ds_1 = brake_point - s; // distance with constant velocity to braking point
+        double dt_1 = ds_1 / v; // time with constant velocity to braking point
+        double dt_2 = dt_ - dt_1; // remaining time with deceleration
+        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v * dt_2, 0.0);
+        ds = ds_1 + ds_2;
+      } else {
+        v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_max_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
+        ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
+        if (ds < 0.0) ds = path.back().s - s; // only add rest of route instead of driving backwards
       }
     }
 

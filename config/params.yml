@@ -12,7 +12,7 @@
     n_states: 61                    # number of states in published trajectory
     internal_route_update: False    # true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).
     interpolation_type: 1           # 0: linear, 1: cubic spline
-    v_ref: 3.0                      # reference velocity (m/s)
+    v_ref: 3.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
     a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 
     #### traffic light parameters
