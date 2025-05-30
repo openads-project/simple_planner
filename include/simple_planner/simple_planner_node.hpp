@@ -100,6 +100,9 @@ class SimplePlannerNode : public rclcpp::Node {
   double a_max_decel_ = -2.5;
   bool consider_traffic_lights_ = false;
   double offset_to_stop_line_ = 0.0;
+  bool lane_change_restriction_ = true;
+  double lane_change_distance_factor_ = 6.0;
+  double lane_change_min_distance_factor_ = 2.0;
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;

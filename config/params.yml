@@ -18,3 +18,8 @@
     #### traffic light parameters
     consider_traffic_lights: True   # true: planner will consider traffic lights; false: planner will ignore traffic lights
     offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)
+
+    #### lane change parameters
+    lane_change_restriction: True        # true: lane change is only allowed if all traffic rules are fulfilled; false: lane change is allowed even if there is no valid adjacent lane
+    lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)
+    lane_change_min_distance_factor: 2.0 # factor multiplied with the vehicle length to determine the minimum lane change distance (m)

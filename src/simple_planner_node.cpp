@@ -41,6 +41,12 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
                                 "front of vehicle at stop line)");
+  this->declareAndLoadParameter("lane_change_restriction", lane_change_restriction_,
+                                "true: lane change is only allowed if all traffic rules are fulfilled; false: lane change is allowed even if there is no valid adjacent lane");
+  this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
+                                "factor multiplied with the current velocity to determine the lane change distance (m)");
+  this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
+                                "factor multiplied with the vehicle length to determine the minimum lane change distance (m)");
 
   this->setup();
 }
@@ -257,7 +263,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       size_t current_lane_idx = route_element.suggested_lane_idx;
       int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
       double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-      double lane_change_distance = std::max(ego_data_.length * 2.0, 6.0 * ego_velocity); // 2x length of ego vehicle or 6x velocity, whichever is larger
+      double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
       RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
 
       double ds = 0.0;
@@ -269,7 +275,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
           RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_start);
           break;
         }
-        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
+        if (lane_change_restriction_ && !route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
           RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_start-1);
           break;
         }
