@@ -234,6 +234,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   // convert route to simple path
   bool stop_at_end = false;
+  double offset_to_stop_line = 0.0;
   std::vector<SimplePathPoint> path;
   std::map<uint64_t, uint64_t> lane_change_indices_map; // maps lane change idx (j) to start lane change idx (i_start)
   RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
@@ -296,8 +297,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       for (size_t k = 0; k < reg_elems.size(); ++k) {
         if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
         if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
+        offset_to_stop_line = offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
         stop_at_end = true;
-        break;
       }
     }
     path.push_back(simple_path_point);
@@ -323,7 +324,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   path = std::move(merged_path); // replace path with merged_path
 
   // resample path over time
-  std::vector<SimplePathPoint> resampled_path = resamplePath(path, stop_at_end);
+  std::vector<SimplePathPoint> resampled_path = resamplePath(path, stop_at_end, offset_to_stop_line);
 
   // remove first point of path as long as it is behind the ego vehicle
   while (!resampled_path.empty() && resampled_path[0].position.x() < 0.0) {
@@ -399,7 +400,7 @@ void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
   }
 }
 
-std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end) {
+std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line) {
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   if (path.empty()) {
     RCLCPP_WARN(this->get_logger(), "Route is empty. No resampling possible.");
@@ -437,11 +438,11 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       v = path[idx].v + (path[idx+1].v - path[idx].v) / (path[idx+1].s - path[idx].s) * (s - path[idx].s); // case 1: override v_ref from route
     }
 
-    double distance_to_stop = -0.5 * std::pow(v, 2) / a_max_decel_;
+    double distance_to_stop = -0.5 * std::pow(v, 2) / a_max_decel_ + offset_to_stop_line;
     distance_to_stop = std::max(distance_to_stop, 0.0);
     double brake_point = path.back().s - distance_to_stop;
     double ds = v * dt_; // case 1: constant velocity
-    if (s + ds > brake_point) {
+    if (s + ds > brake_point && stop_at_end) {
       if (s < brake_point) { // special case: braking point is between two states
         double ds_1 = brake_point - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v; // time with constant velocity to braking point

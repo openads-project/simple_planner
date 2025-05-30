@@ -66,7 +66,7 @@ class SimplePlannerNode : public rclcpp::Node {
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
-  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end);
+  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0);
 
   void publishTimerCallback();
 
