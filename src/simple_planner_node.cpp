@@ -286,7 +286,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     }
     simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
     if (consider_traffic_lights_) {
-      const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementOfLaneElement(suggested_lane, route_element.regulatory_elements);
+      const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
       for (size_t k = 0; k < reg_elems.size(); ++k) {
         if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
         if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
@@ -355,7 +355,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
                                                                        const route_planning_msgs::msg::Route& route) {
   std::vector<SimplePathPoint> lane_change_path;
   int end_idx = turn_idx + 1; // lane change should end at the next route element
-  if (start_idx >= end_idx || start_idx < 0 || end_idx >= route.route_elements.size()) {
+  if (start_idx >= end_idx || start_idx < 0 || end_idx >= static_cast<int>(route.route_elements.size())) {
     RCLCPP_WARN(this->get_logger(), "Invalid lane change indices: %d, %d", start_idx, end_idx);
     return lane_change_path;
   }
