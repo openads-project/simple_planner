@@ -248,7 +248,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
     SimplePathPoint simple_path_point;
     simple_path_point.position = Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
-    simple_path_point.yaw = getYawFromQuaternion(suggested_lane.reference_pose.orientation);
     simple_path_point.s = route_element.s;
 
     // get starting lane change index
@@ -379,12 +378,9 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
     const auto& adjacent_lane = route_planning_msgs::route_access::getAdjacentLane(route_element, route.route_elements[i].suggested_lane_idx, lane_change_direction);
     Eigen::Vector2d suggested_lane_pos(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     Eigen::Vector2d adjacent_lane_pos(adjacent_lane.reference_pose.position.x, adjacent_lane.reference_pose.position.y);
-    double suggested_lane_yaw = getYawFromQuaternion(suggested_lane.reference_pose.orientation);
-    double adjacent_lane_yaw = getYawFromQuaternion(adjacent_lane.reference_pose.orientation);
     double alpha = 0.5 * (1.0 + std::cos(M_PI * static_cast<double>(i - start_idx) / (end_idx - start_idx)));
     Eigen::Vector2d interpolated_pos = alpha * suggested_lane_pos + (1.0 - alpha) * adjacent_lane_pos;
-    double interpolated_yaw = alpha * suggested_lane_yaw + (1.0 - alpha) * adjacent_lane_yaw;
-    lane_change_path.push_back(SimplePathPoint(interpolated_pos, interpolated_yaw));
+    lane_change_path.push_back(SimplePathPoint(interpolated_pos));
   }
 
   return lane_change_path;
@@ -505,14 +501,6 @@ void SimplePlannerNode::publishTimerCallback() {
   } catch (const std::runtime_error& e) {
     RCLCPP_ERROR(this->get_logger(), "Error while creating trajectory, do not publish trajectory: %s", e.what());
   }
-}
-
-double SimplePlannerNode::getYawFromQuaternion(const geometry_msgs::msg::Quaternion& msg) {
-  tf2::Quaternion q;
-  tf2::fromMsg(msg, q);
-  double roll, pitch, yaw;
-  tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
-  return yaw;
 }
 
 }  // namespace simple_planner

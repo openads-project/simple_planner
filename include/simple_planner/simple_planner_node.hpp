@@ -28,13 +28,12 @@ template <typename C> inline constexpr bool is_vector_v = is_vector<C>::value;
 
 struct SimplePathPoint {
   Eigen::Vector2d position;
-  double yaw;
   double s;
   double v;
 
   // custom constructor
-  SimplePathPoint(const Eigen::Vector2d& pos, double yaw, double s = -1.0, double v = -1.0)
-  : position(pos), yaw(yaw), s(s), v(v) {}
+  SimplePathPoint(const Eigen::Vector2d& pos, double s = -1.0, double v = -1.0)
+  : position(pos), s(s), v(v) {}
 
   // default constructor
   SimplePathPoint() = default;
@@ -73,7 +72,6 @@ class SimplePlannerNode : public rclcpp::Node {
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
-  double getYawFromQuaternion(const geometry_msgs::msg::Quaternion& msg);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
