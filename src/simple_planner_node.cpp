@@ -35,11 +35,12 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
-  this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_,
-      "true: planner will consider traffic lights; false: planner will ignore traffic lights");
+  this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
                                 "front of vehicle at stop line)");
+  this->declareAndLoadParameter("consider_future_states", consider_future_states_,
+                                "true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
@@ -231,6 +232,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   // convert route to simple path
   bool stop_at_end = false;
+  double t_total = 0.0;
   double offset_to_stop_line = 0.0;
   std::vector<SimplePathPoint> path;
   std::map<uint64_t, uint64_t> lane_change_indices_map; // maps lane change idx (j) to start lane change idx (i_start)
@@ -246,7 +248,20 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     SimplePathPoint simple_path_point;
     simple_path_point.position = Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     simple_path_point.s = route_element.s;
-    simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
+    simple_path_point.v = v_ref_; // default: use constant velocity from params
+    if (v_ref_ < 0.0) { // use velocity from route if param v_ref_ is negative
+      simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
+    }
+
+    if (path.size() > 0) {
+      // calculate time difference to previous point
+      double v_average = (path.back().v + simple_path_point.v) / 2.0; // average velocity between last point and current point
+      double dt = (simple_path_point.s - path.back().s) / v_average; // time difference to previous point
+      if (dt < 0.0) {
+        RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. TODO?", dt, path.back().s, simple_path_point.s);
+      }
+      t_total += dt;
+    }
 
     // get starting lane change index
     if (route_element.will_change_suggested_lane) {
@@ -294,16 +309,37 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
       for (size_t k = 0; k < reg_elems.size(); ++k) {
         if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
-        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) continue;
+        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED && !consider_future_states_) continue;
         offset_to_stop_line = offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
-        stop_at_end = true;
+        double dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v; // time to stop in front of traffic light
+
+        if (reg_elems[k].has_validity_stamp && consider_future_states_) {
+          double validity_duration = rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
+          if (validity_duration < (t_total - dt_offset_to_stop_line)) {
+            if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
+              stop_at_end = true; // change from green to red until stop point is reached
+            } else {
+              continue;           // change from red to green until stop point is reached
+            }
+          } else {
+            if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
+              continue;           // green light, no stop required
+            } else {
+              stop_at_end = true; // red light, stop required
+            }
+          }
+        } else {
+          stop_at_end = true; // no validity stamp or no future states considered, stop required
+        }
       }
     }
 
-    // add simple path point to path and break the loop if we want to stop at the end (traffic light or end of route)
+    // add simple path point to path
     path.push_back(simple_path_point);
+
+    // break loop if stop at end (traffic light or end of route) or if total time exceeds 2x trajectory horizon
     if (j == tf_route.destination_route_element_idx - 1) stop_at_end = true;
-    if (stop_at_end) break;
+    if (stop_at_end || t_total >= 2.0 * trajectory_horizon_) break;
   }
 
   // generate lane change segments and insert them into path

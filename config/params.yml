@@ -18,6 +18,7 @@
     #### traffic light parameters
     consider_traffic_lights: True   # true: planner will consider traffic lights; false: planner will ignore traffic lights
     offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)
+    consider_future_states: False   # true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state
 
     #### lane change parameters
     lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)
