@@ -246,6 +246,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     SimplePathPoint simple_path_point;
     simple_path_point.position = Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     simple_path_point.s = route_element.s;
+    simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
 
     // get starting lane change index
     if (route_element.will_change_suggested_lane) {
@@ -287,7 +288,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
       lane_change_indices_map[j] = i_start;
     }
-    simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
+
+    // check for traffic light along the route element
     if (consider_traffic_lights_) {
       const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
       for (size_t k = 0; k < reg_elems.size(); ++k) {
@@ -297,6 +299,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
         stop_at_end = true;
       }
     }
+
+    // add simple path point to path and break the loop if we want to stop at the end (traffic light or end of route)
     path.push_back(simple_path_point);
     if (j == tf_route.destination_route_element_idx - 1) stop_at_end = true;
     if (stop_at_end) break;
