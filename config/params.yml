@@ -8,11 +8,11 @@
     route_timeout: 1.0              # time after which a received route is considered invalid (s) (use -1 for no timeout)
 
     #### trajectory generation parameters
-    trajectory_horizon: 6.0         # covered time horizon of the published trajectory (s)
-    n_states: 61                    # number of states in published trajectory
+    trajectory_horizon: 10.0         # covered time horizon of the published trajectory (s)
+    n_states: 51                    # number of states in published trajectory
     internal_route_update: False    # true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).
     interpolation_type: 1           # 0: linear, 1: cubic spline
-    v_ref: 3.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
+    v_ref: 5.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
     a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 
     #### traffic light parameters
@@ -20,6 +20,5 @@
     offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)
 
     #### lane change parameters
-    lane_change_restriction: True        # true: lane change is only allowed if all traffic rules are fulfilled; false: lane change is allowed even if there is no valid adjacent lane
     lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)
     lane_change_min_distance_factor: 2.0 # factor multiplied with the vehicle length to determine the minimum lane change distance (m)

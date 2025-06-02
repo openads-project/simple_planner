@@ -35,14 +35,11 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
-  this->declareAndLoadParameter(
-      "consider_traffic_lights", consider_traffic_lights_,
+  this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_,
       "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
                                 "front of vehicle at stop line)");
-  this->declareAndLoadParameter("lane_change_restriction", lane_change_restriction_,
-                                "true: lane change is only allowed if all traffic rules are fulfilled; false: lane change is allowed even if there is no valid adjacent lane");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
@@ -275,7 +272,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
           RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_start);
           break;
         }
-        if (lane_change_restriction_ && !route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
+        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
           RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_start-1);
           break;
         }
