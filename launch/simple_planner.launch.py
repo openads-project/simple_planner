@@ -1,48 +1,47 @@
+#!/usr/bin/env python3
+
+import os
+
 from ament_index_python import get_package_share_directory
 from launch import LaunchDescription
-
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 
 
 def generate_launch_description():
 
-    params_arg = DeclareLaunchArgument('params', default_value=PathJoinSubstitution([
-        get_package_share_directory("simple_planner"), "config", "params.yml"])
-    )
+    remappable_topics = [
+        DeclareLaunchArgument("ego_data_topic", default_value="~/ego_data"),
+        DeclareLaunchArgument("route_topic", default_value="~/route"),
+        DeclareLaunchArgument("trajectory_topic", default_value="~/trajectory"),
+    ]
 
-    node_name_arg = DeclareLaunchArgument('node_name', default_value='simple_planner')
-    namespace_arg = DeclareLaunchArgument('namespace', default_value='')
+    args = [
+        DeclareLaunchArgument("node_name", default_value="simple_planner", description="node name"),
+        DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
+        DeclareLaunchArgument("params", default_value=os.path.join(get_package_share_directory("simple_planner"), "config", "params.yml"), description="path to parameter file"),
+        DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
+        DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),
+        *remappable_topics,
+    ]
 
-    ego_data_topic_arg = DeclareLaunchArgument('ego_data_topic', default_value='~/ego_data')
-    route_topic_arg = DeclareLaunchArgument('route_topic', default_value='~/route')
-    trajectory_topic_arg = DeclareLaunchArgument('trajectory_topic', default_value='~/trajectory')
-  
-    use_sim_time_arg = DeclareLaunchArgument('use_sim_time', default_value='False')
-
-    node = Node(
-        name=LaunchConfiguration('node_name'),
-        namespace=LaunchConfiguration('namespace'),
-        package='simple_planner',
-        executable='simple_planner_node',
-        parameters=[LaunchConfiguration('params')],
-        remappings=[('~/ego_data', LaunchConfiguration('ego_data_topic')),
-                    ('~/route', LaunchConfiguration('route_topic')),
-                    ('~/trajectory', LaunchConfiguration('trajectory_topic'))
-        ],
-        output='screen',
-        emulate_tty=True)
+    nodes = [
+        Node(
+            package="simple_planner",
+            executable="simple_planner_node",
+            namespace=LaunchConfiguration("namespace"),
+            name=LaunchConfiguration("node_name"),
+            parameters=[LaunchConfiguration("params")],
+            arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
+            remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
+            output="screen",
+            emulate_tty=True,
+        )
+    ]
 
     return LaunchDescription([
-        params_arg,
-        node_name_arg,
-        namespace_arg,
-        ego_data_topic_arg,
-        route_topic_arg,
-        trajectory_topic_arg,
-        use_sim_time_arg,
-        SetParameter(name='use_sim_time', value=LaunchConfiguration('use_sim_time')),
-        node
+        *args,
+        SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
+        *nodes,
     ])
