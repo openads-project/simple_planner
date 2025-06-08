@@ -38,14 +38,18 @@
 | `trajectory_frame_id` | `string` | Frame ID of published reference trajectory |
 | `fixed_over_time_frame_id` | `string` | Frame ID of frame that is fixed over time for finding temporal transforms |
 | `frequency` | `double` | frequency for publishing output trajectory |
+| `route_timeout` | `double` | time after which a received route is considered invalid (s) (use `-1.0` for no timeout) |
 | `trajectory_horizon` | `double` | covered time horizon of the published trajectory (s) |
 | `n_states` | `int` | defines the number of states in the published trajectory |
 | `internal_route_update` | `bool` | true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally). |
 | `interpolation_type` | `int` | defines the interpolation type of the received route, which is important for sampling it time equidistantly (0: linear, 1: spline) |
-| `v_ref` | `double` | defines the constant velocity of the published trajectory |
+| `v_ref` | `double` | reference velocity (m/s). If set to a positive value, the trajectory will be generated with this constant velocity. If set to `-1.0`, the velocity from the route will be used, which is defined in the route message. |
 | `a_max_decel` | `double` | defines the maximum deceleration for the braking maneuver before the end of the route (has to be `<= 0.0`; if `= 0.0`, no braking) |
-| `consider_traffic_lights` | `bool` | consider traffic lights for trajectory planning (stop at red traffic lights or not) |
+| `consider_traffic_lights` | `bool` | true: planner will consider traffic lights; false: planner will ignore traffic lights |
 | `offset_to_stop_line` | `double` | additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
+| `consider_future_states` | `bool` | true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
+| `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
+| `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
 
 ## Usage of docker-ros Images
 

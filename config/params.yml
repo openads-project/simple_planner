@@ -8,7 +8,7 @@
     route_timeout: 1.0              # time after which a received route is considered invalid (s) (use -1 for no timeout)
 
     #### trajectory generation parameters
-    trajectory_horizon: 10.0         # covered time horizon of the published trajectory (s)
+    trajectory_horizon: 10.0        # covered time horizon of the published trajectory (s)
     n_states: 51                    # number of states in published trajectory
     internal_route_update: False    # true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).
     interpolation_type: 1           # 0: linear, 1: cubic spline
