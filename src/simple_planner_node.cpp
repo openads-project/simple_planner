@@ -204,6 +204,16 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
   if (!route_init_) route_init_ = true;
 }
 
+/**
+ * @brief Main function of this node. Creates a reference trajectory based on the current route, vehicle state, and planning parameters.
+ *
+ * This function generates a trajectory message by processing the current route, transforming it to the appropriate frame,
+ * handling special cases (such as route timeouts or empty routes), and considering traffic lights and lane changes.
+ * The resulting trajectory is resampled over time and trimmed to fit the configured number of states.
+ *
+ * @throws std::runtime_error if the route is too old.
+ * @return trajectory_planning_msgs::msg::Trajectory The generated trajectory message.
+ */
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
 
@@ -264,7 +274,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       double v_average = (path.back().v + simple_path_point.v) / 2.0; // average velocity between last point and current point
       double dt = (simple_path_point.s - path.back().s) / v_average; // time difference to previous point
       if (dt < 0.0) {
-        RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. TODO?", dt, path.back().s, simple_path_point.s);
+        RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, path.back().s, simple_path_point.s);
       }
       t_total += dt;
     }
@@ -276,8 +286,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
         break;
       }
       int i_end = j + 1; // lane change should end at the next route element
-
-      // size_t i_start = route_planning_msgs::route_access::getRouteElementIdxClosestToS(tf_route, route_element.s - 20.0);
 
       size_t current_lane_idx = route_element.suggested_lane_idx;
       int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
@@ -304,7 +312,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
       if (!tf_route.route_elements[i_start].is_enriched || !tf_route.route_elements[i_end].is_enriched) {
         RCLCPP_WARN(this->get_logger(), "Not enough enriched route elements (%u, %u) for lane change.", i_start, i_end);
-        break; // TODO: does this make sense?
+        break;
       }
 
       lane_change_indices_map[j] = i_start;
@@ -500,7 +508,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     if (path.size() == 1) {
       simple_path_point.position = path[0].position;
     }
-    else if (interpolation_type_ == InterpolationType::SPLINE && path.size() > 2){ // spline interpolation
+    else if (interpolation_type_ == InterpolationType::SPLINE && path.size() > 2) { // spline interpolation
       simple_path_point.position.x() = x_spline(s);
       simple_path_point.position.y() = y_spline(s);
     }
