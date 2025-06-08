@@ -50,25 +50,52 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
 
+  /**
+   * @brief Declares and loads a ROS parameter
+   *
+   * @param name name
+   * @param param parameter variable to load into
+   * @param description description
+   * @param add_to_auto_reconfigurable_params enable reconfiguration of parameter
+   * @param is_required whether failure to load parameter will stop node
+   * @param read_only set parameter to read-only
+   * @param from_value parameter range minimum
+   * @param to_value parameter range maximum
+   * @param step_value parameter range step
+   * @param additional_constraints additional constraints description
+   */
   template <typename T>
-  void declareAndLoadParameter(const std::string &name, T &member_param, const std::string &description,
-                               const bool add_to_auto_reconfigurable_params = true, const bool is_required = false,
-                               const bool read_only = false, const std::optional<T> &from_value = std::nullopt,
-                               const std::optional<T> &to_value = std::nullopt,
-                               const std::optional<T> &step_value = std::nullopt,
+  void declareAndLoadParameter(const std::string &name,
+                               T &param,
+                               const std::string &description,
+                               const bool add_to_auto_reconfigurable_params = true,
+                               const bool is_required = false,
+                               const bool read_only = false,
+                               const std::optional<double> &from_value = std::nullopt,
+                               const std::optional<double> &to_value = std::nullopt,
+                               const std::optional<double> &step_value = std::nullopt,
                                const std::string &additional_constraints = "");
-  rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters);
 
+  /**
+   * @brief Handles reconfiguration when a parameter value is changed
+   *
+   * @param parameters parameters
+   * @return parameter change result
+   */
+  rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter>& parameters);
+
+  /**
+   * @brief Sets up subscribers, publishers, etc. to configure the node
+   */
   void setup();
 
   void egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg);
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
-  trajectory_planning_msgs::msg::Trajectory createTrajectory();
-  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0);
-
   void publishTimerCallback();
 
+  trajectory_planning_msgs::msg::Trajectory createTrajectory();
+  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0);
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
@@ -83,9 +110,17 @@ class SimplePlannerNode : public rclcpp::Node {
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
-  // Parameters
+  /**
+   * @brief Auto-reconfigurable parameters for dynamic reconfiguration
+   */
   std::vector<std::tuple<std::string, std::function<void(const rclcpp::Parameter &)>>> auto_reconfigurable_params_;
+
+  /**
+   * @brief Callback handle for dynamic parameter reconfiguration
+   */
   OnSetParametersCallbackHandle::SharedPtr parameters_callback_;
+
+  // Parameters
   std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
@@ -104,12 +139,9 @@ class SimplePlannerNode : public rclcpp::Node {
 
   perception_msgs::msg::EgoData ego_data_;
   route_planning_msgs::msg::Route route_;
-  std::vector<double> v_profile_;
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
-  double s_start_brake_ = std::numeric_limits<double>::infinity();
-  double distance_to_stop_;
   double dt_;
 };
 
