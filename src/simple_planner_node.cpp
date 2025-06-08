@@ -431,7 +431,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
     Eigen::Vector2d adjacent_lane_pos(adjacent_lane.reference_pose.position.x, adjacent_lane.reference_pose.position.y);
     double alpha = 0.5 * (1.0 + std::cos(M_PI * static_cast<double>(i - start_idx) / (end_idx - start_idx)));
     Eigen::Vector2d interpolated_pos = alpha * suggested_lane_pos + (1.0 - alpha) * adjacent_lane_pos;
-    lane_change_path.push_back(SimplePathPoint(interpolated_pos));
+    lane_change_path.push_back(SimplePathPoint(interpolated_pos, route_element.s, suggested_lane.speed_limit / 3.6)); // convert km/h to m/s
   }
 
   return lane_change_path;
@@ -459,12 +459,11 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
 
   tk::spline x_spline, y_spline;
   if (interpolation_type_ == InterpolationType::SPLINE && path.size() > 2) {
-    std::vector<double> s_vector, x_vector, y_vector, v_vector;
+    std::vector<double> s_vector, x_vector, y_vector;
     for (size_t j = 0; j < path.size(); ++j) {
       s_vector.push_back(path[j].s);
       x_vector.push_back(path[j].position.x());
       y_vector.push_back(path[j].position.y());
-      v_vector.push_back(path[j].v);
     }
     x_spline.set_points(s_vector, x_vector);
     y_spline.set_points(s_vector, y_vector);
