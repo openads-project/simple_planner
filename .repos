@@ -6,4 +6,4 @@ repositories:
   planning_interfaces:
     type: git
     url: https://github.com/ika-rwth-aachen/planning_interfaces.git
-    version: refactor-route-msgs # TODO: revert
+    version: main
