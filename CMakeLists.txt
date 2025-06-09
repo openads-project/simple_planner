@@ -10,6 +10,7 @@ find_package(perception_msgs REQUIRED)
 find_package(perception_msgs_utils REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(route_planning_msgs REQUIRED)
+find_package(route_planning_msgs_utils REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_route_planning_msgs REQUIRED)
@@ -32,6 +33,7 @@ ament_target_dependencies(${TARGET_NAME}
   perception_msgs_utils  
   rclcpp
   route_planning_msgs
+  route_planning_msgs_utils
   std_msgs
   tf2_route_planning_msgs
   trajectory_planning_msgs
