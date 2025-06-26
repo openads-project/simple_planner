@@ -352,7 +352,15 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     path.push_back(simple_path_point);
 
     // break loop if stop at end (traffic light or end of route) or if total time exceeds 2x trajectory horizon
-    if (j == tf_route.destination_route_element_idx - 1) stop_at_end = true;
+    if (j == tf_route.destination_route_element_idx - 1) {
+      // add destination point as last point of path
+      SimplePathPoint destination_point;
+      destination_point.position = Eigen::Vector2d(tf_route.destination.x, tf_route.destination.y);
+      destination_point.s = simple_path_point.s + (destination_point.position - simple_path_point.position).norm(); // calculate s value for destination point (linear)
+      destination_point.v = simple_path_point.v; // use same velocity as last point
+      path.push_back(destination_point);
+      stop_at_end = true;
+    }
     if (stop_at_end || t_total >= 2.0 * trajectory_horizon_) break;
   }
 
