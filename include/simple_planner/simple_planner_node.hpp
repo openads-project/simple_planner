@@ -39,6 +39,11 @@ struct SimplePathPoint {
   SimplePathPoint() = default;
 };
 
+struct SimplePath {
+  std_msgs::msg::Header header;
+  std::vector<SimplePathPoint> points;
+};
+
 class SimplePlannerNode : public rclcpp::Node {
  public:
   SimplePlannerNode();
@@ -95,10 +100,11 @@ class SimplePlannerNode : public rclcpp::Node {
   void publishTimerCallback();
 
   trajectory_planning_msgs::msg::Trajectory createTrajectory();
-  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0);
+  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, double v_init, bool stop_at_end, double offset_to_stop_line = 0.0);
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
+  SimplePath convertRouteToSimplePath(const route_planning_msgs::msg::Route& tf_route);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
@@ -142,6 +148,8 @@ class SimplePlannerNode : public rclcpp::Node {
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
+  double safe_stop_distance_ = -1.0;
+  SimplePath latest_path_;
   double dt_;
 };
 

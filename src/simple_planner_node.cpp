@@ -201,7 +201,10 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
   RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
-  if (!route_init_) route_init_ = true;
+  if (!route_init_) {
+    route_init_ = true;
+    safe_stop_distance_ = -1.0;
+  }
 }
 
 /**
@@ -225,8 +228,34 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
   // handle special cases
   if ((route_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp)) > rclcpp::Duration::from_seconds(route_timeout_)) {
-    route_init_ = false;
-    throw std::runtime_error("Route is older than " + std::to_string(route_timeout_) + ".");
+    // check for timout of ego data
+    if ((rclcpp::Time(tra.header.stamp) - rclcpp::Time(ego_data_.header.stamp)) > rclcpp::Duration::from_seconds(route_timeout_)) {
+      route_init_ = false;
+      ego_data_init_ = false;
+      throw std::runtime_error("Route and EgoData are older than " + std::to_string(route_timeout_) + ".");
+    }
+
+    // check if ego vehicle is moving and initate safe stop if necessary
+    double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+    if (current_velocity < 0.2) {
+      trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
+      route_init_ = false;
+      RCLCPP_WARN(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
+      return tra; // return standstill trajectory
+    } else if (safe_stop_distance_ < 0.0) {
+      // init safe stop and calculate safe stop distance based on current velocity and maximum deceleration
+      safe_stop_distance_ = - 0.5 * std::pow(current_velocity, 2) / a_max_decel_;
+      double start_s = latest_path_.points.empty() ? 0.0 : latest_path_.points[0].s; // start s value of latest path
+      for (int i = 0; i < latest_path_.points.size(); i++) {
+        if (latest_path_.points[i].s > start_s + safe_stop_distance_) {
+          // remove all points after the point where the safe stop distance is reached
+          latest_path_.points.erase(latest_path_.points.begin() + i, latest_path_.points.end());
+        }
+      }
+      RCLCPP_WARN(this->get_logger(), "Initialize safe stop. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
+    } else {
+      RCLCPP_INFO(this->get_logger(), "TODO: what to do in this case?"); // TODO: what to do in this case?
+    }
   } else if (route_.route_elements.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
@@ -234,23 +263,91 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     return tra;
   }
 
-  // time-transform route to current trajectory_frame_id_ frame
-  geometry_msgs::msg::TransformStamped tf;
-  try {
-    tf =
-        tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id, route_.header.stamp,
-                                     fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
-  } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
-  }
-  route_planning_msgs::msg::Route tf_route;
-  tf2::doTransform(route_, tf_route, tf);
+  SimplePath path;
+  if (safe_stop_distance_ < 0.0) { // default case: follow route
+    // time-transform route to current trajectory_frame_id_ frame
+    geometry_msgs::msg::TransformStamped tf;
+    try {
+      tf =
+          tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id, route_.header.stamp,
+                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    } catch (tf2::TransformException& ex) {
+      RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
+    }
+    route_planning_msgs::msg::Route tf_route;
+    tf2::doTransform(route_, tf_route, tf);
 
-  // convert route to simple path
+    // generate SimplePath from route
+    path = convertRouteToSimplePath(tf_route);
+  } else { // special case: safe stop
+    geometry_msgs::msg::TransformStamped tf;
+    try {
+      tf =
+          tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, latest_path_.header.frame_id, latest_path_.header.stamp,
+                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    } catch (tf2::TransformException& ex) {
+      RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
+    }
+    SimplePath tf_path;
+    for (const auto& point : latest_path_.points) {
+      SimplePathPoint tf_point = point;
+      geometry_msgs::msg::PointStamped point_msg;
+      point_msg.header = latest_path_.header;
+      point_msg.point.x = point.position.x();
+      point_msg.point.y = point.position.y();
+      point_msg.point.z = 0.0;
+      geometry_msgs::msg::PointStamped tf_point_msg;
+      tf2::doTransform(point_msg, tf_point_msg, tf);
+      tf_path.header = tf_point_msg.header;
+      tf_point.position = Eigen::Vector2d(tf_point_msg.point.x, tf_point_msg.point.y);
+      tf_path.points.push_back(tf_point);
+    }
+
+    path.header = tf_path.header;
+    path.points = resamplePath(tf_path.points, v_ref_, true, 0.0);
+  }
+
+  // remove first point of path as long as it is behind the ego vehicle
+  while (!path.points.empty() && path.points[0].position.x() < 0.0) {
+    path.points.erase(path.points.begin());
+  }
+
+  latest_path_ = path;
+  std::vector<SimplePathPoint> path_points = latest_path_.points;
+
+  // keep maximum the first n_states_ in path (and therefore in trajectory) // TODO: still necessary after cutting time horizon?
+  if ((size_t) n_states_ < path_points.size()) {
+    path_points.erase(path_points.begin() + n_states_, path_points.end());
+  }
+
+  // init trajectory and fill with path (route) and velocity (const from param) data
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
+  if (!path_points.empty()) { // only fill trajectory if path is not empty
+    for (int i = 0; i < n_states_; i++) {
+      int idx = (size_t)i < path_points.size() ? i : path_points.size() - 1; // multiple points at end of path if n_states_ > path_points.size()
+      trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
+      trajectory_planning_msgs::trajectory_access::setX(tra, path_points[idx].position.x(), i);
+      trajectory_planning_msgs::trajectory_access::setY(tra, path_points[idx].position.y(), i);
+      trajectory_planning_msgs::trajectory_access::setV(tra, path_points[idx].v, i);
+      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
+                  dt_ * i, path_points[i].position.x(), path_points[i].position.y(), path_points[i].v, path_points[i].s);
+    }
+  }
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, path_points.empty());
+
+  RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
+
+  rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+  RCLCPP_DEBUG(this->get_logger(), "Trajectory creation took %f ms", (end - begin).seconds() * 1e3);
+  return tra;
+}
+
+SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs::msg::Route& tf_route) {
   bool stop_at_end = false;
   double t_total = 0.0;
   double offset_to_stop_line = 0.0;
-  std::vector<SimplePathPoint> path;
+  SimplePath path;
+  path.header = tf_route.header;
   std::map<uint64_t, uint64_t> lane_change_indices_map; // maps lane change idx (j) to start lane change idx (i_start)
   RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
   for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
@@ -269,12 +366,12 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
     }
 
-    if (path.size() > 0) {
+    if (path.points.size() > 0) {
       // calculate time difference to previous point
-      double v_average = (path.back().v + simple_path_point.v) / 2.0; // average velocity between last point and current point
-      double dt = (simple_path_point.s - path.back().s) / v_average; // time difference to previous point
+      double v_average = (path.points.back().v + simple_path_point.v) / 2.0; // average velocity between last point and current point
+      double dt = (simple_path_point.s - path.points.back().s) / v_average; // time difference to previous point
       if (dt < 0.0) {
-        RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, path.back().s, simple_path_point.s);
+        RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, path.points.back().s, simple_path_point.s);
       }
       t_total += dt;
     }
@@ -349,7 +446,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
     }
 
     // add simple path point to path
-    path.push_back(simple_path_point);
+    path.points.push_back(simple_path_point);
 
     // break loop if stop at end (traffic light or end of route) or if total time exceeds 2x trajectory horizon
     if (j == tf_route.destination_route_element_idx - 1) {
@@ -358,62 +455,33 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       destination_point.position = Eigen::Vector2d(tf_route.destination.x, tf_route.destination.y);
       destination_point.s = simple_path_point.s + (destination_point.position - simple_path_point.position).norm(); // calculate s value for destination point (linear)
       destination_point.v = simple_path_point.v; // use same velocity as last point
-      path.push_back(destination_point);
+      path.points.push_back(destination_point);
       stop_at_end = true;
     }
     if (stop_at_end || t_total >= 2.0 * trajectory_horizon_) break;
   }
 
-  // generate lane change segments and insert them into path
+  // generate lane change segments and insert them into path points
   size_t current = 0;
-  std::vector<SimplePathPoint> merged_path;
+  std::vector<SimplePathPoint> merged_points;
   for (const auto& lane_change_indices : lane_change_indices_map) {
     uint64_t lane_change_idx_route = lane_change_indices.first;
     uint64_t start_idx_route = lane_change_indices.second;
     int start_idx = std::max(static_cast<int>(start_idx_route - tf_route.current_route_element_idx), 0);
     int end_idx = (lane_change_idx_route + 1) - tf_route.current_route_element_idx; // lane change should end at the next route element
-    merged_path.insert(merged_path.end(), path.begin() + current, path.begin() + start_idx);
-    std::vector<SimplePathPoint> lane_change_path = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
-    merged_path.insert(merged_path.end(), lane_change_path.begin(), lane_change_path.end());
+    merged_points.insert(merged_points.end(), path.points.begin() + current, path.points.begin() + start_idx);
+    std::vector<SimplePathPoint> lane_change_points = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
+    merged_points.insert(merged_points.end(), lane_change_points.begin(), lane_change_points.end());
     current = end_idx+1;
   }
-  merged_path.insert(merged_path.end(), path.begin() + current, path.end()); // add remaining tail
-  recalculateS(merged_path); // recalculate s values for merged path
-  path = std::move(merged_path); // replace path with merged_path
+  merged_points.insert(merged_points.end(), path.points.begin() + current, path.points.end()); // add remaining tail
+  recalculateS(merged_points); // recalculate s values for merged points
 
-  // resample path over time
-  std::vector<SimplePathPoint> resampled_path = resamplePath(path, stop_at_end, offset_to_stop_line);
+  // resample points over time
+  std::vector<SimplePathPoint> resampled_path = resamplePath(merged_points, v_ref_, stop_at_end, offset_to_stop_line);
 
-  // remove first point of path as long as it is behind the ego vehicle
-  while (!resampled_path.empty() && resampled_path[0].position.x() < 0.0) {
-    resampled_path.erase(resampled_path.begin());
-  }
-
-  // keep maximum the first n_states_ in resampled_path (and therefore in trajectory)
-  if ((size_t) n_states_ < resampled_path.size()) {
-    resampled_path.erase(resampled_path.begin() + n_states_, resampled_path.end());
-  }
-
-  // init trajectory and fill with resampled_path (route) and velocity (const from param) data
-  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
-  if (!resampled_path.empty()) { // only fill trajectory if resampled_path is not empty
-    for (int i = 0; i < n_states_; i++) {
-      int idx = (size_t)i < resampled_path.size() ? i : resampled_path.size() - 1; // multiple points at end of resampled_path if n_states_ > resampled_path.size()
-      trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
-      trajectory_planning_msgs::trajectory_access::setX(tra, resampled_path[idx].position.x(), i);
-      trajectory_planning_msgs::trajectory_access::setY(tra, resampled_path[idx].position.y(), i);
-      trajectory_planning_msgs::trajectory_access::setV(tra, resampled_path[idx].v, i);
-      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
-                  dt_ * i, resampled_path[i].position.x(), resampled_path[i].position.y(), resampled_path[i].v, resampled_path[i].s);
-    }
-  }
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, resampled_path.empty());
-
-  RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
-
-  rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
-  RCLCPP_DEBUG(this->get_logger(), "Trajectory creation took %f ms", (end - begin).seconds() * 1e3);
-  return tra;
+  path.points = std::move(resampled_path);
+  return path;
 }
 
 std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int start_idx, const int turn_idx,
@@ -455,7 +523,7 @@ void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
   }
 }
 
-std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line) {
+std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, double v_init, bool stop_at_end, double offset_to_stop_line) {
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   if (path.empty()) {
     RCLCPP_WARN(this->get_logger(), "Route is empty. No resampling possible.");
@@ -487,9 +555,9 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       }
     }
 
-    double v = v_ref_; // case 1: constant velocity from params
-    if (v_ref_ < 0.0 && idx >= 0) {
-      v = path[idx].v + (path[idx+1].v - path[idx].v) / (path[idx+1].s - path[idx].s) * (s - path[idx].s); // case 1: override v_ref from route
+    double v = v_init; // option 1: use predefined constant velocity
+    if (v_init < 0.0 && idx >= 0) { // option 2: use velocity from route if predefined velocity is negative
+      v = path[idx].v + (path[idx+1].v - path[idx].v) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
     }
 
     double distance_to_stop = -0.5 * std::pow(v, 2) / a_max_decel_ + offset_to_stop_line;
