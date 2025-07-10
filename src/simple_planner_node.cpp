@@ -250,14 +250,17 @@ SimplePath SimplePlannerNode::calculateSafeStopAlongRoute(const SimplePath& path
 }
 
 SimplePath SimplePlannerNode::calculateSafeStopAlongEgoHeading(const perception_msgs::msg::EgoData& ego_data, const double safe_stop_distance, const std_msgs::msg::Header& target_header) {
-  // TODO: check
   SimplePath safe_stop_path;
-  safe_stop_path.header = target_header;
+  safe_stop_path.header = ego_data.header;
 
+  // TODO: implement when required
   // better: safe_stop_path.header = ego_data.header; // use ego_data header as target header -> transform to target frame later
+  RCLCPP_ERROR(this->get_logger(), "Safe stop along ego heading is not yet fully supported.");
 
   // use three points (vehicle frame)
   double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data);
+  geometry_msgs::msg::Pose pose = perception_msgs::object_access::getPose(ego_data);
+
   SimplePathPoint start_point(Eigen::Vector2d(0.0, 0.0), 0.0, v_ego);
   safe_stop_path.points.push_back(start_point);
   SimplePathPoint mid_point(Eigen::Vector2d(safe_stop_distance / 2.0, 0.0), safe_stop_distance / 2.0, v_ego);
