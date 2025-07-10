@@ -6,12 +6,14 @@
     fixed_over_time_frame_id: map   # Frame ID of frame that is fixed over time for finding temporal transforms
     frequency: 10.0
     route_timeout: 1.0              # time after which a received route is considered invalid (s) (use -1 for no timeout)
+    ego_data_timeout: 1.0           # time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout)
 
     #### trajectory generation parameters
     trajectory_horizon: 10.0        # covered time horizon of the published trajectory (s)
     n_states: 51                    # number of states in published trajectory
     internal_route_update: False    # true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).
     interpolation_type: 1           # 0: linear, 1: cubic spline
+    standstill_threshold: 0.2       # if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)
     v_ref: 5.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
     a_max_decel: -0.5               # maximum deceleration for braking at stop lines or end of route (m/s^2)
 

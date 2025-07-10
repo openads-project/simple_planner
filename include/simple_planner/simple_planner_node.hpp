@@ -39,6 +39,11 @@ struct SimplePathPoint {
   SimplePathPoint() = default;
 };
 
+struct SimplePath {
+  std_msgs::msg::Header header;
+  std::vector<SimplePathPoint> points;
+};
+
 class SimplePlannerNode : public rclcpp::Node {
  public:
   SimplePlannerNode();
@@ -99,6 +104,10 @@ class SimplePlannerNode : public rclcpp::Node {
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
+  SimplePath calculateSafeStopAlongEgoHeading(const perception_msgs::msg::EgoData& ego_data, const double safe_stop_distance, const std_msgs::msg::Header& target_header);
+  SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
+  SimplePath convertRouteToSimplePath(const route_planning_msgs::msg::Route& tf_route);
+  SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
@@ -125,10 +134,12 @@ class SimplePlannerNode : public rclcpp::Node {
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
   double route_timeout_ = 1.0;
+  double ego_data_timeout_ = 1.0;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
   bool internal_route_update_ = false;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
+  double standstill_threshold_ = 0.2;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
   bool consider_traffic_lights_ = false;
@@ -142,6 +153,8 @@ class SimplePlannerNode : public rclcpp::Node {
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
+  double safe_stop_distance_ = -1.0;
+  SimplePath latest_path_;
   double dt_;
 };
 
