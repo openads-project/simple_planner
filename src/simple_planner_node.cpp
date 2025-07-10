@@ -28,12 +28,14 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
   this->declareAndLoadParameter("route_timeout", route_timeout_, "Time after which a received route is considered invalid (s) (use -1 for no timeout)");
+  this->declareAndLoadParameter("ego_data_timeout", ego_data_timeout_, "Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
   this->declareAndLoadParameter("internal_route_update", internal_route_update_,
                                 "true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
+  this->declareAndLoadParameter("standstill_threshold", standstill_threshold_, "if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)");
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
@@ -106,8 +108,9 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
-  RCLCPP_INFO(this->get_logger(), "Received route message, initialized global variable");
+
   if (!route_init_) {
+    RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
     route_init_ = true;
     safe_stop_distance_ = -1.0;
   }
@@ -120,7 +123,7 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
  * handling special cases (such as route timeouts or empty routes), and considering traffic lights and lane changes.
  * The resulting trajectory is resampled over time and trimmed to fit the configured number of states.
  *
- * @throws std::runtime_error if the route is too old.
+ * @throws std::runtime_error if the ego_data is too old.
  * @return trajectory_planning_msgs::msg::Trajectory The generated trajectory message.
  */
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
@@ -133,9 +136,9 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.frame_id = trajectory_frame_id_;
 
   // check if ego data is outdated
-  if ((route_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(ego_data_.header.stamp)) > rclcpp::Duration::from_seconds(route_timeout_)) {
+  if ((ego_data_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(ego_data_.header.stamp)) > rclcpp::Duration::from_seconds(ego_data_timeout_)) {
     ego_data_init_ = false;
-    throw std::runtime_error("EgoData is older than " + std::to_string(route_timeout_) + ".");
+    throw std::runtime_error("EgoData is older than " + std::to_string(ego_data_timeout_) + ".");
   }
 
   // check if route is outdated
@@ -143,7 +146,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
     // check if ego vehicle is moving and initate safe stop if necessary
     double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-    if (current_velocity < 0.2) {
+    if (current_velocity < standstill_threshold_) {
       trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
       route_init_ = false;
       RCLCPP_WARN(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
@@ -165,12 +168,12 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
         latest_path_ = calculateSafeStopAlongRoute(safe_stop_path, safe_stop_distance_);
       }
     } else {
-      RCLCPP_ERROR(this->get_logger(), "TODO: what to do in this case?"); // TODO: what to do in this case?
+      RCLCPP_DEBUG(this->get_logger(), "Executing safe stop.");
     }
   } else if (route_.route_elements.empty()) {
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
-    RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory."); // TODO: just do nothing?
+    RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory.");
     return tra;
   }
 

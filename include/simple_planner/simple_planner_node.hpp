@@ -134,10 +134,12 @@ class SimplePlannerNode : public rclcpp::Node {
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;
   double route_timeout_ = 1.0;
+  double ego_data_timeout_ = 1.0;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
   bool internal_route_update_ = false;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
+  double standstill_threshold_ = 0.2;
   double v_ref_ = 13.89;
   double a_max_decel_ = -2.5;
   bool consider_traffic_lights_ = false;
