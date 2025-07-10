@@ -105,7 +105,7 @@ SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_ms
         tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, path.header.frame_id, path.header.stamp,
                                     fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
+    RCLCPP_WARN(this->get_logger(), "Transformation is not available: %s", ex.what());
   }
   for (const auto& point : path.points) {
     geometry_msgs::msg::PointStamped point_msg, transformed_point_msg;

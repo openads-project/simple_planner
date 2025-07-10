@@ -135,10 +135,13 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   tra.header.stamp = now();
   tra.header.frame_id = trajectory_frame_id_;
 
+  // init path variable
+  SimplePath path;
+
   // check if ego data is outdated
   if ((ego_data_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(ego_data_.header.stamp)) > rclcpp::Duration::from_seconds(ego_data_timeout_)) {
     ego_data_init_ = false;
-    throw std::runtime_error("EgoData is older than " + std::to_string(ego_data_timeout_) + ".");
+    throw std::range_error("EgoData is older than " + std::to_string(ego_data_timeout_) + ".");
   }
 
   // check if route is outdated
@@ -146,14 +149,16 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
     // check if ego vehicle is moving and initate safe stop if necessary
     double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-    if (current_velocity < standstill_threshold_) {
+    if (current_velocity < standstill_threshold_) { // no route; ego vehicle is not moving -> vehicle is in standstill; reset variables
       trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
-      route_init_ = false;
+      route_init_ = false; // reset route initialization flag
+      safe_stop_distance_ = -1.0; // reset safe stop distance
       RCLCPP_WARN(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
       return tra; // return standstill trajectory
-    } else if (internal_route_update_) {
+    } else if (internal_route_update_) { // internal route update
       RCLCPP_ERROR(this->get_logger(), "TODO: handle internal route update"); // TODO: handle internal route update
-    } else if (safe_stop_distance_ < 0.0) {
+    } else if (safe_stop_distance_ < 0.0) { // no route; ego vehicle is moving -> initiate safe stop
+      route_init_ = false; // reset route initialization flag
       // init safe stop and calculate safe stop distance based on current velocity and maximum deceleration
       safe_stop_distance_ = - 0.5 * std::pow(current_velocity, 2) / a_max_decel_;
       SimplePath safe_stop_path = transformPath(latest_path_, tra.header);
@@ -167,18 +172,18 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
         RCLCPP_WARN(this->get_logger(), "Initialize safe stop along latest route. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
         latest_path_ = calculateSafeStopAlongRoute(safe_stop_path, safe_stop_distance_);
       }
-    } else {
-      RCLCPP_DEBUG(this->get_logger(), "Executing safe stop.");
+      path = latest_path_; // initial safe stop path
+    } else { // safe stop is already initialized -> update path
+      RCLCPP_DEBUG(this->get_logger(), "Special Case: Executing safe stop.");
+      path = transformPath(latest_path_, tra.header);
     }
-  } else if (route_.route_elements.empty()) {
+  } else if (route_.route_elements.empty()) { // received route is empty -> stanstill required
     trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
     route_init_ = false;
     RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory.");
     return tra;
-  }
-
-  SimplePath path;
-  if (safe_stop_distance_ < 0.0) { // default case: follow route
+  } else { // route is up to date -> create path from route
+    RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
     // time-transform route to current trajectory_frame_id_ frame
     geometry_msgs::msg::TransformStamped tf;
     try {
@@ -193,8 +198,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 
     // generate SimplePath from route
     path = convertRouteToSimplePath(tf_route);
-  } else { // special case: safe stop
-    path = transformPath(latest_path_, tra.header);
   }
 
   // remove first point of path as long as it is behind the ego vehicle
@@ -205,7 +208,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
   latest_path_ = path;
   std::vector<SimplePathPoint> path_points = latest_path_.points;
 
-  // keep maximum the first n_states_ in path (and therefore in trajectory) // TODO: still necessary after cutting time horizon?
+  // keep maximum the first n_states_ in path (and therefore in trajectory)
   if ((size_t) n_states_ < path_points.size()) {
     path_points.erase(path_points.begin() + n_states_, path_points.end());
   }
@@ -235,7 +238,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 SimplePath SimplePlannerNode::calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance) {
   SimplePath safe_stop_path = path; 
   double start_s = safe_stop_path.points[0].s; // start s value of path
-  for (int i = 0; i < safe_stop_path.points.size(); i++) {
+  for (size_t i = 0; i < safe_stop_path.points.size(); i++) {
     if (safe_stop_path.points[i].s > start_s + safe_stop_distance) {
       // remove all points after the point where the safe stop distance is reached
       safe_stop_path.points.erase(safe_stop_path.points.begin() + i, safe_stop_path.points.end());
@@ -277,7 +280,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
   for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
     const auto& route_element = tf_route.route_elements[j];
     if (!route_element.is_enriched) {
-      RCLCPP_WARN(this->get_logger(), "Route element %zu is not enriched. Skipping.", j);
+      RCLCPP_DEBUG(this->get_logger(), "Route element %zu is not enriched. Skipping.", j);
       continue;
     }
 
@@ -540,7 +543,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
  */
 void SimplePlannerNode::publishTimerCallback() {
   // if route and ego data are not received, do nothing
-  if (!route_init_ || !ego_data_init_) {
+  if ((!route_init_ && safe_stop_distance_ < 0.0) || !ego_data_init_) {
     return;
   }
 
