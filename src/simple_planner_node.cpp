@@ -329,6 +329,10 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
           RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_start);
           break;
         }
+        if ((i_start - 2) >= 0 && tf_route.route_elements[i_start-2].will_change_suggested_lane) {
+          RCLCPP_WARN(this->get_logger(), "Found previous lane change in route element: %u. Could not extend lane change over this element.", i_start-2); 
+          break;
+        }
         if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
           RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_start-1);
           break;
