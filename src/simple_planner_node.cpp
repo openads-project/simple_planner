@@ -378,7 +378,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
         }
 
         // ignore traffic light if cant stop with appropriate deceleration
-        double distance_to_stop_point = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line
+        double distance_to_stop_point = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line;
         double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
         double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
         double safety_factor = 1.25;
