@@ -358,11 +358,6 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
         offset_to_stop_line = offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
         double dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v; // time to stop in front of traffic light
 
-        double remaining_distance = tf_route.route_elements[tf_route.current_route_element_idx].s - tf_route.route_elements[j].s - offset_to_stop_line;
-        double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-        double t_remaining = remaining_distance / v_ego;
-
-
         if (reg_elems[k].has_validity_stamp && consider_future_states_) {
           double validity_duration = rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
           if (validity_duration < (t_total - dt_offset_to_stop_line)) {
@@ -382,8 +377,12 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
           stop_at_end = true; // no validity stamp or no future states considered, stop required
         }
 
-        if (t_remaining < 5.0) {
-          RCLCPP_INFO(this->get_logger(), "Traffic light is only %f m away. Don't consider it for stopping.", remaining_distance);
+        // ignore traffic light if cant stop with appropriate deceleration
+        double distance_to_stop_point = tf_route.route_elements[tf_route.current_route_element_idx].s - tf_route.route_elements[j].s - offset_to_stop_line;
+        double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+        double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
+        if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
+          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light. Distance to traffic light: %f m, minimum distance to stop: %f m", distance_to_stop_point, min_distance_to_stop);
           stop_at_end = false;
         }
       }
