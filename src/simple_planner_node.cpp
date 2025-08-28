@@ -37,7 +37,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("standstill_threshold", standstill_threshold_, "if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)");
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
-  this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
+  this->declareAndLoadParameter("a_decel", a_decel_, "desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
+  this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and < a_decel");
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
@@ -380,7 +381,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
         // ignore traffic light if cant stop with appropriate deceleration
         double distance_to_stop_point = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line;
         double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-        double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / (a_max_decel_*1.5);
+        double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
         if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
           RCLCPP_WARN(this->get_logger(), "Ignoring traffic light. Distance to traffic light: %f m, minimum distance to stop: %f m", distance_to_stop_point, min_distance_to_stop);
           stop_at_end = false;
@@ -503,7 +504,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       v = path[idx].v + (path[idx+1].v - path[idx].v) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
     }
 
-    double distance_to_stop = -0.5 * std::pow(v, 2) / a_max_decel_ + offset_to_stop_line;
+    double distance_to_stop = -0.5 * std::pow(v, 2) / a_decel_ + offset_to_stop_line;
     distance_to_stop = std::max(distance_to_stop, 0.0);
     double brake_point = path.back().s - distance_to_stop;
     double ds = v * dt_; // case 1: constant velocity
@@ -512,11 +513,11 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
         double ds_1 = brake_point - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v; // time with constant velocity to braking point
         double dt_2 = dt_ - dt_1; // remaining time with deceleration
-        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v * dt_2, 0.0);
+        double ds_2 = std::max(0.5 * a_decel_ * std::pow(dt_2, 2) + v * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_max_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
-        ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
+        v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
+        ds = 0.5 * a_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
         if (ds < 0.0) ds = path.back().s - s; // only add rest of route instead of driving backwards
       }
     }
