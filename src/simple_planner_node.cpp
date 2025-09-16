@@ -380,7 +380,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
           stop_at_end = true; // no validity stamp or no future states considered, stop required
         }
 
-        // ignore traffic light if cant stop with appropriate deceleration
+        // ignore stop point if can't stop with appropriate deceleration
         double distance_to_commitment_line = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line + offset_to_commitment_line_;
         double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
         double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;

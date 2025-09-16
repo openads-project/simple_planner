@@ -16,7 +16,7 @@
     standstill_threshold: 0.2       # if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)
     v_ref: 5.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
     a_decel: -0.5                   # desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0
-    a_max_decel: -1.0               # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and < a_decel
+    a_max_decel: -0.75               # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and < a_decel
 
     #### traffic light parameters
     consider_traffic_lights: True   # true: planner will consider traffic lights; false: planner will ignore traffic lights
