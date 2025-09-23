@@ -43,8 +43,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
                                 "front of vehicle at stop line)");  
-  this->declareAndLoadParameter("offset_to_commitment_line", offset_to_commitment_line_,
-                                "offset to virtual stop line, where regulatory element is not considered anymore (m) (default: 0.5)");
+  this->declareAndLoadParameter("ignore_stop_line_threshold", ignore_stop_line_threshold_,
+                                "a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
   this->declareAndLoadParameter("consider_future_states", consider_future_states_,
                                 "true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
@@ -380,12 +380,15 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
           stop_at_end = true; // no validity stamp or no future states considered, stop required
         }
 
-        // ignore stop point if can't stop with appropriate deceleration
-        double distance_to_commitment_line = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line + offset_to_commitment_line_;
+        // ignore stop point if can't stop with appropriate deceleration or if already passed stop line
+        double distance_to_stop_point = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line;
         double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
         double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
-        if ((distance_to_commitment_line < min_distance_to_stop) && stop_at_end) {
-          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light. Distance to commitment line of traffic light: %f m, minimum distance to stop: %f m", distance_to_commitment_line, min_distance_to_stop);
+        if (distance_to_stop_point < 0.0 && std::abs(distance_to_stop_point) > ignore_stop_line_threshold_) {
+          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light behind ego vehicle. Threshold: %f m, distance to stop point of traffic light: %f m", ignore_stop_line_threshold_, distance_to_stop_point);
+          stop_at_end = false;
+        } else if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
+          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light in front of ego vehicle. Distance to stop point of traffic light: %f m, minimum distance to stop: %f m", distance_to_stop_point, min_distance_to_stop);
           stop_at_end = false;
         }
       }
