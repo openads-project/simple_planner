@@ -79,18 +79,48 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name,
 
 rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(const std::vector<rclcpp::Parameter>& parameters) {
 
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = false;
+
   for (const auto& param : parameters) {
+
+    // check for specific parameter constraints
+    if (param.get_name() == "a_decel") {
+      if (param.as_double() >= 0.0) {
+        result.successful = false;
+        result.reason = "a_decel (" + std::to_string(param.as_double()) + ") must be < 0.0";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_decel': %s", result.reason.c_str());
+        break;
+      } else if (a_max_decel_ > param.as_double()) {
+        result.successful = false;
+        result.reason = "a_max_decel (" + std::to_string(a_max_decel_) + ") must be <= a_decel (" + std::to_string(param.as_double()) + ")";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_decel': %s", result.reason.c_str());
+        break;
+      }
+    } else if (param.get_name() == "a_max_decel") {
+      if (param.as_double() >= 0.0) {
+        result.successful = false;
+        result.reason = "a_max_decel (" + std::to_string(param.as_double()) + ") must be < 0.0";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_max_decel': %s", result.reason.c_str());
+        break;
+      } else if (param.as_double() > a_decel_) {
+        result.successful = false;
+        result.reason = "a_max_decel (" + std::to_string(param.as_double()) + ") must be <= a_decel (" + std::to_string(a_decel_) + ")";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_max_decel': %s", result.reason.c_str());
+        break;
+      }
+    }
+
+    // apply parameter change
     for (auto& auto_reconfigurable_param : auto_reconfigurable_params_) {
       if (param.get_name() == std::get<0>(auto_reconfigurable_param)) {
         std::get<1>(auto_reconfigurable_param)(param);
         RCLCPP_INFO(this->get_logger(), "Reconfigured parameter '%s'", param.get_name().c_str());
+        result.successful = true;
         break;
       }
     }
   }
-
-  rcl_interfaces::msg::SetParametersResult result;
-  result.successful = true;
 
   return result;
 }
@@ -101,23 +131,24 @@ SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_ms
 
   geometry_msgs::msg::TransformStamped tf;
   try {
-    tf =
-        tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, path.header.frame_id, path.header.stamp,
-                                    fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, path.header.frame_id, path.header.stamp,
+                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    for (const auto& point : path.points) {
+      geometry_msgs::msg::PointStamped point_msg, transformed_point_msg;
+      point_msg.header = path.header;
+      point_msg.point.x = point.position.x();
+      point_msg.point.y = point.position.y();
+      point_msg.point.z = 0.0;
+      tf2::doTransform(point_msg, transformed_point_msg, tf);
+      SimplePathPoint transformed_point = point;
+      transformed_point.position = Eigen::Vector2d(transformed_point_msg.point.x, transformed_point_msg.point.y);
+      transformed_path.points.push_back(transformed_point);
+    }
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Transformation is not available: %s", ex.what());
+    RCLCPP_WARN(this->get_logger(), "Could not transform path: %s. Reusing old path.", ex.what());
+    return path;
   }
-  for (const auto& point : path.points) {
-    geometry_msgs::msg::PointStamped point_msg, transformed_point_msg;
-    point_msg.header = path.header;
-    point_msg.point.x = point.position.x();
-    point_msg.point.y = point.position.y();
-    point_msg.point.z = 0.0;
-    tf2::doTransform(point_msg, transformed_point_msg, tf);
-    SimplePathPoint transformed_point = point;
-    transformed_point.position = Eigen::Vector2d(transformed_point_msg.point.x, transformed_point_msg.point.y);
-    transformed_path.points.push_back(transformed_point);
-  }
+
   return transformed_path;
 }
 

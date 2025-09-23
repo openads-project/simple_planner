@@ -141,9 +141,11 @@ class SimplePlannerNode : public rclcpp::Node {
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
   double standstill_threshold_ = 0.2;
   double v_ref_ = 13.89;
-  double a_max_decel_ = -2.5;
+  double a_decel_ = -0.5;
+  double a_max_decel_ = -0.75;
   bool consider_traffic_lights_ = false;
   double offset_to_stop_line_ = 0.0;
+  double ignore_stop_line_threshold_ = 0.5;
   bool consider_future_states_ = false;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;

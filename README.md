@@ -46,9 +46,11 @@
 | `interpolation_type` | `int` | defines the interpolation type of the received route, which is important for sampling it time equidistantly (0: linear, 1: spline) |
 | `standstill_threshold` | `double` | if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s) |
 | `v_ref` | `double` | reference velocity (m/s). If set to a positive value, the trajectory will be generated with this constant velocity. If set to `-1.0`, the velocity from the route will be used, which is defined in the route message. |
-| `a_max_decel` | `double` | defines the maximum deceleration for the braking maneuver before the end of the route (has to be `<= 0.0`; if `= 0.0`, no braking) |
+| `a_decel` | `double` | desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0 |
+| `a_max_decel` | `double` | maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel |
 | `consider_traffic_lights` | `bool` | true: planner will consider traffic lights; false: planner will ignore traffic lights |
 | `offset_to_stop_line` | `double` | additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
+| `ignore_stop_line_threshold` | `double` | a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
 | `consider_future_states` | `bool` | true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |

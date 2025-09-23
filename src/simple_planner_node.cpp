@@ -37,17 +37,30 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("standstill_threshold", standstill_threshold_, "if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)");
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
-  this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration (m/s^2) - must be < 0.0");
+  this->declareAndLoadParameter("a_decel", a_decel_, "desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
+  this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
-                                "front of vehicle at stop line)");
+                                "front of vehicle at stop line)");  
+  this->declareAndLoadParameter("ignore_stop_line_threshold", ignore_stop_line_threshold_,
+                                "a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
   this->declareAndLoadParameter("consider_future_states", consider_future_states_,
                                 "true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
                                 "factor multiplied with the vehicle length to determine the minimum lane change distance (m)");
+
+  // check parameters
+  if (a_decel_ >= 0.0) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid parameter: a_decel must be < 0.0");
+    exit(EXIT_FAILURE);
+  }
+  if (a_max_decel_ > a_decel_) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid parameter: a_max_decel must be < 0.0 and <= a_decel");
+    exit(EXIT_FAILURE);
+  }
 
   this->setup();
 }
@@ -223,7 +236,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       trajectory_planning_msgs::trajectory_access::setY(tra, path_points[idx].position.y(), i);
       trajectory_planning_msgs::trajectory_access::setV(tra, path_points[idx].v, i);
       RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
-                  dt_ * i, path_points[i].position.x(), path_points[i].position.y(), path_points[i].v, path_points[i].s);
+                  dt_ * i, path_points[idx].position.x(), path_points[idx].position.y(), path_points[idx].v, path_points[idx].s);
     }
   }
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, path_points.empty());
@@ -299,8 +312,11 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
     if (path.points.size() > 0) {
       // calculate time difference to previous point
       double v_average = (path.points.back().v + simple_path_point.v) / 2.0; // average velocity between last point and current point
-      double dt = (simple_path_point.s - path.points.back().s) / v_average; // time difference to previous point
-      if (dt < 0.0) {
+      double dt = 0.0;
+      if (v_average != 0.0) { // avoid division by zero
+        dt = (simple_path_point.s - path.points.back().s) / v_average; // time difference to previous point
+      }
+      if (dt <= 0.0) {
         RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, path.points.back().s, simple_path_point.s);
       }
       t_total += dt;
@@ -356,7 +372,13 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
         if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
         if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED && !consider_future_states_) continue;
         offset_to_stop_line = offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
-        double dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v; // time to stop in front of traffic light
+        double dt_offset_to_stop_line = 0.0;
+        if (simple_path_point.v != 0.0) {
+          dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v; // time to stop in front of traffic light
+        }
+        if (dt_offset_to_stop_line <= 0.0) {
+          RCLCPP_WARN(this->get_logger(), "Negative time difference 'dt_offset_to_stop_line': %f. Could lead to unexpected behavior.", dt_offset_to_stop_line);
+        }
 
         if (reg_elems[k].has_validity_stamp && consider_future_states_) {
           double validity_duration = rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
@@ -375,6 +397,18 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
           }
         } else {
           stop_at_end = true; // no validity stamp or no future states considered, stop required
+        }
+
+        // ignore stop point if can't stop with appropriate deceleration or if already passed stop line
+        double distance_to_stop_point = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line;
+        double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+        double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
+        if (distance_to_stop_point < 0.0 && std::abs(distance_to_stop_point) > ignore_stop_line_threshold_) {
+          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light behind ego vehicle. Threshold: %f m, distance to stop point of traffic light: %f m", ignore_stop_line_threshold_, distance_to_stop_point);
+          stop_at_end = false;
+        } else if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
+          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light in front of ego vehicle. Distance to stop point of traffic light: %f m, minimum distance to stop: %f m", distance_to_stop_point, min_distance_to_stop);
+          stop_at_end = false;
         }
       }
     }
@@ -494,7 +528,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       v = path[idx].v + (path[idx+1].v - path[idx].v) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
     }
 
-    double distance_to_stop = -0.5 * std::pow(v, 2) / a_max_decel_ + offset_to_stop_line;
+    double distance_to_stop = -0.5 * std::pow(v, 2) / a_decel_ + offset_to_stop_line;
     distance_to_stop = std::max(distance_to_stop, 0.0);
     double brake_point = path.back().s - distance_to_stop;
     double ds = v * dt_; // case 1: constant velocity
@@ -503,11 +537,11 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
         double ds_1 = brake_point - s; // distance with constant velocity to braking point
         double dt_1 = ds_1 / v; // time with constant velocity to braking point
         double dt_2 = dt_ - dt_1; // remaining time with deceleration
-        double ds_2 = std::max(0.5 * a_max_decel_ * std::pow(dt_2, 2) + v * dt_2, 0.0);
+        double ds_2 = std::max(0.5 * a_decel_ * std::pow(dt_2, 2) + v * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_max_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
-        ds = 0.5 * a_max_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
+        v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_decel_ * (s - brake_point), 0.0)); // case 2: deceleration (v(s))
+        ds = 0.5 * a_decel_ * std::pow(dt_, 2) + v * dt_; // case 2: deceleration
         if (ds < 0.0) ds = path.back().s - s; // only add rest of route instead of driving backwards
       }
     }
