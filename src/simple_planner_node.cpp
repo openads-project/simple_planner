@@ -38,7 +38,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("standstill_threshold", standstill_threshold_, "if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)");
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_decel", a_decel_, "desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
-  this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and < a_decel");
+  this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
@@ -51,6 +51,16 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
                                 "factor multiplied with the vehicle length to determine the minimum lane change distance (m)");
+
+  // check parameters
+  if (a_decel_ >= 0.0) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid parameter: a_decel must be < 0.0");
+    exit(EXIT_FAILURE);
+  }
+  if (a_max_decel_ > a_decel_) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid parameter: a_max_decel must be < 0.0 and <= a_decel");
+    exit(EXIT_FAILURE);
+  }
 
   this->setup();
 }

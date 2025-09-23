@@ -79,18 +79,48 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name,
 
 rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(const std::vector<rclcpp::Parameter>& parameters) {
 
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = false;
+
   for (const auto& param : parameters) {
+
+    // check for specific parameter constraints
+    if (param.get_name() == "a_decel") {
+      if (param.as_double() >= 0.0) {
+        result.successful = false;
+        result.reason = "a_decel (" + std::to_string(param.as_double()) + ") must be < 0.0";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_decel': %s", result.reason.c_str());
+        break;
+      } else if (a_max_decel_ > param.as_double()) {
+        result.successful = false;
+        result.reason = "a_max_decel (" + std::to_string(a_max_decel_) + ") must be <= a_decel (" + std::to_string(param.as_double()) + ")";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_decel': %s", result.reason.c_str());
+        break;
+      }
+    } else if (param.get_name() == "a_max_decel") {
+      if (param.as_double() >= 0.0) {
+        result.successful = false;
+        result.reason = "a_max_decel (" + std::to_string(param.as_double()) + ") must be < 0.0";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_max_decel': %s", result.reason.c_str());
+        break;
+      } else if (param.as_double() > a_decel_) {
+        result.successful = false;
+        result.reason = "a_max_decel (" + std::to_string(param.as_double()) + ") must be <= a_decel (" + std::to_string(a_decel_) + ")";
+        RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_max_decel': %s", result.reason.c_str());
+        break;
+      }
+    }
+
+    // apply parameter change
     for (auto& auto_reconfigurable_param : auto_reconfigurable_params_) {
       if (param.get_name() == std::get<0>(auto_reconfigurable_param)) {
         std::get<1>(auto_reconfigurable_param)(param);
         RCLCPP_INFO(this->get_logger(), "Reconfigured parameter '%s'", param.get_name().c_str());
+        result.successful = true;
         break;
       }
     }
   }
-
-  rcl_interfaces::msg::SetParametersResult result;
-  result.successful = true;
 
   return result;
 }
