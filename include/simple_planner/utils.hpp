@@ -131,23 +131,24 @@ SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_ms
 
   geometry_msgs::msg::TransformStamped tf;
   try {
-    tf =
-        tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, path.header.frame_id, path.header.stamp,
-                                    fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, path.header.frame_id, path.header.stamp,
+                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    for (const auto& point : path.points) {
+      geometry_msgs::msg::PointStamped point_msg, transformed_point_msg;
+      point_msg.header = path.header;
+      point_msg.point.x = point.position.x();
+      point_msg.point.y = point.position.y();
+      point_msg.point.z = 0.0;
+      tf2::doTransform(point_msg, transformed_point_msg, tf);
+      SimplePathPoint transformed_point = point;
+      transformed_point.position = Eigen::Vector2d(transformed_point_msg.point.x, transformed_point_msg.point.y);
+      transformed_path.points.push_back(transformed_point);
+    }
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Transformation is not available: %s", ex.what());
+    RCLCPP_WARN(this->get_logger(), "Could not transform path: %s. Reusing old path.", ex.what());
+    return path;
   }
-  for (const auto& point : path.points) {
-    geometry_msgs::msg::PointStamped point_msg, transformed_point_msg;
-    point_msg.header = path.header;
-    point_msg.point.x = point.position.x();
-    point_msg.point.y = point.position.y();
-    point_msg.point.z = 0.0;
-    tf2::doTransform(point_msg, transformed_point_msg, tf);
-    SimplePathPoint transformed_point = point;
-    transformed_point.position = Eigen::Vector2d(transformed_point_msg.point.x, transformed_point_msg.point.y);
-    transformed_path.points.push_back(transformed_point);
-  }
+
   return transformed_path;
 }
 

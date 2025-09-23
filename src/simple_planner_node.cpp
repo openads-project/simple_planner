@@ -236,7 +236,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
       trajectory_planning_msgs::trajectory_access::setY(tra, path_points[idx].position.y(), i);
       trajectory_planning_msgs::trajectory_access::setV(tra, path_points[idx].v, i);
       RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
-                  dt_ * i, path_points[i].position.x(), path_points[i].position.y(), path_points[i].v, path_points[i].s);
+                  dt_ * i, path_points[idx].position.x(), path_points[idx].position.y(), path_points[idx].v, path_points[idx].s);
     }
   }
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, path_points.empty());
@@ -312,8 +312,11 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
     if (path.points.size() > 0) {
       // calculate time difference to previous point
       double v_average = (path.points.back().v + simple_path_point.v) / 2.0; // average velocity between last point and current point
-      double dt = (simple_path_point.s - path.points.back().s) / v_average; // time difference to previous point
-      if (dt < 0.0) {
+      double dt = 0.0;
+      if (v_average != 0.0) { // avoid division by zero
+        dt = (simple_path_point.s - path.points.back().s) / v_average; // time difference to previous point
+      }
+      if (dt <= 0.0) {
         RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, path.points.back().s, simple_path_point.s);
       }
       t_total += dt;
@@ -369,7 +372,13 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
         if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
         if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED && !consider_future_states_) continue;
         offset_to_stop_line = offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
-        double dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v; // time to stop in front of traffic light
+        double dt_offset_to_stop_line = 0.0;
+        if (simple_path_point.v != 0.0) {
+          dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v; // time to stop in front of traffic light
+        }
+        if (dt_offset_to_stop_line <= 0.0) {
+          RCLCPP_WARN(this->get_logger(), "Negative time difference 'dt_offset_to_stop_line': %f. Could lead to unexpected behavior.", dt_offset_to_stop_line);
+        }
 
         if (reg_elems[k].has_validity_stamp && consider_future_states_) {
           double validity_duration = rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
