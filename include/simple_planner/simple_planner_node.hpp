@@ -8,6 +8,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include <std_srvs/srv/set_bool.hpp>
+
 #include <route_planning_msgs/msg/route.hpp>
 #include <route_planning_msgs_utils/route_access.hpp>
 
@@ -54,6 +56,9 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kEgoDataTopic = "~/ego_data";
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
+
+  const std::string kLeftIndicatorSrv = "~/enable_left_turn_indicator";
+  const std::string kRightIndicatorSrv = "~/enable_right_turn_indicator";
 
   /**
    * @brief Declares and loads a ROS parameter
@@ -118,6 +123,8 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr left_indicator_service_client_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr right_indicator_service_client_;
 
   /**
    * @brief Auto-reconfigurable parameters for dynamic reconfiguration
