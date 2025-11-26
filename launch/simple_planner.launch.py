@@ -31,7 +31,7 @@ def generate_launch_description():
             package="simple_planner",
             executable="simple_planner_node",
             namespace=LaunchConfiguration("namespace"),
-            name=LaunchConfiguration("node_name"),
+            name=LaunchConfiguration("name"),
             parameters=[LaunchConfiguration("params")],
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
