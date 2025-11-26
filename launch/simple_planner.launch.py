@@ -18,7 +18,7 @@ def generate_launch_description():
     ]
 
     args = [
-        DeclareLaunchArgument("node_name", default_value="simple_planner", description="node name"),
+        DeclareLaunchArgument("name", default_value="simple_planner", description="node name"),
         DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
         DeclareLaunchArgument("params", default_value=os.path.join(get_package_share_directory("simple_planner"), "config", "params.yml"), description="path to parameter file"),
         DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
