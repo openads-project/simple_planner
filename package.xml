@@ -3,8 +3,8 @@
 <package format="3">
 
   <name>simple_planner</name>
-  <version>0.0.0</version>
-  <description>TODO</description>
+  <version>0.1.0</version>
+  <description>Plans a reference trajectory to follow a route</description>
 
   <maintainer email="jean-pierre.busch@ika.rwth-aachen.de">Jean-Pierre Busch</maintainer>
   <author email="jean-pierre.busch@ika.rwth-aachen.de">Jean-Pierre Busch</author>
