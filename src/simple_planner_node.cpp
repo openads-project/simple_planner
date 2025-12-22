@@ -329,6 +329,13 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
       t_total += dt;
     }
 
+    // check for suggested turn signal
+    if (j == tf_route.current_route_element_idx && suggested_lane.suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT) {
+      first_lane_change_direction = 1;
+    } else if (j == tf_route.current_route_element_idx && suggested_lane.suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT) {
+      first_lane_change_direction = -1;
+    }
+
     // get starting lane change index
     if (route_element.will_change_suggested_lane) {
       if (j+1 >= tf_route.route_elements.size()) {
