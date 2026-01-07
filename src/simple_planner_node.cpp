@@ -295,7 +295,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
   bool stop_at_end = false;
   double t_total = 0.0;
   double offset_to_stop_line = 0.0;
-  int first_lane_change_direction = 0;
+  uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   SimplePath path;
   path.header = tf_route.header;
   std::map<uint64_t, uint64_t> lane_change_indices_map; // maps lane change idx (j) to start lane change idx (i_start)
@@ -330,10 +330,8 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
     }
 
     // check for suggested turn signal
-    if (j == tf_route.current_route_element_idx && suggested_lane.suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT) {
-      first_lane_change_direction = 1;
-    } else if (j == tf_route.current_route_element_idx && suggested_lane.suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT) {
-      first_lane_change_direction = -1;
+    if (j == tf_route.current_route_element_idx)
+      suggested_turn_signal = suggested_lane.suggested_turn_signal;
     }
 
     // get starting lane change index
@@ -346,7 +344,11 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
 
       size_t current_lane_idx = route_element.suggested_lane_idx;
       int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
-      if (first_lane_change_direction == 0) first_lane_change_direction = lane_change_direction;
+      if (lane_change_direction < 0) {
+        suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT;
+      } else if (lane_change_direction > 0) {
+        suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT;
+      }
       double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
       double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
       RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
@@ -464,21 +466,21 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
   std::vector<SimplePathPoint> resampled_path = resamplePath(merged_points, stop_at_end, offset_to_stop_line);
 
   // request turn indicator activation / deactivation
-  if (first_lane_change_direction == 0 && left_indicator_service_client_->service_is_ready() && right_indicator_service_client_->service_is_ready()) {
+  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE && left_indicator_service_client_->service_is_ready() && right_indicator_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = false;
     left_indicator_service_client_->async_send_request(request);
     right_indicator_service_client_->async_send_request(request);
-  } else if (first_lane_change_direction > 0 && left_indicator_service_client_->service_is_ready()) {
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT && left_indicator_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = true;
     left_indicator_service_client_->async_send_request(request);
-  } else if (first_lane_change_direction < 0 && right_indicator_service_client_->service_is_ready()) {
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT && right_indicator_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = true;
     right_indicator_service_client_->async_send_request(request);
   } else {
-    RCLCPP_WARN(this->get_logger(), "Indicator service is not ready yet. Lane change direction: %d", first_lane_change_direction);
+    RCLCPP_WARN(this->get_logger(), "Indicator service is not ready yet. Suggested turn signal: %d", suggested_turn_signal);
   }
 
   path.points = std::move(resampled_path);
