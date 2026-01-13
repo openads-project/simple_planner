@@ -466,11 +466,12 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
   std::vector<SimplePathPoint> resampled_path = resamplePath(merged_points, stop_at_end, offset_to_stop_line);
 
   // request turn indicator activation / deactivation
-  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE && left_indicator_service_client_->service_is_ready() && right_indicator_service_client_->service_is_ready()) {
+  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE && left_indicator_service_client_->service_is_ready() && right_indicator_service_client_->service_is_ready() && hazard_lights_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = false;
     left_indicator_service_client_->async_send_request(request);
     right_indicator_service_client_->async_send_request(request);
+    hazard_lights_service_client_->async_send_request(request);
   } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT && left_indicator_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = true;
