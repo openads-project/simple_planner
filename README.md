@@ -31,6 +31,13 @@
 | --- | --- | --- |
 | `~/trajectory` | `trajectory_planning_msgs/msg/trajectory` | Output Trajectory |
 
+#### Service Clients
+| Service | Type | Description |
+| --- | --- | --- |
+| `~/enable_left_turn_indicator` | `std_srvs/srv/SetBool` | Service client to enable left turn indicator |
+| `~/enable_right_turn_indicator` | `std_srvs/srv/SetBool` | Service client to enable right turn indicator |
+| `~/enable_hazard_lights` | `std_srvs/srv/SetBool` | Service client to enable hazard lights |
+
 #### Parameters
 
 | Parameter | Type | Description |

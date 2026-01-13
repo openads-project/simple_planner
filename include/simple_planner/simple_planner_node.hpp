@@ -59,6 +59,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   const std::string kLeftIndicatorSrv = "~/enable_left_turn_indicator";
   const std::string kRightIndicatorSrv = "~/enable_right_turn_indicator";
+  const std::string kHazardLightsSrv = "~/enable_hazard_lights";
 
   /**
    * @brief Declares and loads a ROS parameter
@@ -125,6 +126,7 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr publish_timer_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr left_indicator_service_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr right_indicator_service_client_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr hazard_lights_service_client_;
 
   /**
    * @brief Auto-reconfigurable parameters for dynamic reconfiguration

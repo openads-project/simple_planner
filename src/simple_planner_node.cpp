@@ -95,11 +95,13 @@ void SimplePlannerNode::setup() {
       kRouteTopic, 10, std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
-  // create service clients for turn indicators
+  // create service clients for turn indicators and hazard lights
   left_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kLeftIndicatorSrv);
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", left_indicator_service_client_->get_service_name());
   right_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kRightIndicatorSrv);
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", right_indicator_service_client_->get_service_name());
+  hazard_lights_service_client_ = this->create_client<std_srvs::srv::SetBool>(kHazardLightsSrv);
+  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", hazard_lights_service_client_->get_service_name());
 
   // create a callback for dynamic parameter configuration
   parameters_callback_ = this->add_on_set_parameters_callback(
@@ -330,9 +332,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
     }
 
     // check for suggested turn signal
-    if (j == tf_route.current_route_element_idx)
-      suggested_turn_signal = suggested_lane.suggested_turn_signal;
-    }
+    if (j == tf_route.current_route_element_idx) suggested_turn_signal = suggested_lane.suggested_turn_signal;
 
     // get starting lane change index
     if (route_element.will_change_suggested_lane) {
@@ -479,6 +479,10 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = true;
     right_indicator_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_HAZARD && hazard_lights_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = true;
+    hazard_lights_service_client_->async_send_request(request);
   } else {
     RCLCPP_WARN(this->get_logger(), "Indicator service is not ready yet. Suggested turn signal: %d", suggested_turn_signal);
   }
