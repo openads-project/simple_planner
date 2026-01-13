@@ -95,6 +95,14 @@ void SimplePlannerNode::setup() {
       kRouteTopic, 10, std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
+  // create service clients for turn indicators and hazard lights
+  left_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kLeftIndicatorSrv);
+  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", left_indicator_service_client_->get_service_name());
+  right_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kRightIndicatorSrv);
+  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", right_indicator_service_client_->get_service_name());
+  hazard_lights_service_client_ = this->create_client<std_srvs::srv::SetBool>(kHazardLightsSrv);
+  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", hazard_lights_service_client_->get_service_name());
+
   // create a callback for dynamic parameter configuration
   parameters_callback_ = this->add_on_set_parameters_callback(
       std::bind(&SimplePlannerNode::parametersCallback, this, std::placeholders::_1));
@@ -249,7 +257,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() 
 }
 
 SimplePath SimplePlannerNode::calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance) {
-  SimplePath safe_stop_path = path; 
+  SimplePath safe_stop_path = path;
   double start_s = safe_stop_path.points[0].s; // start s value of path
   for (size_t i = 0; i < safe_stop_path.points.size(); i++) {
     if (safe_stop_path.points[i].s > start_s + safe_stop_distance) {
@@ -289,6 +297,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
   bool stop_at_end = false;
   double t_total = 0.0;
   double offset_to_stop_line = 0.0;
+  uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   SimplePath path;
   path.header = tf_route.header;
   std::map<uint64_t, uint64_t> lane_change_indices_map; // maps lane change idx (j) to start lane change idx (i_start)
@@ -322,6 +331,9 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
       t_total += dt;
     }
 
+    // check for suggested turn signal
+    if (j == tf_route.current_route_element_idx) suggested_turn_signal = suggested_lane.suggested_turn_signal;
+
     // get starting lane change index
     if (route_element.will_change_suggested_lane) {
       if (j+1 >= tf_route.route_elements.size()) {
@@ -332,6 +344,11 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
 
       size_t current_lane_idx = route_element.suggested_lane_idx;
       int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
+      if (lane_change_direction < 0) {
+        suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT;
+      } else if (lane_change_direction > 0) {
+        suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT;
+      }
       double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
       double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
       RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
@@ -346,7 +363,7 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
           break;
         }
         if ((i_start - 2) >= 0 && tf_route.route_elements[i_start-2].will_change_suggested_lane) {
-          RCLCPP_WARN(this->get_logger(), "Found previous lane change in route element: %u. Could not extend lane change over this element.", i_start-2); 
+          RCLCPP_WARN(this->get_logger(), "Found previous lane change in route element: %u. Could not extend lane change over this element.", i_start-2);
           break;
         }
         if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
@@ -447,6 +464,29 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
 
   // resample points over time
   std::vector<SimplePathPoint> resampled_path = resamplePath(merged_points, stop_at_end, offset_to_stop_line);
+
+  // request turn indicator activation / deactivation
+  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE && left_indicator_service_client_->service_is_ready() && right_indicator_service_client_->service_is_ready() && hazard_lights_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = false;
+    left_indicator_service_client_->async_send_request(request);
+    right_indicator_service_client_->async_send_request(request);
+    hazard_lights_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT && left_indicator_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = true;
+    left_indicator_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT && right_indicator_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = true;
+    right_indicator_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_HAZARD && hazard_lights_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = true;
+    hazard_lights_service_client_->async_send_request(request);
+  } else {
+    RCLCPP_WARN(this->get_logger(), "Indicator service is not ready yet. Suggested turn signal: %d", suggested_turn_signal);
+  }
 
   path.points = std::move(resampled_path);
   return path;
