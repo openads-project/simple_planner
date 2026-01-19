@@ -57,8 +57,8 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
 
-  const std::string kLeftIndicatorSrv = "~/enable_left_turn_indicator";
-  const std::string kRightIndicatorSrv = "~/enable_right_turn_indicator";
+  const std::string kLeftTurnIndicatorSrv = "~/enable_left_turn_indicator";
+  const std::string kRightTurnIndicatorSrv = "~/enable_right_turn_indicator";
   const std::string kHazardLightsSrv = "~/enable_hazard_lights";
 
   /**
@@ -124,8 +124,8 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
-  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr left_indicator_service_client_;
-  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr right_indicator_service_client_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr left_turn_indicator_service_client_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr right_turn_indicator_service_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr hazard_lights_service_client_;
 
   /**

@@ -15,8 +15,8 @@ def generate_launch_description():
         DeclareLaunchArgument("ego_data_topic", default_value="~/ego_data"),
         DeclareLaunchArgument("route_topic", default_value="~/route"),
         DeclareLaunchArgument("trajectory_topic", default_value="~/trajectory"),
-        DeclareLaunchArgument("left_indicator_service", default_value="~/enable_left_turn_indicator"),
-        DeclareLaunchArgument("right_indicator_service", default_value="~/enable_right_turn_indicator"),
+        DeclareLaunchArgument("left_turn_indicator_service", default_value="~/enable_left_turn_indicator"),
+        DeclareLaunchArgument("right_turn_indicator_service", default_value="~/enable_right_turn_indicator"),
         DeclareLaunchArgument("hazard_lights_service", default_value="~/enable_hazard_lights"),
     ]
 
