@@ -96,9 +96,9 @@ void SimplePlannerNode::setup() {
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
   // create service clients for turn indicators and hazard lights
-  left_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kLeftIndicatorSrv);
+  left_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kLeftTurnIndicatorSrv);
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", left_turn_indicator_service_client_->get_service_name());
-  right_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kRightIndicatorSrv);
+  right_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kRightTurnIndicatorSrv);
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", right_turn_indicator_service_client_->get_service_name());
   hazard_lights_service_client_ = this->create_client<std_srvs::srv::SetBool>(kHazardLightsSrv);
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", hazard_lights_service_client_->get_service_name());

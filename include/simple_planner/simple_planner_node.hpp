@@ -57,8 +57,8 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
 
-  const std::string kLeftIndicatorSrv = "~/enable_left_turn_indicator";
-  const std::string kRightIndicatorSrv = "~/enable_right_turn_indicator";
+  const std::string kLeftTurnIndicatorSrv = "~/enable_left_turn_indicator";
+  const std::string kRightTurnIndicatorSrv = "~/enable_right_turn_indicator";
   const std::string kHazardLightsSrv = "~/enable_hazard_lights";
 
   /**
