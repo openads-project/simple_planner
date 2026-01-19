@@ -96,10 +96,10 @@ void SimplePlannerNode::setup() {
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
   // create service clients for turn indicators and hazard lights
-  left_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kLeftIndicatorSrv);
-  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", left_indicator_service_client_->get_service_name());
-  right_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kRightIndicatorSrv);
-  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", right_indicator_service_client_->get_service_name());
+  left_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kLeftIndicatorSrv);
+  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", left_turn_indicator_service_client_->get_service_name());
+  right_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kRightIndicatorSrv);
+  RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", right_turn_indicator_service_client_->get_service_name());
   hazard_lights_service_client_ = this->create_client<std_srvs::srv::SetBool>(kHazardLightsSrv);
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", hazard_lights_service_client_->get_service_name());
 
@@ -466,20 +466,20 @@ SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs
   std::vector<SimplePathPoint> resampled_path = resamplePath(merged_points, stop_at_end, offset_to_stop_line);
 
   // request turn indicator activation / deactivation
-  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE && left_indicator_service_client_->service_is_ready() && right_indicator_service_client_->service_is_ready() && hazard_lights_service_client_->service_is_ready()) {
+  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE && left_turn_indicator_service_client_->service_is_ready() && right_turn_indicator_service_client_->service_is_ready() && hazard_lights_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = false;
-    left_indicator_service_client_->async_send_request(request);
-    right_indicator_service_client_->async_send_request(request);
+    left_turn_indicator_service_client_->async_send_request(request);
+    right_turn_indicator_service_client_->async_send_request(request);
     hazard_lights_service_client_->async_send_request(request);
-  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT && left_indicator_service_client_->service_is_ready()) {
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT && left_turn_indicator_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = true;
-    left_indicator_service_client_->async_send_request(request);
-  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT && right_indicator_service_client_->service_is_ready()) {
+    left_turn_indicator_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT && right_turn_indicator_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = true;
-    right_indicator_service_client_->async_send_request(request);
+    right_turn_indicator_service_client_->async_send_request(request);
   } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_HAZARD && hazard_lights_service_client_->service_is_ready()) {
     auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
     request->data = true;

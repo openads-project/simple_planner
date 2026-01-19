@@ -124,8 +124,8 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
-  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr left_indicator_service_client_;
-  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr right_indicator_service_client_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr left_turn_indicator_service_client_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr right_turn_indicator_service_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr hazard_lights_service_client_;
 
   /**
