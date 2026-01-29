@@ -7,6 +7,7 @@
 #include <Eigen/Dense>
 
 #include <tk/spline.h>
+#include <tracetools/tracetools.h>
 
 #include <simple_planner/simple_planner_node.hpp>
 #include <simple_planner/utils.hpp>
@@ -106,6 +107,16 @@ void SimplePlannerNode::setup() {
   // create a callback for dynamic parameter configuration
   parameters_callback_ = this->add_on_set_parameters_callback(
       std::bind(&SimplePlannerNode::parametersCallback, this, std::placeholders::_1));
+  
+  // Annotate message links for tracing: Trajectory is published periodically based on subscriptions to egoData and route
+  std::vector<const void *> link_subs = {
+      static_cast<const void *>(sub_egoData_->get_subscription_handle().get()),
+      static_cast<const void *>(sub_route_->get_subscription_handle().get())
+  };
+  std::vector<const void *> link_pubs = {
+      static_cast<const void *>(pub_->get_publisher_handle().get())
+  };
+  TRACETOOLS_TRACEPOINT(message_link_periodic_async, link_subs.data(), link_subs.size(), link_pubs.data(), link_pubs.size());
 }
 
 /**
