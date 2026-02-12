@@ -3,6 +3,7 @@ include:
 
 variables:
   BASE_IMAGE: rwthika/ros2:jazzy
+  ENABLE_RECURSIVE_VCS_IMPORT: 'false'
   RMW_IMPLEMENTATION: rmw_zenoh_cpp
   TARGET: dev,run
   PLATFORM: arm64,amd64
