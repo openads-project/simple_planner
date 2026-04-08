@@ -49,7 +49,6 @@
 | `ego_data_timeout` | `double` | time after which a received ego vehicle data is considered invalid (s) (use `-1.0` for no timeout) |
 | `trajectory_horizon` | `double` | covered time horizon of the published trajectory (s) |
 | `n_states` | `int` | defines the number of states in the published trajectory |
-| `internal_route_update` | `bool` | true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally). |
 | `interpolation_type` | `int` | defines the interpolation type of the received route, which is important for sampling it time equidistantly (0: linear, 1: spline) |
 | `standstill_threshold` | `double` | if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s) |
 | `v_ref` | `double` | reference velocity (m/s). If set to a positive value, the trajectory will be generated with this constant velocity. If set to `-1.0`, the velocity from the route will be used, which is defined in the route message. |

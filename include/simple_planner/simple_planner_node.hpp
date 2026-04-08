@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
@@ -52,6 +54,14 @@ class SimplePlannerNode : public rclcpp::Node {
 
  private:
   enum InterpolationType { LINEAR = 0, SPLINE = 1 };
+  enum class PlannerState { NoPublish, Standstill, SafeStop, FollowRoute };
+
+  struct RoutePlanningResult {
+    SimplePath path;
+    bool stop_at_end = false;
+    double offset_to_stop_line = 0.0;
+    uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
+  };
 
   const std::string kEgoDataTopic = "~/ego_data";
   const std::string kRouteTopic = "~/route";
@@ -105,14 +115,140 @@ class SimplePlannerNode : public rclcpp::Node {
 
   void publishTimerCallback();
 
-  trajectory_planning_msgs::msg::Trajectory createTrajectory();
+  /**
+   * @brief Determines the current planner state from input freshness and route availability.
+   *
+   * @param stamp Current planning timestamp.
+   * @return PlannerState The state to be handled for this cycle.
+   */
+  PlannerState determinePlannerState(const rclcpp::Time& stamp);
+
+  /**
+   * @brief Checks whether an input message is older than the configured timeout.
+   *
+   * @param header Header of the input message.
+   * @param timeout Timeout in seconds. A value of `-1.0` disables the timeout.
+   * @param stamp Current planning timestamp.
+   * @return true if the message is outdated.
+   * @return false if the message is still valid.
+   */
+  bool isMessageOutdated(const std_msgs::msg::Header& header, double timeout, const rclcpp::Time& stamp) const;
+
+  /**
+   * @brief Creates a trajectory for the already determined planner state.
+   *
+   * @param state Planner state to be executed.
+   * @param stamp Current planning timestamp propagated from the timer callback.
+   * @return trajectory_planning_msgs::msg::Trajectory The generated output trajectory.
+   */
+  trajectory_planning_msgs::msg::Trajectory createTrajectory(PlannerState state, const rclcpp::Time& stamp);
+
+  /**
+   * @brief Creates a standstill trajectory for the current planning cycle.
+   *
+   * @param stamp Current planning timestamp propagated from the timer callback.
+   * @return trajectory_planning_msgs::msg::Trajectory Standstill trajectory message.
+   */
+  trajectory_planning_msgs::msg::Trajectory buildStandstillTrajectory(const rclcpp::Time& stamp);
+
+  /**
+   * @brief Builds a trajectory message from a simple path.
+   *
+   * This also trims points behind the ego vehicle and falls back to standstill if
+   * no usable forward path remains.
+   *
+   * @param path Path to be converted.
+   * @return trajectory_planning_msgs::msg::Trajectory Generated trajectory message.
+   */
+  trajectory_planning_msgs::msg::Trajectory buildTrajectoryFromSimplePath(const SimplePath& path);
+
+  /**
+   * @brief Builds or updates the safe-stop path for the current cycle.
+   *
+   * @param stamp Current planning timestamp propagated from the timer callback.
+   * @return SimplePath Safe-stop path in trajectory frame.
+   */
+  SimplePath buildSafeStopPath(const rclcpp::Time& stamp);
+
+  /**
+   * @brief Builds the complete route-following plan including route-side effects.
+   *
+   * @param stamp Current planning timestamp propagated from the timer callback.
+   * @return RoutePlanningResult Planned route path plus stop and indicator metadata.
+   */
+  RoutePlanningResult buildRoutePlan(const rclcpp::Time& stamp);
+
+  /**
+   * @brief Appends route-derived path points and stop metadata for the follow-route case.
+   *
+   * @param tf_route Route transformed into trajectory frame.
+   * @param route_plan Mutable route planning result to extend.
+   * @param lane_change_indices_map Output lane-change windows to be merged later.
+   */
+  void appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, RoutePlanningResult& route_plan,
+                         std::map<uint64_t, uint64_t>& lane_change_indices_map);
+
+  /**
+   * @brief Detects and stores the start/end window of a lane change.
+   *
+   * @param tf_route Route transformed into trajectory frame.
+   * @param route_element_idx Index of the current route element.
+   * @param lane_change_indices_map Output map of lane-change route indices.
+   * @param suggested_turn_signal Turn signal selected for the current route plan.
+   * @return true if the lane change could be registered.
+   * @return false if the route data is insufficient and processing should stop.
+   */
+  bool tryRegisterLaneChange(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+                             std::map<uint64_t, uint64_t>& lane_change_indices_map, uint8_t& suggested_turn_signal);
+
+  /**
+   * @brief Updates stop-at-end and stop-line offset state from traffic-light regulatory elements.
+   *
+   * @param tf_route Route transformed into trajectory frame.
+   * @param route_element_idx Index of the current route element.
+   * @param suggested_lane Suggested lane element of the current route element.
+   * @param simple_path_point Current path point candidate.
+   * @param t_total Accumulated travel time along the partial path.
+   * @param stop_at_end Whether the path should stop at its current end.
+   * @param offset_to_stop_line Effective offset used for braking towards the stop line.
+   */
+  void updateTrafficLightState(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+                               const route_planning_msgs::msg::LaneElement& suggested_lane,
+                               const SimplePathPoint& simple_path_point, double t_total,
+                               bool& stop_at_end, double& offset_to_stop_line);
+
+  /**
+   * @brief Merges interpolated lane-change segments into the base route path.
+   *
+   * @param tf_route Route transformed into trajectory frame.
+   * @param route_points Base route points before lane-change insertion.
+   * @param lane_change_indices_map Lane-change windows gathered during route processing.
+   * @return std::vector<SimplePathPoint> Path points with lane changes inserted.
+   */
+  std::vector<SimplePathPoint> mergeLaneChangeSegments(const route_planning_msgs::msg::Route& tf_route,
+                                                       const std::vector<SimplePathPoint>& route_points,
+                                                       const std::map<uint64_t, uint64_t>& lane_change_indices_map);
+
+  /**
+   * @brief Requests the appropriate indicator state for the current route plan.
+   *
+   * @param suggested_turn_signal Suggested signal derived from route semantics.
+   */
+  void applyIndicatorRequest(uint8_t suggested_turn_signal);
+
+  /**
+   * @brief Removes path points that lie behind the ego vehicle in trajectory frame.
+   *
+   * @param path Path to be trimmed in-place.
+   */
+  void trimPathBehindEgo(SimplePath& path);
+
   std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0);
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
   SimplePath calculateSafeStopAlongEgoHeading(const perception_msgs::msg::EgoData& ego_data, const double safe_stop_distance, const std_msgs::msg::Header& target_header);
   SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
-  SimplePath convertRouteToSimplePath(const route_planning_msgs::msg::Route& tf_route);
   SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
@@ -146,7 +282,6 @@ class SimplePlannerNode : public rclcpp::Node {
   double ego_data_timeout_ = 1.0;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
-  bool internal_route_update_ = false;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
   double standstill_threshold_ = 0.2;
   double v_ref_ = 13.89;

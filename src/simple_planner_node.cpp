@@ -32,8 +32,6 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("ego_data_timeout", ego_data_timeout_, "Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
-  this->declareAndLoadParameter("internal_route_update", internal_route_update_,
-                                "true: the route is received once and then updated locally in this node (cutting off the traveled route, etc.); false: the route is received cyclically (it is updated externally).");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
   this->declareAndLoadParameter("standstill_threshold", standstill_threshold_, "if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)");
@@ -43,7 +41,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
-                                "front of vehicle at stop line)");  
+                                "front of vehicle at stop line)");
   this->declareAndLoadParameter("ignore_stop_line_threshold", ignore_stop_line_threshold_,
                                 "a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
   this->declareAndLoadParameter("consider_future_states", consider_future_states_,
@@ -107,7 +105,7 @@ void SimplePlannerNode::setup() {
   // create a callback for dynamic parameter configuration
   parameters_callback_ = this->add_on_set_parameters_callback(
       std::bind(&SimplePlannerNode::parametersCallback, this, std::placeholders::_1));
-  
+
   // Annotate message links for tracing: Trajectory is published periodically based on subscriptions to egoData and route
   std::vector<const void *> link_subs = {
       static_cast<const void *>(sub_egoData_->get_subscription_handle().get()),
@@ -148,6 +146,55 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
   }
 }
 
+SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const rclcpp::Time& stamp) {
+  if (!ego_data_init_) {
+    return PlannerState::NoPublish;
+  }
+
+  if (isMessageOutdated(ego_data_.header, ego_data_timeout_, stamp)) {
+    ego_data_init_ = false;
+    RCLCPP_WARN(this->get_logger(), "EgoData is older than %f seconds. Skip publishing until fresh ego data arrives.", ego_data_timeout_);
+    return PlannerState::NoPublish;
+  }
+
+  if (!route_init_ && safe_stop_distance_ < 0.0) {
+    return PlannerState::NoPublish;
+  }
+
+  if (route_init_ && isMessageOutdated(route_.header, route_timeout_, stamp)) {
+    if (perception_msgs::object_access::getVelocityMagnitude(ego_data_) < standstill_threshold_) {
+      route_init_ = false;
+      safe_stop_distance_ = -1.0;
+      latest_path_.points.clear();
+      RCLCPP_WARN(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
+      return PlannerState::Standstill;
+    }
+    route_init_ = false;
+    return PlannerState::SafeStop;
+  }
+
+  if (route_init_ && route_.route_elements.empty()) {
+    route_init_ = false;
+    safe_stop_distance_ = -1.0;
+    latest_path_.points.clear();
+    RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory.");
+    return PlannerState::Standstill;
+  }
+
+  if (!route_init_ && safe_stop_distance_ >= 0.0) {
+    return PlannerState::SafeStop;
+  }
+
+  return PlannerState::FollowRoute;
+}
+
+bool SimplePlannerNode::isMessageOutdated(const std_msgs::msg::Header& header, double timeout, const rclcpp::Time& stamp) const {
+  if (timeout == -1.0) {
+    return false;
+  }
+  return (stamp - rclcpp::Time(header.stamp)) > rclcpp::Duration::from_seconds(timeout);
+}
+
 /**
  * @brief Main function of this node. Creates a reference trajectory based on the current route, vehicle state, and planning parameters.
  *
@@ -155,116 +202,351 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
  * handling special cases (such as route timeouts or empty routes), and considering traffic lights and lane changes.
  * The resulting trajectory is resampled over time and trimmed to fit the configured number of states.
  *
- * @throws std::runtime_error if the ego_data is too old.
  * @return trajectory_planning_msgs::msg::Trajectory The generated trajectory message.
  */
-trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory() {
+trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(PlannerState state, const rclcpp::Time& stamp) {
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
 
-  // define trajectory message and set header
-  int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
   trajectory_planning_msgs::msg::Trajectory tra;
-  tra.header.stamp = now();
-  tra.header.frame_id = trajectory_frame_id_;
-
-  // init path variable
-  SimplePath path;
-
-  // check if ego data is outdated
-  if ((ego_data_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(ego_data_.header.stamp)) > rclcpp::Duration::from_seconds(ego_data_timeout_)) {
-    ego_data_init_ = false;
-    throw std::range_error("EgoData is older than " + std::to_string(ego_data_timeout_) + ".");
-  }
-
-  // check if route is outdated
-  if ((route_timeout_ != -1.0) && (rclcpp::Time(tra.header.stamp) - rclcpp::Time(route_.header.stamp)) > rclcpp::Duration::from_seconds(route_timeout_)) {
-
-    // check if ego vehicle is moving and initate safe stop if necessary
-    double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-    if (current_velocity < standstill_threshold_) { // no route; ego vehicle is not moving -> vehicle is in standstill; reset variables
-      trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
-      route_init_ = false; // reset route initialization flag
-      safe_stop_distance_ = -1.0; // reset safe stop distance
-      RCLCPP_WARN(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
-      return tra; // return standstill trajectory
-    } else if (internal_route_update_) { // internal route update
-      RCLCPP_ERROR(this->get_logger(), "TODO: handle internal route update"); // TODO: handle internal route update
-    } else if (safe_stop_distance_ < 0.0) { // no route; ego vehicle is moving -> initiate safe stop
-      route_init_ = false; // reset route initialization flag
-      // init safe stop and calculate safe stop distance based on current velocity and maximum deceleration
-      safe_stop_distance_ = - 0.5 * std::pow(current_velocity, 2) / a_max_decel_;
-      SimplePath safe_stop_path = transformPath(latest_path_, tra.header);
-      while (!safe_stop_path.points.empty() && safe_stop_path.points[0].position.x() < 0.0) { // remove first point of path as long as it is behind the ego vehicle
-        safe_stop_path.points.erase(safe_stop_path.points.begin());
-      }
-      if (safe_stop_path.points.empty()) {
-        RCLCPP_WARN(this->get_logger(), "No latest route available. Initialize safe stop along ego heading. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
-        latest_path_ = calculateSafeStopAlongEgoHeading(ego_data_, safe_stop_distance_, tra.header);
-      } else {
-        RCLCPP_WARN(this->get_logger(), "Initialize safe stop along latest route. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
-        latest_path_ = calculateSafeStopAlongRoute(safe_stop_path, safe_stop_distance_);
-      }
-      path = latest_path_; // initial safe stop path
-    } else { // safe stop is already initialized -> update path
-      RCLCPP_DEBUG(this->get_logger(), "Special Case: Executing safe stop.");
-      path = transformPath(latest_path_, tra.header);
+  switch (state) {
+    case PlannerState::Standstill:
+      tra = buildStandstillTrajectory(stamp);
+      break;
+    case PlannerState::SafeStop:
+      tra = buildTrajectoryFromSimplePath(buildSafeStopPath(stamp));
+      break;
+    case PlannerState::FollowRoute: {
+      safe_stop_distance_ = -1.0;
+      RoutePlanningResult route_plan = buildRoutePlan(stamp);
+      tra = buildTrajectoryFromSimplePath(route_plan.path);
+      break;
     }
-  } else if (route_.route_elements.empty()) { // received route is empty -> stanstill required
-    trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
-    route_init_ = false;
-    RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory.");
-    return tra;
-  } else { // route is up to date -> create path from route
-    RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
-    // time-transform route to current trajectory_frame_id_ frame
-    geometry_msgs::msg::TransformStamped tf;
-    try {
-      tf =
-          tf2_buffer_->lookupTransform(tra.header.frame_id, tra.header.stamp, route_.header.frame_id, route_.header.stamp,
-                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
-    } catch (tf2::TransformException& ex) {
-      RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
-    }
-    route_planning_msgs::msg::Route tf_route;
-    tf2::doTransform(route_, tf_route, tf);
-
-    // generate SimplePath from route
-    path = convertRouteToSimplePath(tf_route);
+    case PlannerState::NoPublish:
+      throw std::runtime_error("createTrajectory called for non-publish state");
   }
-
-  // remove first point of path as long as it is behind the ego vehicle
-  while (!path.points.empty() && path.points[0].position.x() < 0.0) {
-    path.points.erase(path.points.begin());
-  }
-
-  latest_path_ = path;
-  std::vector<SimplePathPoint> path_points = latest_path_.points;
-
-  // keep maximum the first n_states_ in path (and therefore in trajectory)
-  if ((size_t) n_states_ < path_points.size()) {
-    path_points.erase(path_points.begin() + n_states_, path_points.end());
-  }
-
-  // init trajectory and fill with path (route) and velocity (const from param) data
-  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
-  if (!path_points.empty()) { // only fill trajectory if path is not empty
-    for (int i = 0; i < n_states_; i++) {
-      int idx = (size_t)i < path_points.size() ? i : path_points.size() - 1; // multiple points at end of path if n_states_ > path_points.size()
-      trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
-      trajectory_planning_msgs::trajectory_access::setX(tra, path_points[idx].position.x(), i);
-      trajectory_planning_msgs::trajectory_access::setY(tra, path_points[idx].position.y(), i);
-      trajectory_planning_msgs::trajectory_access::setV(tra, path_points[idx].v, i);
-      RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
-                  dt_ * i, path_points[idx].position.x(), path_points[idx].position.y(), path_points[idx].v, path_points[idx].s);
-    }
-  }
-  trajectory_planning_msgs::trajectory_access::setStandstill(tra, path_points.empty());
-
-  RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
 
   rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   RCLCPP_DEBUG(this->get_logger(), "Trajectory creation took %f ms", (end - begin).seconds() * 1e3);
   return tra;
+}
+
+trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildStandstillTrajectory(const rclcpp::Time& stamp) {
+  int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
+  trajectory_planning_msgs::msg::Trajectory tra;
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
+  tra.header.stamp = stamp;
+  tra.header.frame_id = trajectory_frame_id_;
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, true);
+  return tra;
+}
+
+trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFromSimplePath(const SimplePath& path) {
+  SimplePath usable_path = path;
+  trimPathBehindEgo(usable_path);
+
+  if (usable_path.points.empty()) {
+    safe_stop_distance_ = -1.0;
+    latest_path_.points.clear();
+    RCLCPP_WARN(this->get_logger(), "No usable forward path remains. Publishing standstill trajectory.");
+    return buildStandstillTrajectory(rclcpp::Time(path.header.stamp));
+  }
+
+  latest_path_ = usable_path;
+  std::vector<SimplePathPoint> path_points = latest_path_.points;
+  if ((size_t) n_states_ < path_points.size()) {
+    path_points.erase(path_points.begin() + n_states_, path_points.end());
+  }
+
+  int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
+  trajectory_planning_msgs::msg::Trajectory tra;
+  trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, n_states_);
+  tra.header = usable_path.header;
+
+  for (int i = 0; i < n_states_; i++) {
+    int idx = (size_t)i < path_points.size() ? i : path_points.size() - 1;
+    trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
+    trajectory_planning_msgs::trajectory_access::setX(tra, path_points[idx].position.x(), i);
+    trajectory_planning_msgs::trajectory_access::setY(tra, path_points[idx].position.y(), i);
+    trajectory_planning_msgs::trajectory_access::setV(tra, path_points[idx].v, i);
+    RCLCPP_DEBUG(this->get_logger(), "Debug: i: %d,  t: %f,  x: %f,  y: %f,  v: %f, s: %f", i,
+                dt_ * i, path_points[idx].position.x(), path_points[idx].position.y(), path_points[idx].v, path_points[idx].s);
+  }
+
+  trajectory_planning_msgs::trajectory_access::setStandstill(tra, false);
+  RCLCPP_DEBUG(this->get_logger(), "Standstill = %d", tra.standstill);
+  return tra;
+}
+
+SimplePath SimplePlannerNode::buildSafeStopPath(const rclcpp::Time& stamp) {
+  std_msgs::msg::Header target_header;
+  target_header.stamp = stamp;
+  target_header.frame_id = trajectory_frame_id_;
+  if (safe_stop_distance_ < 0.0) {
+    double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+    safe_stop_distance_ = -0.5 * std::pow(current_velocity, 2) / a_max_decel_;
+
+    SimplePath safe_stop_path = transformPath(latest_path_, target_header);
+    trimPathBehindEgo(safe_stop_path);
+    if (safe_stop_path.points.empty()) {
+      RCLCPP_WARN(this->get_logger(), "No latest route available. Initialize safe stop along ego heading. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
+      latest_path_ = transformPath(calculateSafeStopAlongEgoHeading(ego_data_, safe_stop_distance_, target_header), target_header);
+    } else {
+      RCLCPP_WARN(this->get_logger(), "Initialize safe stop along latest route. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
+      latest_path_ = calculateSafeStopAlongRoute(safe_stop_path, safe_stop_distance_);
+    }
+    return latest_path_;
+  }
+
+  RCLCPP_DEBUG(this->get_logger(), "Special Case: Executing safe stop.");
+  return transformPath(latest_path_, target_header);
+}
+
+SimplePlannerNode::RoutePlanningResult SimplePlannerNode::buildRoutePlan(const rclcpp::Time& stamp) {
+  RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
+  std_msgs::msg::Header target_header;
+  target_header.stamp = stamp;
+  target_header.frame_id = trajectory_frame_id_;
+
+  geometry_msgs::msg::TransformStamped tf;
+  try {
+    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, route_.header.frame_id, route_.header.stamp,
+                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+  } catch (tf2::TransformException& ex) {
+    RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
+  }
+
+  route_planning_msgs::msg::Route tf_route;
+  tf2::doTransform(route_, tf_route, tf);
+  RoutePlanningResult route_plan;
+  route_plan.path.header = tf_route.header;
+
+  std::map<uint64_t, uint64_t> lane_change_indices_map;
+  appendRoutePoints(tf_route, route_plan, lane_change_indices_map);
+
+  std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
+  recalculateS(merged_points);
+  route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
+  applyIndicatorRequest(route_plan.suggested_turn_signal);
+  return route_plan;
+}
+
+void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, RoutePlanningResult& route_plan,
+                                          std::map<uint64_t, uint64_t>& lane_change_indices_map) {
+  double t_total = 0.0;
+  RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
+
+  for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
+    const auto& route_element = tf_route.route_elements[j];
+    if (!route_element.is_enriched) {
+      RCLCPP_DEBUG(this->get_logger(), "Route element %zu is not enriched. Skipping.", j);
+      continue;
+    }
+
+    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
+    SimplePathPoint simple_path_point;
+    simple_path_point.position = Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
+    simple_path_point.s = route_element.s;
+    simple_path_point.v = v_ref_;
+    if (v_ref_ < 0.0) {
+      simple_path_point.v = suggested_lane.speed_limit / 3.6;
+    }
+
+    if (!route_plan.path.points.empty()) {
+      double v_average = (route_plan.path.points.back().v + simple_path_point.v) / 2.0;
+      double dt = 0.0;
+      if (v_average != 0.0) {
+        dt = (simple_path_point.s - route_plan.path.points.back().s) / v_average;
+      }
+      if (dt <= 0.0) {
+        RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, route_plan.path.points.back().s, simple_path_point.s);
+      }
+      t_total += dt;
+    }
+
+    if (j == tf_route.current_route_element_idx) {
+      route_plan.suggested_turn_signal = suggested_lane.suggested_turn_signal;
+    }
+
+    if (route_element.will_change_suggested_lane && !tryRegisterLaneChange(tf_route, j, lane_change_indices_map, route_plan.suggested_turn_signal)) {
+      break;
+    }
+
+    if (consider_traffic_lights_) {
+      updateTrafficLightState(tf_route, j, suggested_lane, simple_path_point, t_total,
+                              route_plan.stop_at_end, route_plan.offset_to_stop_line);
+    }
+
+    route_plan.path.points.push_back(simple_path_point);
+
+    if (j == tf_route.destination_route_element_idx - 1) {
+      SimplePathPoint destination_point;
+      destination_point.position = Eigen::Vector2d(tf_route.destination.x, tf_route.destination.y);
+      destination_point.s = simple_path_point.s + (destination_point.position - simple_path_point.position).norm();
+      destination_point.v = simple_path_point.v;
+      route_plan.path.points.push_back(destination_point);
+      route_plan.stop_at_end = true;
+    }
+    if (route_plan.stop_at_end || t_total >= 2.0 * trajectory_horizon_) {
+      break;
+    }
+  }
+}
+
+bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+                                              std::map<uint64_t, uint64_t>& lane_change_indices_map, uint8_t& suggested_turn_signal) {
+  if (route_element_idx + 1 >= tf_route.route_elements.size()) {
+    RCLCPP_WARN(this->get_logger(), "Route element %zu is the last element. Cannot change lane.", route_element_idx);
+    return false;
+  }
+
+  int i_end = route_element_idx + 1;
+  const auto& route_element = tf_route.route_elements[route_element_idx];
+  size_t current_lane_idx = route_element.suggested_lane_idx;
+  int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[route_element_idx + 1]);
+  if (lane_change_direction < 0) {
+    suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT;
+  } else if (lane_change_direction > 0) {
+    suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT;
+  }
+
+  double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+  double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
+  RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
+
+  double ds = 0.0;
+  int i_start = route_element_idx;
+  while (ds < lane_change_distance && i_start > 0) {
+    if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_start - 1])) {
+      current_lane_idx = *result;
+    } else {
+      RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_start);
+      break;
+    }
+    if ((i_start - 2) >= 0 && tf_route.route_elements[i_start - 2].will_change_suggested_lane) {
+      RCLCPP_WARN(this->get_logger(), "Found previous lane change in route element: %u. Could not extend lane change over this element.", i_start - 2);
+      break;
+    }
+    if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start - 1], current_lane_idx, lane_change_direction)) {
+      RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_start - 1);
+      break;
+    }
+    ds += std::abs(tf_route.route_elements[i_start].s - tf_route.route_elements[i_start - 1].s);
+    i_start--;
+  }
+
+  if (!tf_route.route_elements[i_start].is_enriched || !tf_route.route_elements[i_end].is_enriched) {
+    RCLCPP_WARN(this->get_logger(), "Not enough enriched route elements (%u, %u) for lane change.", i_start, i_end);
+    return false;
+  }
+
+  lane_change_indices_map[route_element_idx] = i_start;
+  return true;
+}
+
+void SimplePlannerNode::updateTrafficLightState(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+                                                const route_planning_msgs::msg::LaneElement& suggested_lane,
+                                                const SimplePathPoint& simple_path_point, double t_total,
+                                                bool& stop_at_end, double& offset_to_stop_line) {
+  const auto& route_element = tf_route.route_elements[route_element_idx];
+  const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
+  for (size_t k = 0; k < reg_elems.size(); ++k) {
+    if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) {
+      continue;
+    }
+    if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED && !consider_future_states_) {
+      continue;
+    }
+
+    offset_to_stop_line = offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
+    double dt_offset_to_stop_line = 0.0;
+    if (simple_path_point.v != 0.0) {
+      dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v;
+    }
+    if (dt_offset_to_stop_line <= 0.0) {
+      RCLCPP_WARN(this->get_logger(), "Negative time difference 'dt_offset_to_stop_line': %f. Could lead to unexpected behavior.", dt_offset_to_stop_line);
+    }
+
+    if (reg_elems[k].has_validity_stamp && consider_future_states_) {
+      double validity_duration = rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
+      if (validity_duration < (t_total - dt_offset_to_stop_line)) {
+        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
+          stop_at_end = true;
+        } else {
+          continue;
+        }
+      } else {
+        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
+          continue;
+        } else {
+          stop_at_end = true;
+        }
+      }
+    } else {
+      stop_at_end = true;
+    }
+
+    double distance_to_stop_point = tf_route.route_elements[route_element_idx].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line;
+    double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+    double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
+    if (distance_to_stop_point < 0.0 && std::abs(distance_to_stop_point) > ignore_stop_line_threshold_) {
+      RCLCPP_WARN(this->get_logger(), "Ignoring traffic light behind ego vehicle. Threshold: %f m, distance to stop point of traffic light: %f m", ignore_stop_line_threshold_, distance_to_stop_point);
+      stop_at_end = false;
+    } else if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
+      RCLCPP_WARN(this->get_logger(), "Ignoring traffic light in front of ego vehicle. Distance to stop point of traffic light: %f m, minimum distance to stop: %f m", distance_to_stop_point, min_distance_to_stop);
+      stop_at_end = false;
+    }
+  }
+}
+
+std::vector<SimplePathPoint> SimplePlannerNode::mergeLaneChangeSegments(const route_planning_msgs::msg::Route& tf_route,
+                                                                        const std::vector<SimplePathPoint>& route_points,
+                                                                        const std::map<uint64_t, uint64_t>& lane_change_indices_map) {
+  size_t current = 0;
+  std::vector<SimplePathPoint> merged_points;
+  for (const auto& lane_change_indices : lane_change_indices_map) {
+    uint64_t lane_change_idx_route = lane_change_indices.first;
+    uint64_t start_idx_route = lane_change_indices.second;
+    int start_idx = std::max(static_cast<int>(start_idx_route - tf_route.current_route_element_idx), 0);
+    int end_idx = (lane_change_idx_route + 1) - tf_route.current_route_element_idx;
+    merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.begin() + start_idx);
+    std::vector<SimplePathPoint> lane_change_points = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
+    merged_points.insert(merged_points.end(), lane_change_points.begin(), lane_change_points.end());
+    current = end_idx + 1;
+  }
+  merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.end());
+  return merged_points;
+}
+
+void SimplePlannerNode::applyIndicatorRequest(uint8_t suggested_turn_signal) {
+  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE &&
+      left_turn_indicator_service_client_->service_is_ready() && right_turn_indicator_service_client_->service_is_ready() &&
+      hazard_lights_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = false;
+    left_turn_indicator_service_client_->async_send_request(request);
+    right_turn_indicator_service_client_->async_send_request(request);
+    hazard_lights_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT && left_turn_indicator_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = true;
+    left_turn_indicator_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT && right_turn_indicator_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = true;
+    right_turn_indicator_service_client_->async_send_request(request);
+  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_HAZARD && hazard_lights_service_client_->service_is_ready()) {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = true;
+    hazard_lights_service_client_->async_send_request(request);
+  } else {
+    RCLCPP_WARN(this->get_logger(), "Indicator service is not ready yet. Suggested turn signal: %d", suggested_turn_signal);
+  }
+}
+
+void SimplePlannerNode::trimPathBehindEgo(SimplePath& path) {
+  while (!path.points.empty() && path.points[0].position.x() < 0.0) {
+    path.points.erase(path.points.begin());
+  }
 }
 
 SimplePath SimplePlannerNode::calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance) {
@@ -293,6 +575,9 @@ SimplePath SimplePlannerNode::calculateSafeStopAlongEgoHeading(const perception_
   double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data);
   geometry_msgs::msg::Pose pose = perception_msgs::object_access::getPose(ego_data);
 
+  (void)target_header;
+  (void)pose;
+
   SimplePathPoint start_point(Eigen::Vector2d(0.0, 0.0), 0.0, v_ego);
   safe_stop_path.points.push_back(start_point);
   SimplePathPoint mid_point(Eigen::Vector2d(safe_stop_distance / 2.0, 0.0), safe_stop_distance / 2.0, v_ego);
@@ -302,205 +587,6 @@ SimplePath SimplePlannerNode::calculateSafeStopAlongEgoHeading(const perception_
 
   safe_stop_path.points = resamplePath(safe_stop_path.points, true, 0.0);
   return safe_stop_path;
-}
-
-SimplePath SimplePlannerNode::convertRouteToSimplePath(const route_planning_msgs::msg::Route& tf_route) {
-  bool stop_at_end = false;
-  double t_total = 0.0;
-  double offset_to_stop_line = 0.0;
-  uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
-  SimplePath path;
-  path.header = tf_route.header;
-  std::map<uint64_t, uint64_t> lane_change_indices_map; // maps lane change idx (j) to start lane change idx (i_start)
-  RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
-  for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
-    const auto& route_element = tf_route.route_elements[j];
-    if (!route_element.is_enriched) {
-      RCLCPP_DEBUG(this->get_logger(), "Route element %zu is not enriched. Skipping.", j);
-      continue;
-    }
-
-    const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
-    SimplePathPoint simple_path_point;
-    simple_path_point.position = Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
-    simple_path_point.s = route_element.s;
-    simple_path_point.v = v_ref_; // default: use constant velocity from params
-    if (v_ref_ < 0.0) { // use velocity from route if param v_ref_ is negative
-      simple_path_point.v = suggested_lane.speed_limit / 3.6; // convert km/h to m/s
-    }
-
-    if (path.points.size() > 0) {
-      // calculate time difference to previous point
-      double v_average = (path.points.back().v + simple_path_point.v) / 2.0; // average velocity between last point and current point
-      double dt = 0.0;
-      if (v_average != 0.0) { // avoid division by zero
-        dt = (simple_path_point.s - path.points.back().s) / v_average; // time difference to previous point
-      }
-      if (dt <= 0.0) {
-        RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, path.points.back().s, simple_path_point.s);
-      }
-      t_total += dt;
-    }
-
-    // check for suggested turn signal
-    if (j == tf_route.current_route_element_idx) suggested_turn_signal = suggested_lane.suggested_turn_signal;
-
-    // get starting lane change index
-    if (route_element.will_change_suggested_lane) {
-      if (j+1 >= tf_route.route_elements.size()) {
-        RCLCPP_WARN(this->get_logger(), "Route element %zu is the last element. Cannot change lane.", j);
-        break;
-      }
-      int i_end = j + 1; // lane change should end at the next route element
-
-      size_t current_lane_idx = route_element.suggested_lane_idx;
-      int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[j+1]);
-      if (lane_change_direction < 0) {
-        suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT;
-      } else if (lane_change_direction > 0) {
-        suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT;
-      }
-      double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-      double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
-      RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
-
-      double ds = 0.0;
-      int i_start = j;
-      while (ds < lane_change_distance && i_start > 0) {
-        if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx, tf_route.route_elements[i_start-1])) {
-          current_lane_idx = *result;
-        } else {
-          RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_start);
-          break;
-        }
-        if ((i_start - 2) >= 0 && tf_route.route_elements[i_start-2].will_change_suggested_lane) {
-          RCLCPP_WARN(this->get_logger(), "Found previous lane change in route element: %u. Could not extend lane change over this element.", i_start-2);
-          break;
-        }
-        if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start-1], current_lane_idx, lane_change_direction)) {
-          RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_start-1);
-          break;
-        }
-        ds = ds + std::abs(tf_route.route_elements[i_start].s - tf_route.route_elements[i_start-1].s);
-        i_start--;
-      }
-
-      if (!tf_route.route_elements[i_start].is_enriched || !tf_route.route_elements[i_end].is_enriched) {
-        RCLCPP_WARN(this->get_logger(), "Not enough enriched route elements (%u, %u) for lane change.", i_start, i_end);
-        break;
-      }
-
-      lane_change_indices_map[j] = i_start;
-    }
-
-    // check for traffic light along the route element
-    if (consider_traffic_lights_) {
-      const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
-      for (size_t k = 0; k < reg_elems.size(); ++k) {
-        if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) continue;
-        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED && !consider_future_states_) continue;
-        offset_to_stop_line = offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
-        double dt_offset_to_stop_line = 0.0;
-        if (simple_path_point.v != 0.0) {
-          dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v; // time to stop in front of traffic light
-        }
-        if (dt_offset_to_stop_line <= 0.0) {
-          RCLCPP_WARN(this->get_logger(), "Negative time difference 'dt_offset_to_stop_line': %f. Could lead to unexpected behavior.", dt_offset_to_stop_line);
-        }
-
-        if (reg_elems[k].has_validity_stamp && consider_future_states_) {
-          double validity_duration = rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
-          if (validity_duration < (t_total - dt_offset_to_stop_line)) {
-            if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
-              stop_at_end = true; // change from green to red until stop point is reached
-            } else {
-              continue;           // change from red to green until stop point is reached
-            }
-          } else {
-            if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
-              continue;           // green light, no stop required
-            } else {
-              stop_at_end = true; // red light, stop required
-            }
-          }
-        } else {
-          stop_at_end = true; // no validity stamp or no future states considered, stop required
-        }
-
-        // ignore stop point if can't stop with appropriate deceleration or if already passed stop line
-        double distance_to_stop_point = tf_route.route_elements[j].s - tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line;
-        double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-        double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
-        if (distance_to_stop_point < 0.0 && std::abs(distance_to_stop_point) > ignore_stop_line_threshold_) {
-          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light behind ego vehicle. Threshold: %f m, distance to stop point of traffic light: %f m", ignore_stop_line_threshold_, distance_to_stop_point);
-          stop_at_end = false;
-        } else if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
-          RCLCPP_WARN(this->get_logger(), "Ignoring traffic light in front of ego vehicle. Distance to stop point of traffic light: %f m, minimum distance to stop: %f m", distance_to_stop_point, min_distance_to_stop);
-          stop_at_end = false;
-        }
-      }
-    }
-
-    // add simple path point to path
-    path.points.push_back(simple_path_point);
-
-    // break loop if stop at end (traffic light or end of route) or if total time exceeds 2x trajectory horizon
-    if (j == tf_route.destination_route_element_idx - 1) {
-      // add destination point as last point of path
-      SimplePathPoint destination_point;
-      destination_point.position = Eigen::Vector2d(tf_route.destination.x, tf_route.destination.y);
-      destination_point.s = simple_path_point.s + (destination_point.position - simple_path_point.position).norm(); // calculate s value for destination point (linear)
-      destination_point.v = simple_path_point.v; // use same velocity as last point
-      path.points.push_back(destination_point);
-      stop_at_end = true;
-    }
-    if (stop_at_end || t_total >= 2.0 * trajectory_horizon_) break;
-  }
-
-  // generate lane change segments and insert them into path points
-  size_t current = 0;
-  std::vector<SimplePathPoint> merged_points;
-  for (const auto& lane_change_indices : lane_change_indices_map) {
-    uint64_t lane_change_idx_route = lane_change_indices.first;
-    uint64_t start_idx_route = lane_change_indices.second;
-    int start_idx = std::max(static_cast<int>(start_idx_route - tf_route.current_route_element_idx), 0);
-    int end_idx = (lane_change_idx_route + 1) - tf_route.current_route_element_idx; // lane change should end at the next route element
-    merged_points.insert(merged_points.end(), path.points.begin() + current, path.points.begin() + start_idx);
-    std::vector<SimplePathPoint> lane_change_points = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
-    merged_points.insert(merged_points.end(), lane_change_points.begin(), lane_change_points.end());
-    current = end_idx+1;
-  }
-  merged_points.insert(merged_points.end(), path.points.begin() + current, path.points.end()); // add remaining tail
-  recalculateS(merged_points); // recalculate s values for merged points
-
-  // resample points over time
-  std::vector<SimplePathPoint> resampled_path = resamplePath(merged_points, stop_at_end, offset_to_stop_line);
-
-  // request turn indicator activation / deactivation
-  if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE && left_turn_indicator_service_client_->service_is_ready() && right_turn_indicator_service_client_->service_is_ready() && hazard_lights_service_client_->service_is_ready()) {
-    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-    request->data = false;
-    left_turn_indicator_service_client_->async_send_request(request);
-    right_turn_indicator_service_client_->async_send_request(request);
-    hazard_lights_service_client_->async_send_request(request);
-  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT && left_turn_indicator_service_client_->service_is_ready()) {
-    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-    request->data = true;
-    left_turn_indicator_service_client_->async_send_request(request);
-  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT && right_turn_indicator_service_client_->service_is_ready()) {
-    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-    request->data = true;
-    right_turn_indicator_service_client_->async_send_request(request);
-  } else if (suggested_turn_signal == route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_HAZARD && hazard_lights_service_client_->service_is_ready()) {
-    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-    request->data = true;
-    hazard_lights_service_client_->async_send_request(request);
-  } else {
-    RCLCPP_WARN(this->get_logger(), "Indicator service is not ready yet. Suggested turn signal: %d", suggested_turn_signal);
-  }
-
-  path.points = std::move(resampled_path);
-  return path;
 }
 
 std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int start_idx, const int turn_idx,
@@ -568,7 +654,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     // find index of segment in route (not required if using linearInterpolation from utils)
     int idx = -1;
     for (size_t j = 0; j < path.size() - 1; ++j) {
-      if (s >= path[j].s && s <= path[j+1].s) {
+      if (s >= path[j].s && s <= path[j + 1].s) {
         idx = j;
         break;
       }
@@ -576,7 +662,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
 
     double v = v_ref_; // option 1: use predefined constant velocity
     if (v_ref_ < 0.0 && idx >= 0) { // option 2: use velocity from route if predefined velocity is negative
-      v = path[idx].v + (path[idx+1].v - path[idx].v) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
+      v = path[idx].v + (path[idx + 1].v - path[idx].v) / (path[idx + 1].s - path[idx].s) * (s - path[idx].s);
     }
 
     double distance_to_stop = -0.5 * std::pow(v, 2) / a_decel_ + offset_to_stop_line;
@@ -607,8 +693,8 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       simple_path_point.position.y() = y_spline(s);
     }
     else if ((interpolation_type_ == InterpolationType::SPLINE && path.size() <= 2) || interpolation_type_ == InterpolationType::LINEAR) { // linear interpolation // TODO: could be improved by using our linearInterpolation function -> no need for idx anymore
-      simple_path_point.position.x() = path[idx].position.x() + (path[idx+1].position.x() - path[idx].position.x()) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
-      simple_path_point.position.y() = path[idx].position.y() + (path[idx+1].position.y() - path[idx].position.y()) / (path[idx+1].s - path[idx].s) * (s - path[idx].s);
+      simple_path_point.position.x() = path[idx].position.x() + (path[idx + 1].position.x() - path[idx].position.x()) / (path[idx + 1].s - path[idx].s) * (s - path[idx].s);
+      simple_path_point.position.y() = path[idx].position.y() + (path[idx + 1].position.y() - path[idx].position.y()) / (path[idx + 1].s - path[idx].s) * (s - path[idx].s);
     }
     else { // unsupported interpolation type
       RCLCPP_ERROR(this->get_logger(), "Unsupported interpolation type value %d", interpolation_type_);
@@ -634,13 +720,14 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
  *
  */
 void SimplePlannerNode::publishTimerCallback() {
-  // if route and ego data are not received, do nothing
-  if ((!route_init_ && safe_stop_distance_ < 0.0) || !ego_data_init_) {
+  const rclcpp::Time stamp = now();
+  PlannerState planner_state = determinePlannerState(stamp);
+  if (planner_state == PlannerState::NoPublish) {
     return;
   }
 
   try {
-    trajectory_planning_msgs::msg::Trajectory msg = createTrajectory();
+    trajectory_planning_msgs::msg::Trajectory msg = createTrajectory(planner_state, stamp);
     pub_->publish(msg);
     RCLCPP_DEBUG(this->get_logger(), "Published Trajectory!");
   } catch (const std::runtime_error& e) {
