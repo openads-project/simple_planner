@@ -1,6 +1,9 @@
 #include <chrono>
+#include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -11,6 +14,88 @@
 
 #include <simple_planner/simple_planner_node.hpp>
 #include <simple_planner/utils.hpp>
+#include <tf2_perception_msgs/tf2_perception_msgs.hpp>
+
+namespace {
+
+struct PathProjection {
+  bool valid = false;
+  double s = 0.0;
+  double t = 0.0;
+  double lateral_distance = std::numeric_limits<double>::infinity();
+};
+
+PathProjection projectPointOntoPath(const Eigen::Vector2d& point, const std::vector<simple_planner::SimplePathPoint>& path, double dt) {
+  PathProjection best_projection;
+  if (path.empty()) {
+    return best_projection;
+  }
+
+  if (path.size() == 1) {
+    best_projection.valid = true;
+    best_projection.s = path.front().s;
+    best_projection.t = 0.0;
+    best_projection.lateral_distance = (point - path.front().position).norm();
+    return best_projection;
+  }
+
+  for (size_t i = 0; i + 1 < path.size(); ++i) {
+    const Eigen::Vector2d segment = path[i + 1].position - path[i].position;
+    const double segment_norm_squared = segment.squaredNorm();
+    double alpha = 0.0;
+    Eigen::Vector2d projection = path[i].position;
+    if (segment_norm_squared > 1e-9) {
+      alpha = std::clamp((point - path[i].position).dot(segment) / segment_norm_squared, 0.0, 1.0);
+      projection = path[i].position + alpha * segment;
+    }
+
+    const double lateral_distance = (point - projection).norm();
+    if (lateral_distance >= best_projection.lateral_distance) {
+      continue;
+    }
+
+    best_projection.valid = true;
+    best_projection.lateral_distance = lateral_distance;
+    best_projection.s = path[i].s + alpha * (path[i + 1].s - path[i].s);
+    best_projection.t = dt * (static_cast<double>(i) + alpha);
+  }
+
+  return best_projection;
+}
+
+std::vector<simple_planner::SimplePathPoint> truncatePathAtS(const std::vector<simple_planner::SimplePathPoint>& path, double stop_s) {
+  if (path.empty() || stop_s >= path.back().s) {
+    return path;
+  }
+
+  std::vector<simple_planner::SimplePathPoint> truncated_path;
+  truncated_path.push_back(path.front());
+  if (path.size() == 1) {
+    return truncated_path;
+  }
+
+  for (size_t i = 0; i + 1 < path.size(); ++i) {
+    const auto& start_point = path[i];
+    const auto& end_point = path[i + 1];
+    if (stop_s >= end_point.s) {
+      truncated_path.push_back(end_point);
+      continue;
+    }
+
+    const double ds = end_point.s - start_point.s;
+    const double alpha = ds > 1e-9 ? std::clamp((stop_s - start_point.s) / ds, 0.0, 1.0) : 0.0;
+    simple_planner::SimplePathPoint stop_point;
+    stop_point.position = start_point.position + alpha * (end_point.position - start_point.position);
+    stop_point.s = stop_s;
+    stop_point.v = start_point.v + alpha * (end_point.v - start_point.v);
+    truncated_path.push_back(stop_point);
+    break;
+  }
+
+  return truncated_path;
+}
+
+}  // namespace
 
 /**
  * @brief Namespace for simple_planner package
@@ -30,6 +115,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
   this->declareAndLoadParameter("route_timeout", route_timeout_, "Time after which a received route is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("ego_data_timeout", ego_data_timeout_, "Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout)");
+  this->declareAndLoadParameter("object_timeout", object_timeout_, "Time after which a received object list is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
@@ -47,6 +133,16 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
   this->declareAndLoadParameter("consider_future_states", consider_future_states_,
                                 "true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state");
+  this->declareAndLoadParameter("consider_objects", consider_objects_,
+                                "true: planner will consider perceived objects on the route; false: planner will ignore objects");
+  this->declareAndLoadParameter("min_object_existence_prob", min_object_existence_prob_,
+                                "minimum object existence probability for considering an object on the route");
+  this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
+                                "minimum probability for considering an object prediction branch");
+  this->declareAndLoadParameter("object_lateral_margin", object_lateral_margin_,
+                                "additional lateral safety margin when associating objects with the route path (m)");
+  this->declareAndLoadParameter("object_time_tolerance", object_time_tolerance_,
+                                "maximum absolute time difference between object prediction and ego arrival for considering a predicted state blocking (s)");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
@@ -90,6 +186,10 @@ void SimplePlannerNode::setup() {
       kEgoDataTopic, 10, std::bind(&SimplePlannerNode::egoDataCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_egoData_->get_topic_name());
 
+  sub_object_list_ = this->create_subscription<perception_msgs::msg::ObjectList>(
+      kObjectListTopic, 10, std::bind(&SimplePlannerNode::objectListCallback, this, std::placeholders::_1));
+  RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_object_list_->get_topic_name());
+
   // create subscriber for route
   sub_route_ = this->create_subscription<route_planning_msgs::msg::Route>(
       kRouteTopic, 10, std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
@@ -110,6 +210,7 @@ void SimplePlannerNode::setup() {
   // Annotate message links for tracing: Trajectory is published periodically based on subscriptions to egoData and route
   std::vector<const void *> link_subs = {
       static_cast<const void *>(sub_egoData_->get_subscription_handle().get()),
+      static_cast<const void *>(sub_object_list_->get_subscription_handle().get()),
       static_cast<const void *>(sub_route_->get_subscription_handle().get())
   };
   std::vector<const void *> link_pubs = {
@@ -129,6 +230,15 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
   if (!ego_data_init_) {
     ego_data_init_ = true;
     RCLCPP_INFO(this->get_logger(), "Received first ego data message, initialized global variable");
+  }
+}
+
+void SimplePlannerNode::objectListCallback(const perception_msgs::msg::ObjectList::UniquePtr msg) {
+  object_list_ = *msg;
+
+  if (!object_list_init_) {
+    object_list_init_ = true;
+    RCLCPP_INFO(this->get_logger(), "Received first object list message, initialized global variable");
   }
 }
 
@@ -338,10 +448,114 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
   recalculateS(merged_points);
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
+  applyObjectConstraints(target_header, merged_points, route_plan);
   if (trigger_turn_signals_) {
     applyIndicatorRequest(route_plan.suggested_turn_signal);
   }
   return route_plan;
+}
+
+void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& target_header,
+                                               const std::vector<SimplePathPoint>& base_path_points,
+                                               FollowRoutePlan& route_plan) {
+  if (!consider_objects_ || !object_list_init_ || route_plan.path.points.empty() || base_path_points.empty()) {
+    return;
+  }
+
+  const rclcpp::Time stamp(target_header.stamp);
+
+  if (isMessageOutdated(object_list_.header, object_timeout_, stamp)) {
+    RCLCPP_DEBUG(this->get_logger(), "Object list is older than %f seconds. Ignoring objects for this planning cycle.", object_timeout_);
+    return;
+  }
+
+  geometry_msgs::msg::TransformStamped tf;
+  try {
+    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, object_list_.header.frame_id, object_list_.header.stamp,
+                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+  } catch (tf2::TransformException& ex) {
+    RCLCPP_WARN(this->get_logger(), "Object transformation is not available: %s", ex.what());
+    return;
+  }
+
+  perception_msgs::msg::ObjectList tf_object_list;
+  tf2::doTransform(object_list_, tf_object_list, tf);
+
+  const double ego_front_offset = ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
+  std::optional<double> earliest_stop_s;
+  std::optional<uint64_t> blocking_object_id;
+
+  for (const auto& object : tf_object_list.objects) {
+    if (object.existence_probability < min_object_existence_prob_) {
+      continue;
+    }
+
+    double object_width = 0.0;
+    double object_length = 0.0;
+    try {
+      object_width = perception_msgs::object_access::getWidth(object);
+      object_length = perception_msgs::object_access::getLength(object);
+    } catch (const std::exception&) {
+      object_width = 0.0;
+      object_length = 0.0;
+    }
+
+    const double lateral_threshold = ego_data_.width / 2.0 + object_width / 2.0 + object_lateral_margin_;
+    auto evaluate_state = [&](const perception_msgs::msg::ObjectState& state, bool require_temporal_match) {
+      const auto position_msg = perception_msgs::object_access::getCenterPosition(state);
+      const Eigen::Vector2d object_position(position_msg.x, position_msg.y);
+      const PathProjection projection = projectPointOntoPath(object_position, route_plan.path.points, dt_);
+      if (!projection.valid || projection.s <= 0.0 || projection.lateral_distance > lateral_threshold) {
+        return;
+      }
+
+      const double object_time = std::max((rclcpp::Time(state.header.stamp) - stamp).seconds(), 0.0);
+      if (require_temporal_match && std::abs(object_time - projection.t) > object_time_tolerance_) {
+        return;
+      }
+
+      const double stop_s = projection.s - ego_front_offset - object_length / 2.0;
+      if (stop_s <= 0.0) {
+        return;
+      }
+
+      if (!earliest_stop_s || stop_s < *earliest_stop_s) {
+        earliest_stop_s = stop_s;
+        blocking_object_id = object.id;
+      }
+    };
+
+    bool used_prediction = false;
+    const auto prediction_it = std::max_element(
+        object.state_predictions.begin(), object.state_predictions.end(),
+        [](const auto& lhs, const auto& rhs) { return lhs.probability < rhs.probability; });
+    if (prediction_it != object.state_predictions.end() && prediction_it->probability >= min_prediction_prob_) {
+      used_prediction = true;
+      for (const auto& state : prediction_it->states) {
+        evaluate_state(state, true);
+      }
+    }
+
+    if (!used_prediction) {
+      evaluate_state(object.state, false);
+    }
+  }
+
+  if (!earliest_stop_s || *earliest_stop_s >= base_path_points.back().s) {
+    return;
+  }
+
+  std::vector<SimplePathPoint> constrained_path = truncatePathAtS(base_path_points, *earliest_stop_s);
+  if (constrained_path.empty()) {
+    return;
+  }
+
+  route_plan.stop_at_end = true;
+  route_plan.offset_to_stop_line = 0.0;
+  route_plan.path.points = resamplePath(constrained_path, true, 0.0);
+  if (blocking_object_id) {
+    RCLCPP_INFO(this->get_logger(), "Applying longitudinal stop for object %lu at s=%f m", *blocking_object_id, *earliest_stop_s);
+  }
 }
 
 void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, FollowRoutePlan& route_plan,
@@ -615,7 +829,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
 
   // Interpolate between the two elements
   for (int i = start_idx; i <= end_idx; ++i) {
-    if ((i - route.current_route_element_idx) < 0) continue;
+    if (i < static_cast<int>(route.current_route_element_idx)) continue;
 
     const auto& route_element = route.route_elements[i];
     const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);

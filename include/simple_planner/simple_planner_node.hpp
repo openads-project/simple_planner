@@ -7,6 +7,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 
 #include <perception_msgs/msg/ego_data.hpp>
+#include <perception_msgs/msg/object_list.hpp>
 #include <perception_msgs_utils/object_access.hpp>
 
 #include <rclcpp/rclcpp.hpp>
@@ -65,6 +66,7 @@ class SimplePlannerNode : public rclcpp::Node {
   };
 
   const std::string kEgoDataTopic = "~/ego_data";
+  const std::string kObjectListTopic = "~/objects";
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
 
@@ -113,6 +115,12 @@ class SimplePlannerNode : public rclcpp::Node {
   void setup();
 
   void egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg);
+  /**
+   * @brief Stores the latest perceived object list including object predictions.
+   *
+   * @param msg Latest object list message.
+   */
+  void objectListCallback(const perception_msgs::msg::ObjectList::UniquePtr msg);
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
 
   void publishTimerCallback();
@@ -179,6 +187,20 @@ class SimplePlannerNode : public rclcpp::Node {
    * @return FollowRoutePlan Planned route path including stop and turn information.
    */
   FollowRoutePlan buildRoutePlan(const std_msgs::msg::Header& target_header);
+
+  /**
+   * @brief Applies longitudinal object-based stop constraints to a follow-route plan.
+   *
+   * The object list is transformed into trajectory frame and evaluated against the
+   * current route plan. If a blocking object is found on the path, the base route
+   * path is shortened and resampled to stop before the object.
+   *
+   * @param target_header Current planning header propagated from the timer callback.
+   * @param base_path_points Route path before time-based resampling.
+   * @param route_plan Mutable route plan to be constrained by dynamic objects.
+   */
+  void applyObjectConstraints(const std_msgs::msg::Header& target_header, const std::vector<SimplePathPoint>& base_path_points,
+                              FollowRoutePlan& route_plan);
 
   /**
    * @brief Appends route-derived path points and stop metadata for the follow-route case.
@@ -261,6 +283,7 @@ class SimplePlannerNode : public rclcpp::Node {
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
   rclcpp::Subscription<perception_msgs::msg::EgoData>::SharedPtr sub_egoData_;
+  rclcpp::Subscription<perception_msgs::msg::ObjectList>::SharedPtr sub_object_list_;
   rclcpp::Subscription<route_planning_msgs::msg::Route>::SharedPtr sub_route_;
 
   rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
@@ -286,6 +309,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double freq_ = 10.0;
   double route_timeout_ = 1.0;
   double ego_data_timeout_ = 1.0;
+  double object_timeout_ = 1.0;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
@@ -297,13 +321,20 @@ class SimplePlannerNode : public rclcpp::Node {
   double offset_to_stop_line_ = 0.0;
   double ignore_stop_line_threshold_ = 0.5;
   bool consider_future_states_ = false;
+  bool consider_objects_ = true;
+  double min_object_existence_prob_ = 0.1;
+  double min_prediction_prob_ = 0.1;
+  double object_lateral_margin_ = 0.5;
+  double object_time_tolerance_ = 0.5;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
 
   perception_msgs::msg::EgoData ego_data_;
+  perception_msgs::msg::ObjectList object_list_;
   route_planning_msgs::msg::Route route_;
 
   bool ego_data_init_ = false;
+  bool object_list_init_ = false;
   bool route_init_ = false;
   std::optional<double> safe_stop_distance_;
   SimplePath latest_path_;

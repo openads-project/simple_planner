@@ -23,6 +23,7 @@
 | Topic | Type | Description |
 | --- | --- | --- |
 | `~/ego_data` | `perception_msgs/msg/ego_data` | Input EgoData |
+| `~/objects` | `perception_msgs/msg/object_list` | Input ObjectList including object predictions |
 | `~/route` | `route_planning_msgs/msg/route` | Input Route |
 
 #### Published Topics
@@ -57,6 +58,12 @@
 | `offset_to_stop_line` | `double` | additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
 | `ignore_stop_line_threshold` | `double` | a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
 | `consider_future_states` | `bool` | true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
+| `consider_objects` | `bool` | true: planner will consider perceived objects on the route; false: planner will ignore objects |
+| `object_timeout` | `double` | time after which a received object list is considered invalid (s) (use `-1.0` for no timeout) |
+| `min_object_existence_prob` | `double` | minimum existence probability for considering an object on the route |
+| `min_prediction_prob` | `double` | minimum probability for considering an object prediction branch |
+| `object_lateral_margin` | `double` | additional lateral safety margin when associating objects with the route path (m) |
+| `object_time_tolerance` | `double` | maximum absolute time difference between object prediction and ego arrival for considering a predicted state blocking (s) |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
 

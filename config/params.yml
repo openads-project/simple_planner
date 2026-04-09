@@ -23,6 +23,14 @@
     ignore_stop_line_threshold: 0.5 # a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)
     consider_future_states: False   # true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state
 
+    #### object parameters
+    consider_objects: True          # true: planner will consider perceived objects on the route; false: planner will ignore objects
+    object_timeout: 1.0             # time after which a received object list is considered invalid (s) (use -1 for no timeout)
+    min_object_existence_prob: 0.1  # minimum existence probability for considering an object on the route
+    min_prediction_prob: 0.1        # minimum probability for considering an object prediction branch
+    object_lateral_margin: 0.5      # additional lateral safety margin when associating objects with the route path (m)
+    object_time_tolerance: 0.5      # maximum absolute time difference between object prediction and ego arrival for considering a predicted state blocking (s)
+
     #### lane change parameters
     lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)
     lane_change_min_distance_factor: 2.0 # factor multiplied with the vehicle length to determine the minimum lane change distance (m)
