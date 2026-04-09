@@ -66,7 +66,7 @@ class SimplePlannerNode : public rclcpp::Node {
   };
 
   const std::string kEgoDataTopic = "~/ego_data";
-  const std::string kObjectListTopic = "~/objects";
+  const std::string kObjectListTopic = "~/object_list";
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
 

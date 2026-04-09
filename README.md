@@ -23,7 +23,7 @@
 | Topic | Type | Description |
 | --- | --- | --- |
 | `~/ego_data` | `perception_msgs/msg/ego_data` | Input EgoData |
-| `~/objects` | `perception_msgs/msg/object_list` | Input ObjectList including object predictions |
+| `~/object_list` | `perception_msgs/msg/object_list` | Input ObjectList |
 | `~/route` | `route_planning_msgs/msg/route` | Input Route |
 
 #### Published Topics
