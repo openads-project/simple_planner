@@ -147,10 +147,10 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Creates a standstill trajectory for the current planning cycle.
    *
-   * @param stamp Current planning timestamp propagated from the timer callback.
+   * @param target_header Output header for the generated trajectory.
    * @return trajectory_planning_msgs::msg::Trajectory Standstill trajectory message.
    */
-  trajectory_planning_msgs::msg::Trajectory buildStandstillTrajectory(const rclcpp::Time& stamp);
+  trajectory_planning_msgs::msg::Trajectory buildStandstillTrajectory(const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Builds a trajectory message from a simple path.
@@ -166,18 +166,18 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Builds the initial safe-stop path for the current cycle.
    *
-   * @param stamp Current planning timestamp propagated from the timer callback.
+   * @param target_header Output header for the generated safe-stop path.
    * @return SimplePath Safe-stop path in trajectory frame.
    */
-  SimplePath buildSafeStopPath(const rclcpp::Time& stamp);
+  SimplePath buildSafeStopPath(const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Builds the complete route-following plan including route-side effects.
    *
-   * @param stamp Current planning timestamp propagated from the timer callback.
+   * @param target_header Output header for the generated route plan.
    * @return FollowRoutePlan Planned route path plus stop and indicator metadata.
    */
-  FollowRoutePlan buildRoutePlan(const rclcpp::Time& stamp);
+  FollowRoutePlan buildRoutePlan(const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Appends route-derived path points and stop metadata for the follow-route case.

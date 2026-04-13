@@ -217,24 +217,24 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
 
   trajectory_planning_msgs::msg::Trajectory tra;
+  tra.header.stamp = stamp;
+  tra.header.frame_id = trajectory_frame_id_;
+
   switch (state) {
     case PlannerState::Standstill:
-      tra = buildStandstillTrajectory(stamp);
+      tra = buildStandstillTrajectory(tra.header);
       break;
     case PlannerState::SafeStop:
       if (!safe_stop_distance_.has_value()) {
-        tra = buildTrajectoryFromSimplePath(buildSafeStopPath(stamp));
+        tra = buildTrajectoryFromSimplePath(buildSafeStopPath(tra.header));
       } else {
         RCLCPP_DEBUG(this->get_logger(), "Executing safe stop.");
-        std_msgs::msg::Header target_header;
-        target_header.stamp = stamp;
-        target_header.frame_id = trajectory_frame_id_;
-        tra = buildTrajectoryFromSimplePath(transformPath(latest_path_, target_header));
+        tra = buildTrajectoryFromSimplePath(transformPath(latest_path_, tra.header));
       }
       break;
     case PlannerState::FollowRoute: {
       safe_stop_distance_.reset();
-      FollowRoutePlan route_plan = buildRoutePlan(stamp);
+      FollowRoutePlan route_plan = buildRoutePlan(tra.header);
       tra = buildTrajectoryFromSimplePath(route_plan.path);
       break;
     }
@@ -247,12 +247,11 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
   return tra;
 }
 
-trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildStandstillTrajectory(const rclcpp::Time& stamp) {
+trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildStandstillTrajectory(const std_msgs::msg::Header& target_header) {
   int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
   trajectory_planning_msgs::msg::Trajectory tra;
   trajectory_planning_msgs::trajectory_access::initializeTrajectory(tra, type_id, 1);
-  tra.header.stamp = stamp;
-  tra.header.frame_id = trajectory_frame_id_;
+  tra.header = target_header;
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, true);
   return tra;
 }
@@ -265,7 +264,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
     safe_stop_distance_.reset();
     latest_path_.points.clear();
     RCLCPP_WARN(this->get_logger(), "No usable forward path remains. Publishing standstill trajectory.");
-    return buildStandstillTrajectory(rclcpp::Time(path.header.stamp));
+    return buildStandstillTrajectory(path.header);
   }
 
   latest_path_ = usable_path;
@@ -294,10 +293,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
   return tra;
 }
 
-SimplePath SimplePlannerNode::buildSafeStopPath(const rclcpp::Time& stamp) {
-  std_msgs::msg::Header target_header;
-  target_header.stamp = stamp;
-  target_header.frame_id = trajectory_frame_id_;
+SimplePath SimplePlannerNode::buildSafeStopPath(const std_msgs::msg::Header& target_header) {
   double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   safe_stop_distance_ = -0.5 * std::pow(current_velocity, 2) / a_max_decel_;
 
@@ -313,11 +309,8 @@ SimplePath SimplePlannerNode::buildSafeStopPath(const rclcpp::Time& stamp) {
   return latest_path_;
 }
 
-SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const rclcpp::Time& stamp) {
+SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_msgs::msg::Header& target_header) {
   RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
-  std_msgs::msg::Header target_header;
-  target_header.stamp = stamp;
-  target_header.frame_id = trajectory_frame_id_;
 
   geometry_msgs::msg::TransformStamped tf;
   try {
