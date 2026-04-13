@@ -147,20 +147,24 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
 }
 
 SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const rclcpp::Time& stamp) {
+  // ego data missing -> no publish
   if (!ego_data_init_) {
     return PlannerState::NoPublish;
   }
 
+  // ego data outdated -> no publish
   if (isMessageOutdated(ego_data_.header, ego_data_timeout_, stamp)) {
     ego_data_init_ = false;
     RCLCPP_WARN(this->get_logger(), "EgoData is older than %f seconds. Skip publishing until fresh ego data arrives.", ego_data_timeout_);
     return PlannerState::NoPublish;
   }
 
+  // no route received and no ongoing safe stop -> no publish
   if (!route_init_ && safe_stop_distance_ < 0.0) {
     return PlannerState::NoPublish;
   }
 
+  // route outdated and vehicle in standstill -> standstill
   if (route_init_ && isMessageOutdated(route_.header, route_timeout_, stamp)) {
     if (perception_msgs::object_access::getVelocityMagnitude(ego_data_) < standstill_threshold_) {
       route_init_ = false;
@@ -170,9 +174,12 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
       return PlannerState::Standstill;
     }
     route_init_ = false;
+
+    // route outdated and vehicle still moving -> safe stop
     return PlannerState::SafeStop;
   }
 
+  // route received, but empty -> standstill
   if (route_init_ && route_.route_elements.empty()) {
     route_init_ = false;
     safe_stop_distance_ = -1.0;
@@ -181,10 +188,12 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     return PlannerState::Standstill;
   }
 
+  // no fresh route, but safe stop already started -> safe stop
   if (!route_init_ && safe_stop_distance_ >= 0.0) {
     return PlannerState::SafeStop;
   }
 
+  // fresh ego data and valid route available -> follow route
   return PlannerState::FollowRoute;
 }
 
