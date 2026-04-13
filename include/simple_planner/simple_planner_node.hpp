@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -56,7 +57,7 @@ class SimplePlannerNode : public rclcpp::Node {
   enum InterpolationType { LINEAR = 0, SPLINE = 1 };
   enum class PlannerState { NoPublish, Standstill, SafeStop, FollowRoute };
 
-  struct RoutePlanningResult {
+  struct FollowRoutePlan {
     SimplePath path;
     bool stop_at_end = false;
     double offset_to_stop_line = 0.0;
@@ -163,7 +164,7 @@ class SimplePlannerNode : public rclcpp::Node {
   trajectory_planning_msgs::msg::Trajectory buildTrajectoryFromSimplePath(const SimplePath& path);
 
   /**
-   * @brief Builds or updates the safe-stop path for the current cycle.
+   * @brief Builds the initial safe-stop path for the current cycle.
    *
    * @param stamp Current planning timestamp propagated from the timer callback.
    * @return SimplePath Safe-stop path in trajectory frame.
@@ -174,9 +175,9 @@ class SimplePlannerNode : public rclcpp::Node {
    * @brief Builds the complete route-following plan including route-side effects.
    *
    * @param stamp Current planning timestamp propagated from the timer callback.
-   * @return RoutePlanningResult Planned route path plus stop and indicator metadata.
+   * @return FollowRoutePlan Planned route path plus stop and indicator metadata.
    */
-  RoutePlanningResult buildRoutePlan(const rclcpp::Time& stamp);
+  FollowRoutePlan buildRoutePlan(const rclcpp::Time& stamp);
 
   /**
    * @brief Appends route-derived path points and stop metadata for the follow-route case.
@@ -185,7 +186,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param route_plan Mutable route planning result to extend.
    * @param lane_change_indices_map Output lane-change windows to be merged later.
    */
-  void appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, RoutePlanningResult& route_plan,
+  void appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, FollowRoutePlan& route_plan,
                          std::map<uint64_t, uint64_t>& lane_change_indices_map);
 
   /**
@@ -299,7 +300,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
-  double safe_stop_distance_ = -1.0;
+  std::optional<double> safe_stop_distance_;
   SimplePath latest_path_;
   double dt_;
 };

@@ -142,7 +142,7 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
   if (!route_init_) {
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
     route_init_ = true;
-    safe_stop_distance_ = -1.0;
+    safe_stop_distance_.reset();
   }
 }
 
@@ -160,7 +160,7 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
   }
 
   // no route received and no ongoing safe stop -> no publish
-  if (!route_init_ && safe_stop_distance_ < 0.0) {
+  if (!route_init_ && !safe_stop_distance_.has_value()) {
     return PlannerState::NoPublish;
   }
 
@@ -168,7 +168,7 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
   if (route_init_ && isMessageOutdated(route_.header, route_timeout_, stamp)) {
     if (perception_msgs::object_access::getVelocityMagnitude(ego_data_) < standstill_threshold_) {
       route_init_ = false;
-      safe_stop_distance_ = -1.0;
+      safe_stop_distance_.reset();
       latest_path_.points.clear();
       RCLCPP_WARN(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
       return PlannerState::Standstill;
@@ -182,14 +182,14 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
   // route received, but empty -> standstill
   if (route_init_ && route_.route_elements.empty()) {
     route_init_ = false;
-    safe_stop_distance_ = -1.0;
+    safe_stop_distance_.reset();
     latest_path_.points.clear();
     RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory.");
     return PlannerState::Standstill;
   }
 
   // no fresh route, but safe stop already started -> safe stop
-  if (!route_init_ && safe_stop_distance_ >= 0.0) {
+  if (!route_init_ && safe_stop_distance_.has_value()) {
     return PlannerState::SafeStop;
   }
 
@@ -222,11 +222,19 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
       tra = buildStandstillTrajectory(stamp);
       break;
     case PlannerState::SafeStop:
-      tra = buildTrajectoryFromSimplePath(buildSafeStopPath(stamp));
+      if (!safe_stop_distance_.has_value()) {
+        tra = buildTrajectoryFromSimplePath(buildSafeStopPath(stamp));
+      } else {
+        RCLCPP_DEBUG(this->get_logger(), "Executing safe stop.");
+        std_msgs::msg::Header target_header;
+        target_header.stamp = stamp;
+        target_header.frame_id = trajectory_frame_id_;
+        tra = buildTrajectoryFromSimplePath(transformPath(latest_path_, target_header));
+      }
       break;
     case PlannerState::FollowRoute: {
-      safe_stop_distance_ = -1.0;
-      RoutePlanningResult route_plan = buildRoutePlan(stamp);
+      safe_stop_distance_.reset();
+      FollowRoutePlan route_plan = buildRoutePlan(stamp);
       tra = buildTrajectoryFromSimplePath(route_plan.path);
       break;
     }
@@ -254,7 +262,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
   trimPathBehindEgo(usable_path);
 
   if (usable_path.points.empty()) {
-    safe_stop_distance_ = -1.0;
+    safe_stop_distance_.reset();
     latest_path_.points.clear();
     RCLCPP_WARN(this->get_logger(), "No usable forward path remains. Publishing standstill trajectory.");
     return buildStandstillTrajectory(rclcpp::Time(path.header.stamp));
@@ -290,27 +298,22 @@ SimplePath SimplePlannerNode::buildSafeStopPath(const rclcpp::Time& stamp) {
   std_msgs::msg::Header target_header;
   target_header.stamp = stamp;
   target_header.frame_id = trajectory_frame_id_;
-  if (safe_stop_distance_ < 0.0) {
-    double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
-    safe_stop_distance_ = -0.5 * std::pow(current_velocity, 2) / a_max_decel_;
+  double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+  safe_stop_distance_ = -0.5 * std::pow(current_velocity, 2) / a_max_decel_;
 
-    SimplePath safe_stop_path = transformPath(latest_path_, target_header);
-    trimPathBehindEgo(safe_stop_path);
-    if (safe_stop_path.points.empty()) {
-      RCLCPP_WARN(this->get_logger(), "No latest route available. Initialize safe stop along ego heading. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
-      latest_path_ = transformPath(calculateSafeStopAlongEgoHeading(ego_data_, safe_stop_distance_, target_header), target_header);
-    } else {
-      RCLCPP_WARN(this->get_logger(), "Initialize safe stop along latest route. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, safe_stop_distance_);
-      latest_path_ = calculateSafeStopAlongRoute(safe_stop_path, safe_stop_distance_);
-    }
-    return latest_path_;
+  SimplePath safe_stop_path = transformPath(latest_path_, target_header);
+  trimPathBehindEgo(safe_stop_path);
+  if (safe_stop_path.points.empty()) {
+    RCLCPP_WARN(this->get_logger(), "No latest path available. Initialize safe stop along ego heading. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, *safe_stop_distance_);
+    latest_path_ = transformPath(calculateSafeStopAlongEgoHeading(ego_data_, *safe_stop_distance_, target_header), target_header);
+  } else {
+    RCLCPP_WARN(this->get_logger(), "Initialize safe stop along latest path. Current velocity: %f m/s, safe stop distance: %f m", current_velocity, *safe_stop_distance_);
+    latest_path_ = calculateSafeStopAlongRoute(safe_stop_path, *safe_stop_distance_);
   }
-
-  RCLCPP_DEBUG(this->get_logger(), "Special Case: Executing safe stop.");
-  return transformPath(latest_path_, target_header);
+  return latest_path_;
 }
 
-SimplePlannerNode::RoutePlanningResult SimplePlannerNode::buildRoutePlan(const rclcpp::Time& stamp) {
+SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const rclcpp::Time& stamp) {
   RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
   std_msgs::msg::Header target_header;
   target_header.stamp = stamp;
@@ -326,7 +329,7 @@ SimplePlannerNode::RoutePlanningResult SimplePlannerNode::buildRoutePlan(const r
 
   route_planning_msgs::msg::Route tf_route;
   tf2::doTransform(route_, tf_route, tf);
-  RoutePlanningResult route_plan;
+  FollowRoutePlan route_plan;
   route_plan.path.header = tf_route.header;
 
   std::map<uint64_t, uint64_t> lane_change_indices_map;
@@ -339,7 +342,7 @@ SimplePlannerNode::RoutePlanningResult SimplePlannerNode::buildRoutePlan(const r
   return route_plan;
 }
 
-void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, RoutePlanningResult& route_plan,
+void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, FollowRoutePlan& route_plan,
                                           std::map<uint64_t, uint64_t>& lane_change_indices_map) {
   double t_total = 0.0;
   RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
