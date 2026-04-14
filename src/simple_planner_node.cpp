@@ -377,8 +377,8 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
     }
 
     if (consider_traffic_lights_) {
-      updateTrafficLightState(tf_route, j, suggested_lane, simple_path_point, t_total,
-                              route_plan.stop_at_end, route_plan.offset_to_stop_line);
+      updateForTrafficLights(tf_route, j, suggested_lane, simple_path_point, t_total,
+                             route_plan.stop_at_end, route_plan.offset_to_stop_line);
     }
 
     route_plan.path.points.push_back(simple_path_point);
@@ -448,10 +448,10 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
   return true;
 }
 
-void SimplePlannerNode::updateTrafficLightState(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
-                                                const route_planning_msgs::msg::LaneElement& suggested_lane,
-                                                const SimplePathPoint& simple_path_point, double t_total,
-                                                bool& stop_at_end, double& offset_to_stop_line) {
+void SimplePlannerNode::updateForTrafficLights(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+                                               const route_planning_msgs::msg::LaneElement& suggested_lane,
+                                               const SimplePathPoint& simple_path_point, double t_total,
+                                               bool& stop_at_end, double& offset_to_stop_line) {
   const auto& route_element = tf_route.route_elements[route_element_idx];
   const auto& reg_elems = route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
   for (size_t k = 0; k < reg_elems.size(); ++k) {
