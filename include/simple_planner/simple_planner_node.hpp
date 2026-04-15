@@ -1,5 +1,8 @@
 #pragma once
 
+#include <map>
+#include <optional>
+
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
@@ -52,6 +55,14 @@ class SimplePlannerNode : public rclcpp::Node {
 
  private:
   enum InterpolationType { LINEAR = 0, SPLINE = 1 };
+  enum class PlannerState { NoPublish, Standstill, SafeStop, FollowRoute };
+
+  struct FollowRoutePlan {
+    SimplePath path;
+    bool stop_at_end = false;
+    double offset_to_stop_line = 0.0;
+    uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
+  };
 
   const std::string kEgoDataTopic = "~/ego_data";
   const std::string kRouteTopic = "~/route";
@@ -62,18 +73,19 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kHazardLightsSrv = "~/enable_hazard_lights";
 
   /**
-   * @brief Declares and loads a ROS parameter
+   * @brief Declares a ROS parameter, loads its value and optionally registers it for runtime updates.
    *
-   * @param name name
-   * @param param parameter variable to load into
-   * @param description description
-   * @param add_to_auto_reconfigurable_params enable reconfiguration of parameter
-   * @param is_required whether failure to load parameter will stop node
-   * @param read_only set parameter to read-only
-   * @param from_value parameter range minimum
-   * @param to_value parameter range maximum
-   * @param step_value parameter range step
-   * @param additional_constraints additional constraints description
+   * @tparam T Parameter value type.
+   * @param[in] name Parameter name.
+   * @param[out] param Member variable to store the parameter value.
+   * @param[in] description Human-readable parameter description.
+   * @param[in] add_to_auto_reconfigurable_params Whether parameter updates automatically update the member variable.
+   * @param[in] is_required Whether the node should fail if the parameter is not set.
+   * @param[in] read_only Whether the parameter is exposed as read-only.
+   * @param[in] from_value Optional lower bound for numeric parameters.
+   * @param[in] to_value Optional upper bound for numeric parameters.
+   * @param[in] step_value Optional step size for numeric parameters.
+   * @param[in] additional_constraints Additional free-form constraint text for the parameter descriptor.
    */
   template <typename T>
   void declareAndLoadParameter(const std::string &name,
@@ -90,7 +102,7 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Handles reconfiguration when a parameter value is changed
    *
-   * @param parameters parameters
+   * @param[in] parameters Requested parameter updates.
    * @return parameter change result
    */
   rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter>& parameters);
@@ -105,14 +117,144 @@ class SimplePlannerNode : public rclcpp::Node {
 
   void publishTimerCallback();
 
-  trajectory_planning_msgs::msg::Trajectory createTrajectory();
+  /**
+   * @brief Determines the current planner state from input freshness and route availability.
+   *
+   * @param[in] stamp Current planning timestamp.
+   * @return PlannerState The state to be handled for this cycle.
+   */
+  PlannerState determinePlannerState(const rclcpp::Time& stamp);
+
+  /**
+   * @brief Checks whether an input message is older than the configured timeout.
+   *
+   * @param[in] header Header of the input message.
+   * @param[in] timeout Timeout in seconds. A value of `-1.0` disables the timeout.
+   * @param[in] stamp Current planning timestamp.
+   * @return true if the message is outdated.
+   * @return false if the message is still valid.
+   */
+  bool isMessageOutdated(const std_msgs::msg::Header& header, double timeout, const rclcpp::Time& stamp) const;
+
+  /**
+   * @brief Creates a trajectory for the already determined planner state.
+   *
+   * @param[in] state Planner state to be executed.
+   * @param[in] stamp Current planning timestamp propagated from the timer callback.
+   * @return trajectory_planning_msgs::msg::Trajectory The generated output trajectory.
+   */
+  trajectory_planning_msgs::msg::Trajectory createTrajectory(PlannerState state, const rclcpp::Time& stamp);
+
+  /**
+   * @brief Creates a standstill trajectory for the current planning cycle.
+   *
+   * @param[in] target_header Output header for the generated trajectory.
+   * @return trajectory_planning_msgs::msg::Trajectory Standstill trajectory message.
+   */
+  trajectory_planning_msgs::msg::Trajectory buildStandstillTrajectory(const std_msgs::msg::Header& target_header);
+
+  /**
+   * @brief Builds a trajectory message from a simple path.
+   *
+   * This also trims points behind the ego vehicle and falls back to standstill if
+   * no usable forward path remains.
+   *
+   * @param[in] path Path to be converted.
+   * @return trajectory_planning_msgs::msg::Trajectory Generated trajectory message.
+   */
+  trajectory_planning_msgs::msg::Trajectory buildTrajectoryFromSimplePath(const SimplePath& path);
+
+  /**
+   * @brief Builds the initial safe-stop path for the current cycle.
+   *
+   * @param[in] target_header Output header for the generated safe-stop path.
+   * @return SimplePath Safe-stop path in trajectory frame.
+   */
+  SimplePath buildSafeStopPath(const std_msgs::msg::Header& target_header);
+
+  /**
+   * @brief Builds the complete route-following plan including stop and turn information.
+   *
+   * @param[in] target_header Output header for the generated route plan.
+   * @return FollowRoutePlan Planned route path including stop and turn information.
+   */
+  FollowRoutePlan buildRoutePlan(const std_msgs::msg::Header& target_header);
+
+  /**
+   * @brief Appends route-derived path points and stop metadata for the follow-route case.
+   *
+   * @param[in] tf_route Route transformed into trajectory frame.
+   * @param[in,out] route_plan Mutable route planning result to extend.
+   * @param[out] lane_change_indices_map Output lane-change windows to be merged later.
+   */
+  void appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, FollowRoutePlan& route_plan,
+                         std::map<uint64_t, uint64_t>& lane_change_indices_map);
+
+  /**
+   * @brief Detects and stores the start/end window of a lane change.
+   *
+   * @param[in] tf_route Route transformed into trajectory frame.
+   * @param[in] route_element_idx Index of the current route element.
+   * @param[out] lane_change_indices_map Output map of lane-change route indices.
+   * @param[in,out] suggested_turn_signal Turn signal selected for the current route plan.
+   * @return true if the lane change could be registered.
+   * @return false if the route data is insufficient and processing should stop.
+   */
+  bool tryRegisterLaneChange(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+                             std::map<uint64_t, uint64_t>& lane_change_indices_map, uint8_t& suggested_turn_signal);
+
+  /**
+   * @brief Updates stop-at-end and stop-line offset state for traffic-light regulatory elements.
+   *
+   * @param[in] tf_route Route transformed into trajectory frame.
+   * @param[in] route_element_idx Index of the current route element.
+   * @param[in] suggested_lane Suggested lane element of the current route element.
+   * @param[in] simple_path_point Current path point candidate.
+   * @param[in] t_total Accumulated travel time along the partial path.
+   * @param[in,out] stop_at_end Whether the path should stop at its current end.
+   * @param[in,out] offset_to_stop_line Effective offset used for braking towards the stop line.
+   */
+  void updateForTrafficLights(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+                              const route_planning_msgs::msg::LaneElement& suggested_lane,
+                              const SimplePathPoint& simple_path_point, double t_total,
+                              bool& stop_at_end, double& offset_to_stop_line);
+
+  /**
+   * @brief Merges interpolated lane-change segments into the base route path.
+   *
+   * The base route points are the already filtered route-following path, while
+   * `tf_route` is still needed to reconstruct the lane geometry for the
+   * interpolated lane-change segments.
+   *
+   * @param[in] tf_route Route transformed into trajectory frame and used to derive lane-change geometry.
+   * @param[in] route_points Base route points before lane-change insertion.
+   * @param[in] lane_change_indices_map Lane-change windows gathered during route processing.
+   * @return std::vector<SimplePathPoint> Path points with lane changes inserted.
+   */
+  std::vector<SimplePathPoint> mergeLaneChangeSegments(const route_planning_msgs::msg::Route& tf_route,
+                                                       const std::vector<SimplePathPoint>& route_points,
+                                                       const std::map<uint64_t, uint64_t>& lane_change_indices_map);
+
+  /**
+   * @brief Requests the appropriate indicator state for the current route plan.
+   *
+   * @param[in] suggested_turn_signal Suggested signal derived from route semantics.
+   */
+  void applyIndicatorRequest(uint8_t suggested_turn_signal);
+
+  /**
+   * @brief Removes path points that lie behind the ego vehicle in trajectory frame.
+   *
+   * @param[in,out] path Path to be trimmed in-place.
+   */
+  void trimPathBehindEgo(SimplePath& path);
+
   std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0);
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
   SimplePath calculateSafeStopAlongEgoHeading(const perception_msgs::msg::EgoData& ego_data, const double safe_stop_distance, const std_msgs::msg::Header& target_header);
   SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
-  SimplePath convertRouteToSimplePath(const route_planning_msgs::msg::Route& tf_route);
   SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
@@ -146,9 +288,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double ego_data_timeout_ = 1.0;
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
-  bool internal_route_update_ = false;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
-  double standstill_threshold_ = 0.2;
   double v_ref_ = 13.89;
   double a_decel_ = -0.5;
   double a_max_decel_ = -0.75;
@@ -164,7 +304,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   bool ego_data_init_ = false;
   bool route_init_ = false;
-  double safe_stop_distance_ = -1.0;
+  std::optional<double> safe_stop_distance_;
   SimplePath latest_path_;
   double dt_;
 };
