@@ -222,7 +222,11 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Merges interpolated lane-change segments into the base route path.
    *
-   * @param[in] tf_route Route transformed into trajectory frame.
+   * The base route points are the already filtered route-following path, while
+   * `tf_route` is still needed to reconstruct the lane geometry for the
+   * interpolated lane-change segments.
+   *
+   * @param[in] tf_route Route transformed into trajectory frame and used to derive lane-change geometry.
    * @param[in] route_points Base route points before lane-change insertion.
    * @param[in] lane_change_indices_map Lane-change windows gathered during route processing.
    * @return std::vector<SimplePathPoint> Path points with lane changes inserted.
@@ -285,7 +289,6 @@ class SimplePlannerNode : public rclcpp::Node {
   double trajectory_horizon_ = 6.0;
   int n_states_ = 51;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
-  double standstill_threshold_ = 0.2;
   double v_ref_ = 13.89;
   double a_decel_ = -0.5;
   double a_max_decel_ = -0.75;

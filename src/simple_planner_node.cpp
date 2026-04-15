@@ -34,7 +34,6 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
                                 true, false, false, (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
-  this->declareAndLoadParameter("standstill_threshold", standstill_threshold_, "if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s)");
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_decel", a_decel_, "desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
@@ -166,7 +165,7 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
 
   // route outdated and vehicle in standstill -> standstill
   if (route_init_ && isMessageOutdated(route_.header, route_timeout_, stamp)) {
-    if (perception_msgs::object_access::getVelocityMagnitude(ego_data_) < standstill_threshold_) {
+    if (perception_msgs::object_access::getStandstill(ego_data_)) {
       route_init_ = false;
       safe_stop_distance_.reset();
       latest_path_.points.clear();

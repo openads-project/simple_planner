@@ -50,7 +50,6 @@
 | `trajectory_horizon` | `double` | covered time horizon of the published trajectory (s) |
 | `n_states` | `int` | defines the number of states in the published trajectory |
 | `interpolation_type` | `int` | defines the interpolation type of the received route, which is important for sampling it time equidistantly (0: linear, 1: spline) |
-| `standstill_threshold` | `double` | if the velocity is below this threshold, the vehicle is considered to be in standstill (m/s) |
 | `v_ref` | `double` | reference velocity (m/s). If set to a positive value, the trajectory will be generated with this constant velocity. If set to `-1.0`, the velocity from the route will be used, which is defined in the route message. |
 | `a_decel` | `double` | desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0 |
 | `a_max_decel` | `double` | maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel |
