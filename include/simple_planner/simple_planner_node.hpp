@@ -189,11 +189,12 @@ class SimplePlannerNode : public rclcpp::Node {
   FollowRoutePlan buildRoutePlan(const std_msgs::msg::Header& target_header);
 
   /**
-   * @brief Applies longitudinal object-based stop constraints to a follow-route plan.
+   * @brief Applies trajectory-based object conflict constraints to a follow-route plan.
    *
-   * The object list is transformed into trajectory frame and evaluated against the
-   * current route plan. If a blocking object is found on the path, the base route
-   * path is shortened and resampled to stop before the object.
+   * The object list is transformed into trajectory frame and checked against the
+   * already planned ego trajectory. Spatial conflicts are detected via bounding
+   * boxes, then filtered with a configurable temporal interaction window. If a
+   * conflict remains, the route path is shortened and resampled to stop earlier.
    *
    * @param target_header Current planning header propagated from the timer callback.
    * @param base_path_points Route path before time-based resampling.
@@ -322,10 +323,9 @@ class SimplePlannerNode : public rclcpp::Node {
   double ignore_stop_line_threshold_ = 0.5;
   bool consider_future_states_ = false;
   bool consider_objects_ = true;
-  double min_object_existence_prob_ = 0.1;
   double min_prediction_prob_ = 0.1;
-  double object_lateral_margin_ = 0.5;
-  double object_time_tolerance_ = 0.5;
+  double object_safety_distance_ = 0.5;
+  double object_interaction_time_window_ = 0.5;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
 
