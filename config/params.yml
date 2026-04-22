@@ -15,6 +15,7 @@
     v_ref: 5.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
     a_decel: -0.5                   # desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0
     a_max_decel: -0.75              # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel
+    trigger_turn_signals: True      # true: planner will request turn signal services; false: planner will not trigger turn signals
 
     #### traffic light parameters
     consider_traffic_lights: True   # true: planner will consider traffic lights; false: planner will ignore traffic lights

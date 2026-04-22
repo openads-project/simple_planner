@@ -37,6 +37,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_decel", a_decel_, "desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
+  this->declareAndLoadParameter("trigger_turn_signals", trigger_turn_signals_,
+                                "true: planner will trigger turn signal services; false: planner will not request turn signals");
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
@@ -337,7 +339,9 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
   recalculateS(merged_points);
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
-  applyIndicatorRequest(route_plan.suggested_turn_signal);
+  if (trigger_turn_signals_) {
+    applyIndicatorRequest(route_plan.suggested_turn_signal);
+  }
   return route_plan;
 }
 
