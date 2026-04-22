@@ -268,6 +268,27 @@ void SimplePlannerNode::setup() {
       static_cast<const void *>(pub_->get_publisher_handle().get())
   };
   TRACETOOLS_TRACEPOINT(message_link_periodic_async, link_subs.data(), link_subs.size(), link_pubs.data(), link_pubs.size());
+
+
+  // setup diagnostic updater
+  diagnostic_updater_.setHardwareID(this->get_name());
+  diagnostic_updater_.add("Health", this, &SimplePlannerNode::health);
+
+}
+
+void SimplePlannerNode::health(diagnostic_updater::DiagnosticStatusWrapper& stat) {
+
+  stat.summary(health_.status, health_.message);
+  for (const auto& [key, value] : health_.key_value_pairs) {
+    stat.add(key, value);
+  }
+}
+
+void SimplePlannerNode::setHealth(const unsigned char status, const std::string& msg, const std::map<std::string, std::string>& key_value_pairs) {
+  health_.status = status;
+  health_.message = msg;
+  health_.key_value_pairs = key_value_pairs;
+  diagnostic_updater_.force_update();
 }
 
 /**
@@ -308,21 +329,54 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
   }
 }
 
+std::string SimplePlannerNode::plannerStatetoString(const SimplePlannerNode::PlannerState& state) const {
+  switch (state) {
+    case PlannerState::NoPublish:
+      return "NoPublish";
+    case PlannerState::Standstill:
+      return "Standstill";
+    case PlannerState::SafeStop:
+      return "SafeStop";
+    case PlannerState::FollowRoute:
+      return "FollowRoute";
+    default:
+      return "Unknown";
+  }
+}
+
+std::string SimplePlannerNode::turnSignalToString(const uint8_t& turn_signal) const {
+  switch (turn_signal) {
+    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE:
+      return "None";
+    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT:
+      return "Left";
+    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT:
+      return "Right";
+    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_HAZARD:
+      return "Hazard";
+    default:
+      return "Unknown";
+  }
+}
+
 SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const rclcpp::Time& stamp) {
   // ego data missing -> no publish
   if (!ego_data_init_) {
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No ego data received yet", { {"PlannerState", plannerStatetoString(PlannerState::NoPublish)} });
     return PlannerState::NoPublish;
   }
 
   // ego data outdated -> no publish
   if (isMessageOutdated(ego_data_.header, ego_data_timeout_, stamp)) {
     ego_data_init_ = false;
-    RCLCPP_WARN(this->get_logger(), "EgoData is older than %f seconds. Skip publishing until fresh ego data arrives.", ego_data_timeout_);
+    RCLCPP_DEBUG(this->get_logger(), "EgoData is older than %f seconds. Skip publishing until fresh ego data arrives.", ego_data_timeout_);
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "EgoData is older than " + std::to_string(ego_data_timeout_) + " seconds. Skip publishing until fresh ego data arrives.", { {"PlannerState", plannerStatetoString(PlannerState::NoPublish)} });
     return PlannerState::NoPublish;
   }
 
   // no route received and no ongoing safe stop -> no publish
   if (!route_init_ && !safe_stop_distance_.has_value()) {
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No route received and no ongoing safe stop", { {"PlannerState", plannerStatetoString(PlannerState::NoPublish)} });
     return PlannerState::NoPublish;
   }
 
@@ -332,12 +386,14 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
       route_init_ = false;
       safe_stop_distance_.reset();
       latest_path_.points.clear();
-      RCLCPP_WARN(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
+      RCLCPP_DEBUG(this->get_logger(), "Route is older than %f seconds and ego vehicle is not moving. Publishing standstill trajectory.", route_timeout_);
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, "Route is older than " + std::to_string(route_timeout_) + " seconds and ego vehicle is not moving. Publishing standstill trajectory.", { {"PlannerState", plannerStatetoString(PlannerState::Standstill)} });
       return PlannerState::Standstill;
     }
     route_init_ = false;
 
     // route outdated and vehicle still moving -> safe stop
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Route is older than " + std::to_string(route_timeout_) + " seconds but ego vehicle is still moving. Executing safe stop trajectory.", { {"PlannerState", plannerStatetoString(PlannerState::SafeStop)} });
     return PlannerState::SafeStop;
   }
 
@@ -346,7 +402,8 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     route_init_ = false;
     safe_stop_distance_.reset();
     latest_path_.points.clear();
-    RCLCPP_WARN(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory.");
+    RCLCPP_DEBUG(this->get_logger(), "Route has no route_elements. Publishing standstill trajectory.");
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, "Route has no route_elements. Publishing standstill trajectory.", { {"PlannerState", plannerStatetoString(PlannerState::Standstill)} });
     return PlannerState::Standstill;
   }
 
@@ -355,13 +412,16 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     if (perception_msgs::object_access::getStandstill(ego_data_)) {
       safe_stop_distance_.reset();
       latest_path_.points.clear();
-      RCLCPP_WARN(this->get_logger(), "Safe stop finished. Ego vehicle is considered stationary. Publishing standstill trajectory.");
+      RCLCPP_DEBUG(this->get_logger(), "Safe stop finished. Ego vehicle is considered stationary. Publishing standstill trajectory.");
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, "Safe stop finished. Ego vehicle is considered stationary. Publishing standstill trajectory.", { {"PlannerState", plannerStatetoString(PlannerState::Standstill)} });
       return PlannerState::Standstill;
     }
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "No fresh route available, but safe stop already started. Executing safe stop trajectory.", { {"PlannerState", plannerStatetoString(PlannerState::SafeStop)} });
     return PlannerState::SafeStop;
   }
 
   // fresh ego data and valid route available -> follow route
+  setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, "Input information up to date. Following route.", { {"PlannerState", plannerStatetoString(PlannerState::FollowRoute)} });
   return PlannerState::FollowRoute;
 }
 
@@ -485,6 +545,7 @@ SimplePath SimplePlannerNode::buildSafeStopPath(const std_msgs::msg::Header& tar
 
 SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_msgs::msg::Header& target_header) {
   RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
+  std::map<std::string, std::string>& key_value_pairs = health_.key_value_pairs;
 
   geometry_msgs::msg::TransformStamped tf;
   try {
@@ -500,6 +561,7 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   route_plan.path.header = tf_route.header;
 
   std::map<uint64_t, uint64_t> lane_change_indices_map;
+  key_value_pairs.insert({"FollowRouteState", route_plan.stop_at_end ? "StopAtEnd" : "FollowRoute"});
   appendRoutePoints(tf_route, route_plan, lane_change_indices_map);
 
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
@@ -508,7 +570,9 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   applyObjectConstraints(target_header, merged_points, route_plan);
   if (trigger_turn_signals_) {
     applyIndicatorRequest(route_plan.suggested_turn_signal);
+    key_value_pairs.insert({"SuggestedTurnSignal", turnSignalToString(route_plan.suggested_turn_signal)});
   }
+  setHealth(health_.status, health_.message, key_value_pairs);
   return route_plan;
 }
 

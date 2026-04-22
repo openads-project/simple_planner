@@ -3,6 +3,9 @@
 #include <map>
 #include <optional>
 
+#include <diagnostic_updater/diagnostic_updater.hpp>
+#include <diagnostic_updater/publisher.hpp>
+
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
@@ -301,6 +304,32 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
   SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 
+  /**
+   * @brief Function called by diagnostic updater to populate diagnostics status
+   */
+  void health(diagnostic_updater::DiagnosticStatusWrapper &stat);
+
+  /**
+   * @brief Sets the health information and triggers publishing by diagnostic updater
+   */
+  void setHealth(const unsigned char status, const std::string& msg, const std::map<std::string, std::string>& key_value_pairs = {});
+
+  /**
+   * @brief Converts a PlannerState enum to a string representation
+   * 
+   * @param state 
+   * @return std::string 
+   */
+  std::string plannerStatetoString(const PlannerState& state) const;
+
+  /**
+   * @brief Converts a turn signal value to a string representation
+   * 
+   * @param turn_signal 
+   * @return std::string 
+   */
+  std::string turnSignalToString(const uint8_t& turn_signal) const;
+
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
@@ -374,6 +403,25 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePath latest_path_;
   int object_conflict_free_cycles_ = 0;
   double dt_;
+
+  /**
+   * @brief Diagnostic updater
+   */
+  diagnostic_updater::Updater diagnostic_updater_{this};
+  
+  /**
+   * @brief Diagnostic status indicating node health
+   */
+  struct DiagnosticStatus {
+    unsigned char status = diagnostic_msgs::msg::DiagnosticStatus::STALE;
+    std::string message = "";
+    std::map<std::string, std::string> key_value_pairs = {};
+  } health_;
+
+  /**
+   * @brief Diagnosed publisher
+   */
+  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<geometry_msgs::msg::PointStamped>> diagnosed_publisher_;
 };
 
 }  // namespace simple_planner
