@@ -497,6 +497,8 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
     safe_stop_distance_.reset();
     latest_path_.points.clear();
     RCLCPP_WARN(this->get_logger(), "No usable forward path remains. Publishing standstill trajectory.");
+    health_.key_value_pairs.insert({"PlannerState", plannerStatetoString(PlannerState::Standstill)});
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "No usable forward path remains. Publishing standstill trajectory.", health_.key_value_pairs);
     return buildStandstillTrajectory(path.header);
   }
 
@@ -550,6 +552,7 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
     tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, route_.header.frame_id, route_.header.stamp,
                                       fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Transformation is not available: " + std::string(ex.what()), health_.key_value_pairs);
     RCLCPP_WARN(this->get_logger(), "Tranformation is not available: %s", ex.what());
   }
 
@@ -946,6 +949,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
         dt = (simple_path_point.s - route_plan.path.points.back().s) / v_average;
       }
       if (dt <= 0.0) {
+        setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Negative time difference between points. Could lead to unexpected behavior.", health_.key_value_pairs);
         RCLCPP_WARN(this->get_logger(), "Negative time difference %f between points at s=%f and s=%f. Could lead to unexpected behavior.", dt, route_plan.path.points.back().s, simple_path_point.s);
       }
       t_total += dt;
@@ -985,6 +989,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
 bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
                                               std::map<uint64_t, uint64_t>& lane_change_indices_map, uint8_t& suggested_turn_signal) {
   if (route_element_idx + 1 >= tf_route.route_elements.size()) {
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Route element is the last element. Cannot change lane.", health_.key_value_pairs);
     RCLCPP_WARN(this->get_logger(), "Route element %zu is the last element. Cannot change lane.", route_element_idx);
     return false;
   }
@@ -1021,14 +1026,17 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
       current_lane_idx = *result;
     } else {
       RCLCPP_WARN(this->get_logger(), "No preceding lane element found for route element %u", i_start);
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "No preceding lane element found for route element " + std::to_string(i_start), health_.key_value_pairs);
       break;
     }
     if ((i_start - 2) >= 0 && tf_route.route_elements[i_start - 2].will_change_suggested_lane) {
       RCLCPP_WARN(this->get_logger(), "Found previous lane change in route element: %u. Could not extend lane change over this element.", i_start - 2);
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Found previous lane change in route element " + std::to_string(i_start - 2) + ". Could not extend lane change over this element.", health_.key_value_pairs);
       break;
     }
     if (!route_planning_msgs::route_access::hasAdjacentLane(tf_route.route_elements[i_start - 1], current_lane_idx, lane_change_direction)) {
       RCLCPP_WARN(this->get_logger(), "No adjacent lane found for route element %u", i_start - 1);
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "No adjacent lane found for route element " + std::to_string(i_start - 1), health_.key_value_pairs);
       break;
     }
     ds += std::abs(tf_route.route_elements[i_start].s - tf_route.route_elements[i_start - 1].s);
@@ -1037,6 +1045,7 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
 
   if (!tf_route.route_elements[i_start].is_enriched || !tf_route.route_elements[i_end].is_enriched) {
     RCLCPP_WARN(this->get_logger(), "Not enough enriched route elements (%u, %u) for lane change.", i_start, i_end);
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Not enough enriched route elements (" + std::to_string(i_start) + ", " + std::to_string(i_end) + ") for lane change.", health_.key_value_pairs);
     return false;
   }
 
@@ -1064,6 +1073,7 @@ void SimplePlannerNode::updateForTrafficLights(const route_planning_msgs::msg::R
       dt_offset_to_stop_line = offset_to_stop_line / simple_path_point.v;
     }
     if (dt_offset_to_stop_line <= 0.0) {
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Negative time difference 'dt_offset_to_stop_line'. Could lead to unexpected behavior.", health_.key_value_pairs);
       RCLCPP_WARN(this->get_logger(), "Negative time difference 'dt_offset_to_stop_line': %f. Could lead to unexpected behavior.", dt_offset_to_stop_line);
     }
 
@@ -1094,6 +1104,7 @@ void SimplePlannerNode::updateForTrafficLights(const route_planning_msgs::msg::R
       stop_at_end = false;
     } else if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
       RCLCPP_WARN(this->get_logger(), "Ignoring traffic light in front of ego vehicle. Distance to stop point of traffic light: %f m, minimum distance to stop: %f m", distance_to_stop_point, min_distance_to_stop);
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Traffic light requires stop, but distance to stop point is smaller than minimum distance to stop. Ignoring traffic light.", health_.key_value_pairs);
       stop_at_end = false;
     }
   }
@@ -1151,6 +1162,7 @@ void SimplePlannerNode::applyIndicatorRequest(uint8_t suggested_turn_signal) {
     hazard_lights_service_client_->async_send_request(request);
   } else {
     RCLCPP_WARN(this->get_logger(), "Indicator service is not ready yet. Suggested turn signal: %d", suggested_turn_signal);
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Indicator service is not ready", health_.key_value_pairs);
   }
 }
 
@@ -1205,6 +1217,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
   int end_idx = turn_idx + 1; // lane change should end at the next route element
   if (start_idx >= end_idx || start_idx < 0 || end_idx >= static_cast<int>(route.route_elements.size())) {
     RCLCPP_WARN(this->get_logger(), "Invalid lane change indices: %d, %d", start_idx, end_idx);
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Invalid lane change indices", health_.key_value_pairs);
     return lane_change_path;
   }
 
@@ -1243,6 +1256,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   if (path.empty()) {
     RCLCPP_WARN(this->get_logger(), "Route is empty. No resampling possible.");
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Route is empty. No resampling possible.", health_.key_value_pairs);
     return path;
   }
 
