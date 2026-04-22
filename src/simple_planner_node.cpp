@@ -191,11 +191,10 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
 
   // no fresh route, but safe stop already started -> safe stop
   if (!route_init_ && safe_stop_distance_.has_value()) {
-    double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
     if (perception_msgs::object_access::getStandstill(ego_data_)) {
       safe_stop_distance_.reset();
       latest_path_.points.clear();
-      RCLCPP_WARN(this->get_logger(), "Safe stop finished. Ego vehicle is considered stationary (v=%f m/s). Publishing standstill trajectory.", current_velocity);
+      RCLCPP_WARN(this->get_logger(), "Safe stop finished. Ego vehicle is considered stationary. Publishing standstill trajectory.");
       return PlannerState::Standstill;
     }
     return PlannerState::SafeStop;
