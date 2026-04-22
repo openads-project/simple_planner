@@ -37,6 +37,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("v_ref", v_ref_, "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_decel", a_decel_, "desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_, "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
+  this->declareAndLoadParameter("trigger_turn_signals", trigger_turn_signals_,
+                                "true: planner will trigger turn signal services; false: planner will not request turn signals");
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_, "true: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
                                 "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
@@ -189,6 +191,12 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
 
   // no fresh route, but safe stop already started -> safe stop
   if (!route_init_ && safe_stop_distance_.has_value()) {
+    if (perception_msgs::object_access::getStandstill(ego_data_)) {
+      safe_stop_distance_.reset();
+      latest_path_.points.clear();
+      RCLCPP_WARN(this->get_logger(), "Safe stop finished. Ego vehicle is considered stationary. Publishing standstill trajectory.");
+      return PlannerState::Standstill;
+    }
     return PlannerState::SafeStop;
   }
 
@@ -330,7 +338,9 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
   recalculateS(merged_points);
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
-  applyIndicatorRequest(route_plan.suggested_turn_signal);
+  if (trigger_turn_signals_) {
+    applyIndicatorRequest(route_plan.suggested_turn_signal);
+  }
   return route_plan;
 }
 
@@ -571,22 +581,21 @@ SimplePath SimplePlannerNode::calculateSafeStopAlongEgoHeading(const perception_
   SimplePath safe_stop_path;
   safe_stop_path.header = ego_data.header;
 
-  // TODO: implement when required
-  // better: safe_stop_path.header = ego_data.header; // use ego_data header as target header -> transform to target frame later
-  RCLCPP_ERROR(this->get_logger(), "Safe stop along ego heading is not yet fully supported.");
-
-  // use three points (vehicle frame)
   double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data);
-  geometry_msgs::msg::Pose pose = perception_msgs::object_access::getPose(ego_data);
+  geometry_msgs::msg::Point point = perception_msgs::object_access::getPosition(ego_data);
+  double yaw = perception_msgs::object_access::getYaw(ego_data);
+  Eigen::Vector2d start_position(point.x, point.y);
+  Eigen::Vector2d heading(std::cos(yaw), std::sin(yaw));
 
+  RCLCPP_WARN(this->get_logger(), "Initializing minimal safe stop along ego heading. Frame: %s, yaw: %f rad",
+              safe_stop_path.header.frame_id.c_str(), yaw);
   (void)target_header;
-  (void)pose;
 
-  SimplePathPoint start_point(Eigen::Vector2d(0.0, 0.0), 0.0, v_ego);
+  SimplePathPoint start_point(start_position, 0.0, v_ego);
   safe_stop_path.points.push_back(start_point);
-  SimplePathPoint mid_point(Eigen::Vector2d(safe_stop_distance / 2.0, 0.0), safe_stop_distance / 2.0, v_ego);
+  SimplePathPoint mid_point(start_position + heading * (safe_stop_distance / 2.0), safe_stop_distance / 2.0, v_ego);
   safe_stop_path.points.push_back(mid_point);
-  SimplePathPoint end_point(Eigen::Vector2d(safe_stop_distance, 0.0), safe_stop_distance, v_ego);
+  SimplePathPoint end_point(start_position + heading * safe_stop_distance, safe_stop_distance, 0.0);
   safe_stop_path.points.push_back(end_point);
 
   safe_stop_path.points = resamplePath(safe_stop_path.points, true, 0.0);
@@ -715,6 +724,14 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
 
   rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   RCLCPP_DEBUG(this->get_logger(), "Resampling route took %f ms", (end - begin).seconds() * 1e3);
+
+  if (stop_at_end) {
+    SimplePathPoint stop_point = path.back();
+    stop_point.v = 0.0;
+    if (resampled_path.empty() || resampled_path.back().s < stop_point.s || resampled_path.back().v != 0.0) {
+      resampled_path.push_back(stop_point);
+    }
+  }
 
   return resampled_path;
 }

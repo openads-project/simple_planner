@@ -292,6 +292,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double v_ref_ = 13.89;
   double a_decel_ = -0.5;
   double a_max_decel_ = -0.75;
+  bool trigger_turn_signals_ = true;
   bool consider_traffic_lights_ = false;
   double offset_to_stop_line_ = 0.0;
   double ignore_stop_line_threshold_ = 0.5;
