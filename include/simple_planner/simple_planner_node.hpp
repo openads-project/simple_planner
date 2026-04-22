@@ -65,6 +65,7 @@ class SimplePlannerNode : public rclcpp::Node {
   struct FollowRoutePlan {
     SimplePath path;
     bool stop_at_end = false;
+    std::string reason_to_stop = "";
     double offset_to_stop_line = 0.0;
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   };

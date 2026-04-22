@@ -288,7 +288,6 @@ void SimplePlannerNode::setHealth(const unsigned char status, const std::string&
   health_.status = status;
   health_.message = msg;
   health_.key_value_pairs = key_value_pairs;
-  diagnostic_updater_.force_update();
 }
 
 /**
@@ -545,7 +544,6 @@ SimplePath SimplePlannerNode::buildSafeStopPath(const std_msgs::msg::Header& tar
 
 SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_msgs::msg::Header& target_header) {
   RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
-  std::map<std::string, std::string>& key_value_pairs = health_.key_value_pairs;
 
   geometry_msgs::msg::TransformStamped tf;
   try {
@@ -561,7 +559,6 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   route_plan.path.header = tf_route.header;
 
   std::map<uint64_t, uint64_t> lane_change_indices_map;
-  key_value_pairs.insert({"FollowRouteState", route_plan.stop_at_end ? "StopAtEnd" : "FollowRoute"});
   appendRoutePoints(tf_route, route_plan, lane_change_indices_map);
 
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
@@ -570,9 +567,9 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   applyObjectConstraints(target_header, merged_points, route_plan);
   if (trigger_turn_signals_) {
     applyIndicatorRequest(route_plan.suggested_turn_signal);
-    key_value_pairs.insert({"SuggestedTurnSignal", turnSignalToString(route_plan.suggested_turn_signal)});
+    health_.key_value_pairs.insert({"SuggestedTurnSignal", turnSignalToString(route_plan.suggested_turn_signal)});
   }
-  setHealth(health_.status, health_.message, key_value_pairs);
+  if (route_plan.stop_at_end) health_.key_value_pairs.insert({"ReasonToStop", route_plan.reason_to_stop});
   return route_plan;
 }
 
@@ -924,8 +921,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, FollowRoutePlan& route_plan,
                                           std::map<uint64_t, uint64_t>& lane_change_indices_map) {
   double t_total = 0.0;
-  RCLCPP_INFO(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
-
+  RCLCPP_DEBUG(this->get_logger(), "Number of remaining route elements: %zu", tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
+  health_.key_value_pairs.insert({"RemainingRouteElements", std::to_string(tf_route.destination_route_element_idx - tf_route.current_route_element_idx)});
   for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
     const auto& route_element = tf_route.route_elements[j];
     if (!route_element.is_enriched) {
@@ -965,6 +962,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
     if (consider_traffic_lights_) {
       updateForTrafficLights(tf_route, j, suggested_lane, simple_path_point, t_total,
                              route_plan.stop_at_end, route_plan.offset_to_stop_line);
+      if (route_plan.stop_at_end) route_plan.reason_to_stop = "Traffic light indicates stop";
     }
 
     route_plan.path.points.push_back(simple_path_point);
@@ -975,6 +973,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
       destination_point.s = simple_path_point.s + (destination_point.position - simple_path_point.position).norm();
       destination_point.v = simple_path_point.v;
       route_plan.path.points.push_back(destination_point);
+      route_plan.reason_to_stop = "Reaching end of route";
       route_plan.stop_at_end = true;
     }
     if (route_plan.stop_at_end || t_total >= 2.0 * trajectory_horizon_) {
@@ -1363,7 +1362,9 @@ void SimplePlannerNode::publishTimerCallback() {
     RCLCPP_DEBUG(this->get_logger(), "Published Trajectory!");
   } catch (const std::runtime_error& e) {
     RCLCPP_ERROR(this->get_logger(), "Error while creating trajectory, do not publish trajectory: %s", e.what());
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::ERROR, std::string("Error while creating trajectory: ") + e.what(), { {"PlannerState", plannerStatetoString(planner_state)} });
   }
+  diagnostic_updater_.force_update();
 }
 
 }  // namespace simple_planner
