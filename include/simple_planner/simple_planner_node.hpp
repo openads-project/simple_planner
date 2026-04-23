@@ -192,9 +192,9 @@ class SimplePlannerNode : public rclcpp::Node {
    * @brief Applies trajectory-based object conflict constraints to a follow-route plan.
    *
    * The object list is transformed into trajectory frame and checked against the
-   * already planned ego trajectory. Spatial conflicts are detected via bounding
-   * boxes, then filtered with a configurable temporal interaction window. If a
-   * conflict remains, the route path is shortened and resampled to stop earlier.
+   * already planned ego trajectory. If conflicts are detected, the path is
+   * resampled repeatedly with a lower speed cap until it is conflict-free or
+   * the speed cap reaches zero.
    *
    * @param target_header Current planning header propagated from the timer callback.
    * @param base_path_points Route path before time-based resampling.
@@ -272,7 +272,8 @@ class SimplePlannerNode : public rclcpp::Node {
    */
   void trimPathBehindEgo(SimplePath& path);
 
-  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0);
+  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0,
+                                            const double* speed_cap = nullptr);
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
   void recalculateS(std::vector<SimplePathPoint>& path);
@@ -326,6 +327,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double min_prediction_prob_ = 0.1;
   double object_safety_distance_ = 0.5;
   double object_interaction_time_window_ = 0.5;
+  double object_velocity_reduction_step_ = 0.3;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
 
