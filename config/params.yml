@@ -29,7 +29,8 @@
     min_prediction_prob: 0.1        # minimum probability for considering an object prediction branch; otherwise the most likely one is used
     object_safety_distance: 0.5     # additional clearance around ego/object bounding boxes for conflict detection (m)
     object_interaction_time_window: 0.5  # maximum time offset for counting a spatial overlap as interaction (s)
-    object_velocity_reduction_step: 0.1  # velocity decrement per object-avoidance iteration (m/s)
+    object_velocity_reduction_step: 0.5  # velocity decrement per object-avoidance iteration (m/s)
+    object_standstill_speed_threshold: 0.5  # publish standstill if object avoidance would require a lower speed cap (m/s)
 
     #### lane change parameters
     lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)

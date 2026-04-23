@@ -64,6 +64,7 @@
 | `object_safety_distance` | `double` | additional clearance around ego/object bounding boxes for conflict detection (m) |
 | `object_interaction_time_window` | `double` | maximum time offset for counting a spatial overlap as interaction (s) |
 | `object_velocity_reduction_step` | `double` | velocity decrement per object-avoidance iteration (m/s) |
+| `object_standstill_speed_threshold` | `double` | publish standstill if object avoidance would require a lower speed cap (m/s) |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
 

@@ -144,6 +144,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "maximum time offset for counting a spatial overlap as interaction (s)");
   this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,
                                 "velocity decrement per object-avoidance iteration (m/s)");
+  this->declareAndLoadParameter("object_standstill_speed_threshold", object_standstill_speed_threshold_,
+                                "publish standstill if object avoidance would require a lower speed cap (m/s)");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
@@ -603,13 +605,28 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     initial_speed_cap = std::max(initial_speed_cap, v_ref_);
   }
 
+  const rclcpp::Time iteration_begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   const double reduction_step = std::max(object_velocity_reduction_step_, 1e-3);
+  const double standstill_threshold = std::max(object_standstill_speed_threshold_, 0.0);
   double speed_cap = initial_speed_cap;
+  size_t iteration_count = 0;
   while (speed_cap > 0.0) {
+    ++iteration_count;
     std::vector<SimplePathPoint> candidate_path = resamplePath(base_path_points, route_plan.stop_at_end,
                                                                route_plan.offset_to_stop_line, &speed_cap);
     const std::optional<uint64_t> conflicting_object_id = find_conflicting_object(candidate_path);
     if (!conflicting_object_id) {
+      const rclcpp::Time iteration_end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+      RCLCPP_INFO(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
+                  (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
+
+      if (speed_cap <= standstill_threshold) {
+        route_plan.path.points.clear();
+        RCLCPP_INFO(this->get_logger(), "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.",
+                    speed_cap, standstill_threshold);
+        return;
+      }
+
       route_plan.path.points = candidate_path;
       if (speed_cap < initial_speed_cap) {
         RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to %f m/s to avoid object conflict", speed_cap);
@@ -621,12 +638,16 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   }
 
   route_plan.path.points = resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line, &speed_cap);
+  const rclcpp::Time iteration_end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+  RCLCPP_INFO(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
+              (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
   if (const std::optional<uint64_t> conflicting_object_id = find_conflicting_object(route_plan.path.points)) {
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill",
                 *conflicting_object_id);
   } else {
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
   }
+  route_plan.path.points.clear();
 }
 
 void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, FollowRoutePlan& route_plan,
@@ -1017,7 +1038,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
 
   if (stop_at_end) {
     SimplePathPoint stop_point = path.back();
-    if (speed_cap != nullptr && *speed_cap <= 1e-6 && !resampled_path.empty()) {
+    if (!resampled_path.empty() && (offset_to_stop_line > 0.0 || (speed_cap != nullptr && *speed_cap <= 1e-6))) {
       stop_point = resampled_path.back();
     }
     stop_point.v = 0.0;
