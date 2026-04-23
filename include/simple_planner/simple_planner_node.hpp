@@ -447,23 +447,14 @@ class SimplePlannerNode : public rclcpp::Node {
   } health_;
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> ego_data_topic_diagnostic_;
-  TopicDiagnosticConfig ego_data_topic_diagnostic_config_{.min_frequency = 45.0,
-                                                          .max_frequency = 55.0,
-                                                          .min_acceptable_timestamp_delta = -1.0,
-                                                          .max_acceptable_timestamp_delta = 0.02};
+  TopicDiagnosticConfig ego_data_topic_diagnostic_config_{45.0, 55.0, -1.0, 0.02};
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
-  TopicDiagnosticConfig route_topic_diagnostic_config_{.min_frequency = 18.0,
-                                                       .max_frequency = 22.0,
-                                                       .min_acceptable_timestamp_delta = -1.0,
-                                                       .max_acceptable_timestamp_delta = 0.05};
+  TopicDiagnosticConfig route_topic_diagnostic_config_{18.0, 22.0, -1.0, 0.05};
 
   std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>>
       diagnosed_publisher_;
-  TopicDiagnosticConfig diagnosed_publisher_config_{.min_frequency = 8.0,
-                                                    .max_frequency = 12.0,
-                                                    .min_acceptable_timestamp_delta = -1.0,
-                                                    .max_acceptable_timestamp_delta = 0.1};
+  TopicDiagnosticConfig diagnosed_publisher_config_{8.0, 12.0, -1.0, 0.1};
 };
 
 }  // namespace simple_planner
