@@ -44,3 +44,23 @@
     #### lane change parameters
     lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)
     lane_change_min_distance_factor: 2.0 # factor multiplied with the vehicle length to determine the minimum lane change distance (m)
+
+    #### diagnostic parameters
+    diagnostic_updater:
+      topic_diagnostics:
+        ego_data:
+          min_frequency: 45.0
+          max_frequency: 55.0
+          min_acceptable_timestamp_delta: 0.015
+          max_acceptable_timestamp_delta: 0.025
+        route:
+          min_frequency: 18.0
+          max_frequency: 22.0
+          min_acceptable_timestamp_delta: 0.045
+          max_acceptable_timestamp_delta: 0.055
+      diagnosed_publishers:
+        trajectory:
+          min_frequency: 12.0
+          max_frequency: 8.0
+          min_acceptable_timestamp_delta: 0.08
+          max_acceptable_timestamp_delta: 0.12

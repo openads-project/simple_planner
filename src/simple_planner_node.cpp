@@ -207,6 +207,20 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
     exit(EXIT_FAILURE);
   }
 
+  // diagnostics parameters
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.min_frequency", ego_data_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming ego-data messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_frequency", ego_data_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming ego-data messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.min_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming ego-data messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming ego-data messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_frequency", route_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming route messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_frequency", route_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming route messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_acceptable_timestamp_delta", route_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming route messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_acceptable_timestamp_delta", route_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming route messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.min_frequency", diagnosed_publisher_config_.min_frequency, "Minimum frequency for published trajectory messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.max_frequency", diagnosed_publisher_config_.max_frequency, "Maximum frequency for published trajectory messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.min_acceptable_timestamp_delta", diagnosed_publisher_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for published trajectory messages", true, true, false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.max_acceptable_timestamp_delta", diagnosed_publisher_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for published trajectory messages", true, true, false);
+
   this->setup();
 }
 
@@ -274,6 +288,30 @@ void SimplePlannerNode::setup() {
   diagnostic_updater_.setHardwareID(this->get_name());
   diagnostic_updater_.add("Health", this, &SimplePlannerNode::health);
 
+  const int ego_data_topic_diagnostic_frequency_window_size = std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * ego_data_topic_diagnostic_config_.min_frequency));
+  ego_data_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
+    kEgoDataTopic,
+    diagnostic_updater_,
+    diagnostic_updater::FrequencyStatusParam(&ego_data_topic_diagnostic_config_.min_frequency, &ego_data_topic_diagnostic_config_.max_frequency, 0.0, ego_data_topic_diagnostic_frequency_window_size),
+    diagnostic_updater::TimeStampStatusParam(ego_data_topic_diagnostic_config_.min_acceptable_timestamp_delta, ego_data_topic_diagnostic_config_.max_acceptable_timestamp_delta)
+  );
+
+  const int route_topic_diagnostic_frequency_window_size = std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * route_topic_diagnostic_config_.min_frequency));
+  route_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
+    kRouteTopic,
+    diagnostic_updater_,
+    diagnostic_updater::FrequencyStatusParam(&route_topic_diagnostic_config_.min_frequency, &route_topic_diagnostic_config_.max_frequency, 0.0, route_topic_diagnostic_frequency_window_size),
+    diagnostic_updater::TimeStampStatusParam(route_topic_diagnostic_config_.min_acceptable_timestamp_delta, route_topic_diagnostic_config_.max_acceptable_timestamp_delta)
+  );
+
+  const int diagnosed_publisher_frequency_window_size = std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * diagnosed_publisher_config_.min_frequency));
+  diagnosed_publisher_ = std::make_unique<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>>(
+    pub_,
+    diagnostic_updater_,
+    diagnostic_updater::FrequencyStatusParam(&diagnosed_publisher_config_.min_frequency, &diagnosed_publisher_config_.max_frequency, 0.0, diagnosed_publisher_frequency_window_size),
+    diagnostic_updater::TimeStampStatusParam(diagnosed_publisher_config_.min_acceptable_timestamp_delta, diagnosed_publisher_config_.max_acceptable_timestamp_delta)
+  );
+
 }
 
 void SimplePlannerNode::health(diagnostic_updater::DiagnosticStatusWrapper& stat) {
@@ -297,6 +335,7 @@ void SimplePlannerNode::setHealth(const unsigned char status, const std::string&
  */
 void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg) {
   ego_data_ = *msg;
+  ego_data_topic_diagnostic_->tick(msg->header.stamp);
 
   if (!ego_data_init_) {
     ego_data_init_ = true;
@@ -320,7 +359,8 @@ void SimplePlannerNode::objectListCallback(const perception_msgs::msg::ObjectLis
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
-
+  route_topic_diagnostic_->tick(msg->header.stamp);
+  
   if (!route_init_) {
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
     route_init_ = true;
@@ -1372,7 +1412,7 @@ void SimplePlannerNode::publishTimerCallback() {
 
   try {
     trajectory_planning_msgs::msg::Trajectory msg = createTrajectory(planner_state, stamp);
-    pub_->publish(msg);
+    diagnosed_publisher_->publish(msg);
     RCLCPP_DEBUG(this->get_logger(), "Published Trajectory!");
   } catch (const std::runtime_error& e) {
     RCLCPP_ERROR(this->get_logger(), "Error while creating trajectory, do not publish trajectory: %s", e.what());

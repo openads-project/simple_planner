@@ -36,6 +36,31 @@ template <typename C> struct is_vector : std::false_type {};
 template <typename T,typename A> struct is_vector< std::vector<T,A> > : std::true_type {};
 template <typename C> inline constexpr bool is_vector_v = is_vector<C>::value;
 
+/**
+ * @brief Configuration parameters for topic diagnostics
+ */
+struct TopicDiagnosticConfig {
+  /**
+   * @brief Minimum acceptable frequency
+   */
+  double min_frequency;
+  
+  /**
+   * @brief Maximum acceptable frequency
+   */
+  double max_frequency;
+  
+  /**
+   * @brief Minimum acceptable difference between message timestamp and receipt time (in seconds)
+   */
+  double min_acceptable_timestamp_delta;
+
+  /**
+   * @brief Maximum acceptable difference between message timestamp and receipt time (in seconds)
+   */
+  double max_acceptable_timestamp_delta;
+};
+
 struct SimplePathPoint {
   Eigen::Vector2d position;
   double s;
@@ -419,10 +444,14 @@ class SimplePlannerNode : public rclcpp::Node {
     std::map<std::string, std::string> key_value_pairs = {};
   } health_;
 
-  /**
-   * @brief Diagnosed publisher
-   */
-  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<geometry_msgs::msg::PointStamped>> diagnosed_publisher_;
+  std::unique_ptr<diagnostic_updater::TopicDiagnostic> ego_data_topic_diagnostic_;
+  TopicDiagnosticConfig ego_data_topic_diagnostic_config_;
+
+  std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
+  TopicDiagnosticConfig route_topic_diagnostic_config_;
+
+  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>> diagnosed_publisher_;
+  TopicDiagnosticConfig diagnosed_publisher_config_;  
 };
 
 }  // namespace simple_planner
