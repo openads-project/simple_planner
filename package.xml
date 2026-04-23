@@ -14,6 +14,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>diagnostic_updater</depend>
+  <depend>diagnostic_msgs</depend>
   <depend>perception_msgs_utils</depend>
   <depend>perception_msgs</depend>
   <depend>rclcpp</depend>
