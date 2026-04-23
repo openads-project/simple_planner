@@ -3,9 +3,9 @@
 #include <map>
 #include <optional>
 
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <diagnostic_updater/publisher.hpp>
-#include <diagnostic_msgs/msg/diagnostic_status.hpp>
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -45,12 +45,12 @@ struct TopicDiagnosticConfig {
    * @brief Minimum acceptable frequency
    */
   double min_frequency;
-  
+
   /**
    * @brief Maximum acceptable frequency
    */
   double max_frequency;
-  
+
   /**
    * @brief Minimum acceptable difference between message timestamp and receipt time (in seconds)
    */
@@ -334,26 +334,27 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Function called by diagnostic updater to populate diagnostics status
    */
-  void health(diagnostic_updater::DiagnosticStatusWrapper &stat);
+  void health(diagnostic_updater::DiagnosticStatusWrapper& stat);
 
   /**
-   * @brief Sets the health information and triggers publishing by diagnostic updater
+   * @brief Sets the health information
    */
-  void setHealth(const unsigned char status, const std::string& msg, const std::map<std::string, std::string>& key_value_pairs = {});
+  void setHealth(const unsigned char status, const std::string& msg,
+                 const std::map<std::string, std::string>& key_value_pairs = {});
 
   /**
    * @brief Converts a PlannerState enum to a string representation
-   * 
-   * @param state 
-   * @return std::string 
+   *
+   * @param state
+   * @return std::string
    */
   std::string plannerStatetoString(const PlannerState& state) const;
 
   /**
    * @brief Converts a turn signal value to a string representation
-   * 
-   * @param turn_signal 
-   * @return std::string 
+   *
+   * @param turn_signal
+   * @return std::string
    */
   std::string turnSignalToString(const uint8_t& turn_signal) const;
 
@@ -435,7 +436,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @brief Diagnostic updater
    */
   diagnostic_updater::Updater diagnostic_updater_{this};
-  
+
   /**
    * @brief Diagnostic status indicating node health
    */
@@ -446,13 +447,23 @@ class SimplePlannerNode : public rclcpp::Node {
   } health_;
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> ego_data_topic_diagnostic_;
-  TopicDiagnosticConfig ego_data_topic_diagnostic_config_{.min_frequency = 45.0, .max_frequency = 55.0, .min_acceptable_timestamp_delta = -1.0, .max_acceptable_timestamp_delta = 0.02};
+  TopicDiagnosticConfig ego_data_topic_diagnostic_config_{.min_frequency = 45.0,
+                                                          .max_frequency = 55.0,
+                                                          .min_acceptable_timestamp_delta = -1.0,
+                                                          .max_acceptable_timestamp_delta = 0.02};
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
-  TopicDiagnosticConfig route_topic_diagnostic_config_{.min_frequency = 18.0, .max_frequency = 22.0, .min_acceptable_timestamp_delta = -1.0, .max_acceptable_timestamp_delta = 0.05};
+  TopicDiagnosticConfig route_topic_diagnostic_config_{.min_frequency = 18.0,
+                                                       .max_frequency = 22.0,
+                                                       .min_acceptable_timestamp_delta = -1.0,
+                                                       .max_acceptable_timestamp_delta = 0.05};
 
-  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>> diagnosed_publisher_;
-  TopicDiagnosticConfig diagnosed_publisher_config_{.min_frequency = 8.0, .max_frequency = 12.0, .min_acceptable_timestamp_delta = -1.0, .max_acceptable_timestamp_delta = 0.1};
+  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>>
+      diagnosed_publisher_;
+  TopicDiagnosticConfig diagnosed_publisher_config_{.min_frequency = 8.0,
+                                                    .max_frequency = 12.0,
+                                                    .min_acceptable_timestamp_delta = -1.0,
+                                                    .max_acceptable_timestamp_delta = 0.1};
 };
 
 }  // namespace simple_planner

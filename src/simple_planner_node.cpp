@@ -360,7 +360,7 @@ void SimplePlannerNode::objectListCallback(const perception_msgs::msg::ObjectLis
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
   route_ = *msg;
   route_topic_diagnostic_->tick(msg->header.stamp);
-  
+
   if (!route_init_) {
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
     route_init_ = true;
