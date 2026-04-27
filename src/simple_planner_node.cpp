@@ -712,9 +712,18 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       const Eigen::Vector2d center = ego_path[i].position + rotate(ego_center_offset, yaw);
       const OrientedBox2D ego_box = buildOrientedBox(center, yaw, ego_data_.length, ego_data_.width, object_safety_distance_);
       const double ego_t = dt_ * static_cast<double>(i);
+      if (ego_t > trajectory_horizon_) {
+        break;
+      }
 
       for (const auto& object_trajectory : object_trajectories) {
         for (const auto& object_sample : object_trajectory.samples) {
+          if (!object_trajectory.is_static &&
+              (object_sample.t < -object_interaction_time_window_ ||
+               object_sample.t > trajectory_horizon_ + object_interaction_time_window_)) {
+            continue;
+          }
+
           if (!overlaps(ego_box, object_sample.box)) {
             continue;
           }
