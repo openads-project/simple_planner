@@ -65,7 +65,9 @@
 | `object_safety_distance` | `double` | additional clearance around ego/object bounding boxes for conflict detection (m) |
 | `object_interaction_time_window` | `double` | maximum time offset for counting a spatial overlap as interaction (s) |
 | `object_velocity_reduction_step` | `double` | velocity decrement per object-avoidance iteration (m/s) |
+| `object_velocity_release_step` | `double` | maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
 | `object_standstill_speed_threshold` | `double` | publish standstill if object avoidance would require a lower speed cap (m/s) |
+| `object_velocity_release_hysteresis_cycles` | `int` | number of conflict-free cycles required before increasing the remembered object speed cap |
 | `publish_object_interaction_markers` | `bool` | publish RViz markers for all conflict points found during object-avoidance iterations |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |

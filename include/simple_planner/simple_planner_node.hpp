@@ -341,7 +341,9 @@ class SimplePlannerNode : public rclcpp::Node {
   double object_safety_distance_ = 0.5;
   double object_interaction_time_window_ = 0.5;
   double object_velocity_reduction_step_ = 0.3;
+  double object_velocity_release_step_ = 0.1;
   double object_standstill_speed_threshold_ = 0.3;
+  int object_velocity_release_hysteresis_cycles_ = 3;
   bool publish_object_interaction_markers_ = true;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
@@ -354,7 +356,9 @@ class SimplePlannerNode : public rclcpp::Node {
   bool object_list_init_ = false;
   bool route_init_ = false;
   std::optional<double> safe_stop_distance_;
+  std::optional<double> last_object_speed_cap_;
   SimplePath latest_path_;
+  int object_conflict_free_cycles_ = 0;
   double dt_;
 };
 

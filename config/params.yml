@@ -27,10 +27,12 @@
     consider_objects: True          # true: planner will consider perceived objects on the route; false: planner will ignore objects
     object_timeout: 1.0             # time after which a received object list is considered invalid (s) (use -1 for no timeout)
     min_prediction_prob: 0.1        # minimum probability for considering an object prediction branch; otherwise the most likely one is used
-    object_safety_distance: 0.5     # additional clearance around ego/object bounding boxes for conflict detection (m)
+    object_safety_distance: 1.0     # additional clearance around ego/object bounding boxes for conflict detection (m)
     object_interaction_time_window: 0.5  # maximum time offset for counting a spatial overlap as interaction (s)
     object_velocity_reduction_step: 0.1  # velocity decrement per object-avoidance iteration (m/s)
+    object_velocity_release_step: 0.1  # maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)
     object_standstill_speed_threshold: 0.1  # publish standstill if object avoidance would require a lower speed cap (m/s)
+    object_velocity_release_hysteresis_cycles: 3  # number of conflict-free cycles required before increasing the remembered object speed cap
     publish_object_interaction_markers: True  # publish RViz markers for all conflict points found during object-avoidance iterations
 
     #### lane change parameters
