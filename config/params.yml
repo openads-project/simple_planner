@@ -31,7 +31,7 @@
     object_interaction_time_window: 0.5  # maximum time offset for counting a spatial overlap as interaction (s)
     object_velocity_reduction_step: 0.1  # velocity decrement per object-avoidance iteration (m/s)
     object_velocity_release_step: 0.1  # maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)
-    object_standstill_speed_threshold: 0.1  # publish standstill if object avoidance would require a lower speed cap (m/s)
+    object_standstill_speed_threshold: 0.3  # publish standstill if object avoidance would require a lower speed cap (m/s)
     object_velocity_release_hysteresis_cycles: 3  # number of conflict-free cycles required before increasing the remembered object speed cap
     publish_object_interaction_markers: True  # publish RViz markers for all conflict points found during object-avoidance iterations
 

@@ -837,12 +837,13 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   RCLCPP_INFO(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
               (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
   last_object_speed_cap_ = speed_cap;
-  object_conflict_free_cycles_ = 0;
   const std::vector<ConflictSample> conflicts_at_standstill = collect_conflicts(route_plan.path.points);
   if (!conflicts_at_standstill.empty()) {
+    object_conflict_free_cycles_ = 0;
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill",
                 conflicts_at_standstill.front().object_id);
   } else {
+    object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, release_hysteresis_cycles);
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
   }
   route_plan.path.points.clear();
