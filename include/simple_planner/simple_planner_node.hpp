@@ -24,6 +24,7 @@
 
 #include <trajectory_planning_msgs/msg/trajectory.hpp>
 #include <trajectory_planning_msgs_utils/trajectory_access.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 namespace simple_planner {
 
@@ -65,10 +66,18 @@ class SimplePlannerNode : public rclcpp::Node {
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   };
 
+  struct InteractionDebugIteration {
+    size_t iteration = 0;
+    double speed_cap = 0.0;
+    std::vector<geometry_msgs::msg::Point> ego_conflict_points;
+    std::vector<geometry_msgs::msg::Point> object_conflict_points;
+  };
+
   const std::string kEgoDataTopic = "~/ego_data";
   const std::string kObjectListTopic = "~/object_list";
   const std::string kRouteTopic = "~/route";
   const std::string kOutputTopic = "~/trajectory";
+  const std::string kObjectInteractionMarkerTopic = "~/object_interaction_markers";
 
   const std::string kLeftTurnIndicatorSrv = "~/enable_left_turn_indicator";
   const std::string kRightTurnIndicatorSrv = "~/enable_right_turn_indicator";
@@ -171,6 +180,9 @@ class SimplePlannerNode : public rclcpp::Node {
    * @return trajectory_planning_msgs::msg::Trajectory Generated trajectory message.
    */
   trajectory_planning_msgs::msg::Trajectory buildTrajectoryFromSimplePath(const SimplePath& path);
+  void clearObjectInteractionMarkers(const std_msgs::msg::Header& target_header);
+  void publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header,
+                                       const std::vector<InteractionDebugIteration>& debug_iterations);
 
   /**
    * @brief Builds the initial safe-stop path for the current cycle.
@@ -289,6 +301,7 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::Subscription<route_planning_msgs::msg::Route>::SharedPtr sub_route_;
 
   rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_interaction_marker_pub_;
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr left_turn_indicator_service_client_;
@@ -329,6 +342,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double object_interaction_time_window_ = 0.5;
   double object_velocity_reduction_step_ = 0.3;
   double object_standstill_speed_threshold_ = 0.3;
+  bool publish_object_interaction_markers_ = true;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
 

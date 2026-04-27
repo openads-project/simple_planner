@@ -31,6 +31,7 @@
 | Topic | Type | Description |
 | --- | --- | --- |
 | `~/trajectory` | `trajectory_planning_msgs/msg/trajectory` | Output Trajectory |
+| `~/object_interaction_markers` | `visualization_msgs/msg/MarkerArray` | RViz markers for object-conflict positions during the speed-reduction loop |
 
 #### Service Clients
 | Service | Type | Description |
@@ -65,6 +66,7 @@
 | `object_interaction_time_window` | `double` | maximum time offset for counting a spatial overlap as interaction (s) |
 | `object_velocity_reduction_step` | `double` | velocity decrement per object-avoidance iteration (m/s) |
 | `object_standstill_speed_threshold` | `double` | publish standstill if object avoidance would require a lower speed cap (m/s) |
+| `publish_object_interaction_markers` | `bool` | publish RViz markers for all conflict points found during object-avoidance iterations |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
 

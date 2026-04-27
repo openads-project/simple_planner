@@ -4,6 +4,7 @@
 #include <cmath>
 #include <functional>
 #include <optional>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -146,6 +147,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "velocity decrement per object-avoidance iteration (m/s)");
   this->declareAndLoadParameter("object_standstill_speed_threshold", object_standstill_speed_threshold_,
                                 "publish standstill if object avoidance would require a lower speed cap (m/s)");
+  this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
+                                "publish RViz markers for all conflict points found during object-avoidance iterations");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
@@ -178,6 +181,8 @@ void SimplePlannerNode::setup() {
   // create a publisher for publishing output trajectory
   pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(kOutputTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
+  object_interaction_marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(kObjectInteractionMarkerTopic, 10);
+  RCLCPP_INFO(this->get_logger(), "Publishing object interaction markers to '%s'", object_interaction_marker_pub_->get_topic_name());
 
   // create a timer for repeatedly invoking a callback to publish messages
   publish_timer_ = this->create_wall_timer(std::chrono::duration<double>(1.0 / freq_),
@@ -340,6 +345,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
   tra.header.stamp = stamp;
   tra.header.frame_id = trajectory_frame_id_;
 
+  if (state != PlannerState::FollowRoute) {
+    clearObjectInteractionMarkers(tra.header);
+  }
+
   switch (state) {
     case PlannerState::Standstill:
       tra = buildStandstillTrajectory(tra.header);
@@ -374,6 +383,109 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildStandstillTraj
   tra.header = target_header;
   trajectory_planning_msgs::trajectory_access::setStandstill(tra, true);
   return tra;
+}
+
+void SimplePlannerNode::clearObjectInteractionMarkers(const std_msgs::msg::Header& target_header) {
+  if (!object_interaction_marker_pub_) {
+    return;
+  }
+
+  visualization_msgs::msg::MarkerArray marker_array;
+  visualization_msgs::msg::Marker delete_all;
+  delete_all.header = target_header;
+  delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
+  marker_array.markers.push_back(delete_all);
+  object_interaction_marker_pub_->publish(marker_array);
+}
+
+void SimplePlannerNode::publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header,
+                                                        const std::vector<InteractionDebugIteration>& debug_iterations) {
+  if (!object_interaction_marker_pub_) {
+    return;
+  }
+
+  visualization_msgs::msg::MarkerArray marker_array;
+  visualization_msgs::msg::Marker delete_all;
+  delete_all.header = target_header;
+  delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
+  marker_array.markers.push_back(delete_all);
+
+  if (!publish_object_interaction_markers_) {
+    object_interaction_marker_pub_->publish(marker_array);
+    return;
+  }
+
+  int marker_id = 0;
+  const size_t iteration_count = std::max<size_t>(debug_iterations.size(), 1);
+  for (size_t idx = 0; idx < debug_iterations.size(); ++idx) {
+    const auto& debug_iteration = debug_iterations[idx];
+    const double z_offset = 0.1 * static_cast<double>(idx);
+    const float color_mix = static_cast<float>(idx) / static_cast<float>(iteration_count);
+
+    visualization_msgs::msg::Marker ego_marker;
+    ego_marker.header = target_header;
+    ego_marker.ns = "object_interaction_ego";
+    ego_marker.id = marker_id++;
+    ego_marker.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+    ego_marker.action = visualization_msgs::msg::Marker::ADD;
+    ego_marker.pose.orientation.w = 1.0;
+    ego_marker.scale.x = 0.35;
+    ego_marker.scale.y = 0.35;
+    ego_marker.scale.z = 0.35;
+    ego_marker.color.r = 1.0f;
+    ego_marker.color.g = color_mix;
+    ego_marker.color.b = 0.0f;
+    ego_marker.color.a = 0.9f;
+    ego_marker.points = debug_iteration.ego_conflict_points;
+    for (auto& point : ego_marker.points) {
+      point.z = z_offset + 0.15;
+    }
+    marker_array.markers.push_back(ego_marker);
+
+    visualization_msgs::msg::Marker object_marker;
+    object_marker.header = target_header;
+    object_marker.ns = "object_interaction_object";
+    object_marker.id = marker_id++;
+    object_marker.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+    object_marker.action = visualization_msgs::msg::Marker::ADD;
+    object_marker.pose.orientation.w = 1.0;
+    object_marker.scale.x = 0.25;
+    object_marker.scale.y = 0.25;
+    object_marker.scale.z = 0.25;
+    object_marker.color.r = 0.0f;
+    object_marker.color.g = 0.6f;
+    object_marker.color.b = 1.0f;
+    object_marker.color.a = 0.9f;
+    object_marker.points = debug_iteration.object_conflict_points;
+    for (auto& point : object_marker.points) {
+      point.z = z_offset + 0.05;
+    }
+    marker_array.markers.push_back(object_marker);
+
+    if (!debug_iteration.ego_conflict_points.empty()) {
+      visualization_msgs::msg::Marker text_marker;
+      text_marker.header = target_header;
+      text_marker.ns = "object_interaction_text";
+      text_marker.id = marker_id++;
+      text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      text_marker.action = visualization_msgs::msg::Marker::ADD;
+      text_marker.pose.position = debug_iteration.ego_conflict_points.front();
+      text_marker.pose.position.z = z_offset + 0.45;
+      text_marker.pose.orientation.w = 1.0;
+      text_marker.scale.z = 0.3;
+      text_marker.color.r = 1.0f;
+      text_marker.color.g = 1.0f;
+      text_marker.color.b = 1.0f;
+      text_marker.color.a = 0.9f;
+      std::ostringstream text_stream;
+      text_stream << "it=" << debug_iteration.iteration << " v_cap=" << debug_iteration.speed_cap
+                  << " n=" << debug_iteration.ego_conflict_points.size();
+      text_marker.text = text_stream.str();
+      marker_array.markers.push_back(text_marker);
+    }
+  }
+
+  object_interaction_marker_pub_->publish(marker_array);
 }
 
 trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFromSimplePath(const SimplePath& path) {
@@ -462,6 +574,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
                                                const std::vector<SimplePathPoint>& base_path_points,
                                                FollowRoutePlan& route_plan) {
   if (!consider_objects_ || !object_list_init_ || route_plan.path.points.empty() || base_path_points.empty()) {
+    clearObjectInteractionMarkers(target_header);
     return;
   }
 
@@ -469,6 +582,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   if (isMessageOutdated(object_list_.header, object_timeout_, stamp)) {
     RCLCPP_DEBUG(this->get_logger(), "Object list is older than %f seconds. Ignoring objects for this planning cycle.", object_timeout_);
+    clearObjectInteractionMarkers(target_header);
     return;
   }
 
@@ -478,6 +592,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
                                       fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
     RCLCPP_WARN(this->get_logger(), "Object transformation is not available: %s", ex.what());
+    clearObjectInteractionMarkers(target_header);
     return;
   }
 
@@ -566,12 +681,20 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   }
 
   if (object_trajectories.empty()) {
+    clearObjectInteractionMarkers(target_header);
     return;
   }
 
   const auto& ego_offset_msg = ego_data_.state.reference_point.translation_to_geometric_center;
   const Eigen::Vector2d ego_center_offset(ego_offset_msg.x, ego_offset_msg.y);
-  auto find_conflicting_object = [&](const std::vector<SimplePathPoint>& ego_path) -> std::optional<uint64_t> {
+  struct ConflictSample {
+    uint64_t object_id = 0;
+    geometry_msgs::msg::Point ego_point;
+    geometry_msgs::msg::Point object_point;
+  };
+
+  auto collect_conflicts = [&](const std::vector<SimplePathPoint>& ego_path) -> std::vector<ConflictSample> {
+    std::vector<ConflictSample> conflicts;
     for (size_t i = 0; i < ego_path.size(); ++i) {
       const double yaw = getPathYaw(ego_path, i);
       const Eigen::Vector2d center = ego_path[i].position + rotate(ego_center_offset, yaw);
@@ -589,12 +712,20 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
             continue;
           }
 
-          return object_trajectory.id;
+          ConflictSample conflict;
+          conflict.object_id = object_trajectory.id;
+          conflict.ego_point.x = center.x();
+          conflict.ego_point.y = center.y();
+          conflict.ego_point.z = 0.0;
+          conflict.object_point.x = object_sample.box.center.x();
+          conflict.object_point.y = object_sample.box.center.y();
+          conflict.object_point.z = 0.0;
+          conflicts.push_back(conflict);
         }
       }
     }
 
-    return std::nullopt;
+    return conflicts;
   };
 
   double initial_speed_cap = 0.0;
@@ -610,13 +741,28 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   const double standstill_threshold = std::max(object_standstill_speed_threshold_, 0.0);
   double speed_cap = initial_speed_cap;
   size_t iteration_count = 0;
+  std::vector<InteractionDebugIteration> debug_iterations;
   while (speed_cap > 0.0) {
     ++iteration_count;
     std::vector<SimplePathPoint> candidate_path = resamplePath(base_path_points, route_plan.stop_at_end,
                                                                route_plan.offset_to_stop_line, &speed_cap);
-    const std::optional<uint64_t> conflicting_object_id = find_conflicting_object(candidate_path);
-    if (!conflicting_object_id) {
+    const std::vector<ConflictSample> conflicts = collect_conflicts(candidate_path);
+    if (!conflicts.empty()) {
+      InteractionDebugIteration debug_iteration;
+      debug_iteration.iteration = iteration_count;
+      debug_iteration.speed_cap = speed_cap;
+      debug_iteration.ego_conflict_points.reserve(conflicts.size());
+      debug_iteration.object_conflict_points.reserve(conflicts.size());
+      for (const auto& conflict : conflicts) {
+        debug_iteration.ego_conflict_points.push_back(conflict.ego_point);
+        debug_iteration.object_conflict_points.push_back(conflict.object_point);
+      }
+      debug_iterations.push_back(std::move(debug_iteration));
+    }
+
+    if (conflicts.empty()) {
       const rclcpp::Time iteration_end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+      publishObjectInteractionMarkers(target_header, debug_iterations);
       RCLCPP_INFO(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
                   (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
 
@@ -638,12 +784,14 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   }
 
   route_plan.path.points = resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line, &speed_cap);
+  publishObjectInteractionMarkers(target_header, debug_iterations);
   const rclcpp::Time iteration_end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   RCLCPP_INFO(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
               (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
-  if (const std::optional<uint64_t> conflicting_object_id = find_conflicting_object(route_plan.path.points)) {
+  const std::vector<ConflictSample> conflicts_at_standstill = collect_conflicts(route_plan.path.points);
+  if (!conflicts_at_standstill.empty()) {
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill",
-                *conflicting_object_id);
+                conflicts_at_standstill.front().object_id);
   } else {
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
   }
@@ -1058,6 +1206,10 @@ void SimplePlannerNode::publishTimerCallback() {
   const rclcpp::Time stamp = now();
   PlannerState planner_state = determinePlannerState(stamp);
   if (planner_state == PlannerState::NoPublish) {
+    std_msgs::msg::Header marker_header;
+    marker_header.stamp = stamp;
+    marker_header.frame_id = trajectory_frame_id_;
+    clearObjectInteractionMarkers(marker_header);
     return;
   }
 

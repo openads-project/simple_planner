@@ -19,6 +19,7 @@ find_package(tf2_route_planning_msgs REQUIRED)
 find_package(tracetools REQUIRED)
 find_package(trajectory_planning_msgs REQUIRED)
 find_package(trajectory_planning_msgs_utils REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 set(TARGET_NAME simple_planner_node)
 
@@ -44,6 +45,7 @@ ament_target_dependencies(${TARGET_NAME}
   tracetools
   trajectory_planning_msgs
   trajectory_planning_msgs_utils
+  visualization_msgs
 )
 
 install(TARGETS ${TARGET_NAME}
