@@ -34,6 +34,7 @@ struct TimedBox2D {
   double t = 0.0;
   double d = 0.0;
   double yaw = 0.0;
+  double path_yaw = 0.0;
   double length = 0.0;
   double width = 0.0;
   bool has_projection = false;
@@ -128,6 +129,7 @@ TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& rhs, dou
   sample.d = lhs.d + alpha * (rhs.d - lhs.d);
   sample.has_projection = lhs.has_projection && rhs.has_projection;
   sample.yaw = wrap_angle_rad(lhs.yaw + alpha * wrap_angle_rad(rhs.yaw - lhs.yaw));
+  sample.path_yaw = wrap_angle_rad(lhs.path_yaw + alpha * wrap_angle_rad(rhs.path_yaw - lhs.path_yaw));
   sample.length = lhs.length + alpha * (rhs.length - lhs.length);
   sample.width = lhs.width + alpha * (rhs.width - lhs.width);
   const Eigen::Vector2d center = lhs.box.center + alpha * (rhs.box.center - lhs.box.center);
@@ -226,6 +228,12 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("object_conflict_latch_cycles", object_conflict_latch_cycles_,
                                 "number of cycles an object conflict is kept after a single missed detection",
                                 true, false, false, 0.0, 100.0, 1.0);
+  this->declareAndLoadParameter("object_oncoming_heading_threshold", object_oncoming_heading_threshold_,
+                                "minimum heading difference for applying oncoming-object lateral filtering (rad)",
+                                true, false, false, 0.0, M_PI, 0.001);
+  this->declareAndLoadParameter("object_oncoming_min_lateral_overlap", object_oncoming_min_lateral_overlap_,
+                                "minimum uninflated lateral overlap required for oncoming-object conflicts (m)",
+                                true, false, false, 0.0, 10.0, 0.1);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
                                 "publish RViz markers for all conflict points found during object-avoidance iterations");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
@@ -647,6 +655,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       sample.has_projection = projection.valid;
       sample.s = projection.valid ? projection.s : 0.0;
       sample.d = projection.valid ? projection.d : 0.0;
+      sample.path_yaw = projection.valid ? projection.yaw : 0.0;
       return sample;
     };
 
@@ -738,6 +747,21 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     return true;
   };
 
+  auto is_relevant_object_overlap = [&](const TimedBox2D& object_sample) {
+    if (!object_sample.has_projection) {
+      return true;
+    }
+
+    const double heading_diff = std::abs(wrap_angle_rad(object_sample.yaw - object_sample.path_yaw));
+    if (heading_diff < object_oncoming_heading_threshold_) {
+      return true;
+    }
+
+    const double uninflated_lateral_overlap =
+        ego_data_.width / 2.0 + object_sample.width / 2.0 - std::abs(object_sample.d);
+    return uninflated_lateral_overlap >= object_oncoming_min_lateral_overlap_;
+  };
+
   auto collect_current_conflicts = [&](const std::vector<SimplePathPoint>& ego_path) -> std::vector<ConflictSample> {
     std::vector<ConflictSample> conflicts;
     if (ego_path.empty()) {
@@ -770,6 +794,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
             if (!overlaps(ego_box, object_sample.box)) {
               continue;
             }
+            if (!is_relevant_object_overlap(object_sample)) {
+              continue;
+            }
             conflicts.push_back({object_trajectory.id, ego_point, toPoint(object_sample.box.center)});
             continue;
           }
@@ -791,6 +818,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
             }
 
             if (!overlaps(ego_box, timed_object_sample.box)) {
+              continue;
+            }
+            if (!is_relevant_object_overlap(timed_object_sample)) {
               continue;
             }
             conflicts.push_back({object_trajectory.id, ego_point, toPoint(timed_object_sample.box.center)});

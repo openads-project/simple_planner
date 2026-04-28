@@ -350,6 +350,8 @@ class SimplePlannerNode : public rclcpp::Node {
   double object_interaction_time_window_growth_ = 0.1;
   double object_interaction_time_window_max_ = 1.0;
   int object_conflict_latch_cycles_ = 3;
+  double object_oncoming_heading_threshold_ = 2.356;
+  double object_oncoming_min_lateral_overlap_ = 0.4;
   bool publish_object_interaction_markers_ = true;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;

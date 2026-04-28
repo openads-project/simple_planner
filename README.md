@@ -74,6 +74,8 @@
 | `object_interaction_time_window_growth` | `double` | additional temporal tolerance per prediction second for dynamic object interactions (s/s) |
 | `object_interaction_time_window_max` | `double` | maximum temporal tolerance for dynamic object interactions (s) |
 | `object_conflict_latch_cycles` | `int` | number of cycles an object conflict remains active after a missed detection |
+| `object_oncoming_heading_threshold` | `double` | heading difference above which oncoming-object lateral filtering is applied (rad) |
+| `object_oncoming_min_lateral_overlap` | `double` | minimum uninflated lateral overlap required for oncoming-object conflicts (m) |
 | `publish_object_interaction_markers` | `bool` | publish RViz markers for all conflict points found during object-avoidance iterations |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |

@@ -39,6 +39,8 @@
     object_interaction_time_window_growth: 0.1  # additional temporal tolerance per prediction second (s/s)
     object_interaction_time_window_max: 1.0     # maximum temporal tolerance for dynamic object interactions (s)
     object_conflict_latch_cycles: 3  # cycles an object conflict remains active after one missed detection
+    object_oncoming_heading_threshold: 2.356  # heading difference above which oncoming lateral filtering is applied (rad)
+    object_oncoming_min_lateral_overlap: 0.4  # minimum uninflated lateral overlap for oncoming-object conflicts (m)
     publish_object_interaction_markers: True  # publish RViz markers for all conflict points found during object-avoidance iterations
 
     #### lane change parameters
