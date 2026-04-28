@@ -68,6 +68,12 @@
 | `object_velocity_release_step` | `double` | maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
 | `object_standstill_speed_threshold` | `double` | publish standstill if object avoidance would require a lower speed cap (m/s) |
 | `object_velocity_release_hysteresis_cycles` | `int` | number of conflict-free cycles required before increasing the remembered object speed cap |
+| `object_collision_check_dt` | `double` | maximum time step used for swept object collision checks between reference states (s) |
+| `object_min_width` | `double` | minimum object width used if reported dimensions are missing or too small (m) |
+| `object_min_length` | `double` | minimum object length used if reported dimensions are missing or too small (m) |
+| `object_interaction_time_window_growth` | `double` | additional temporal tolerance per prediction second for dynamic object interactions (s/s) |
+| `object_interaction_time_window_max` | `double` | maximum temporal tolerance for dynamic object interactions (s) |
+| `object_conflict_latch_cycles` | `int` | number of cycles an object conflict remains active after a missed detection |
 | `publish_object_interaction_markers` | `bool` | publish RViz markers for all conflict points found during object-avoidance iterations |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
