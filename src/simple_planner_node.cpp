@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <thread>
@@ -144,13 +145,17 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("object_interaction_time_window", object_interaction_time_window_,
                                 "maximum time offset for counting a spatial overlap as interaction (s)");
   this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,
-                                "velocity decrement per object-avoidance iteration (m/s)");
+                                "velocity decrement per object-avoidance iteration (m/s)",
+                                true, false, false, 1e-3, 40.0, 1e-3);
   this->declareAndLoadParameter("object_velocity_release_step", object_velocity_release_step_,
-                                "maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)");
+                                "maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)",
+                                true, false, false, 1e-3, 40.0, 1e-3);
   this->declareAndLoadParameter("object_standstill_speed_threshold", object_standstill_speed_threshold_,
-                                "publish standstill if object avoidance would require a lower speed cap (m/s)");
+                                "publish standstill if object avoidance would require a lower speed cap (m/s)",
+                                true, false, false, 0.0, 10.0, 1e-3);
   this->declareAndLoadParameter("object_velocity_release_hysteresis_cycles", object_velocity_release_hysteresis_cycles_,
-                                "number of conflict-free cycles required before increasing the remembered object speed cap");
+                                "number of conflict-free cycles required before increasing the remembered object speed cap",
+                                true, false, false, 0.0, 100.0, 1.0);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
                                 "publish RViz markers for all conflict points found during object-avoidance iterations");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
@@ -758,17 +763,13 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   }
 
   const rclcpp::Time iteration_begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
-  const double reduction_step = std::max(object_velocity_reduction_step_, 1e-3);
-  const double release_step = std::max(object_velocity_release_step_, 1e-3);
-  const double standstill_threshold = std::max(object_standstill_speed_threshold_, 0.0);
-  const int release_hysteresis_cycles = std::max(object_velocity_release_hysteresis_cycles_, 0);
   const double remembered_speed_cap =
       std::clamp(last_object_speed_cap_.value_or(initial_speed_cap), 0.0, initial_speed_cap);
   double search_start_speed_cap = remembered_speed_cap;
   bool attempted_release = false;
   if (last_object_speed_cap_.has_value() && search_start_speed_cap < initial_speed_cap &&
-      object_conflict_free_cycles_ >= release_hysteresis_cycles) {
-    search_start_speed_cap = std::min(search_start_speed_cap + release_step, initial_speed_cap);
+      object_conflict_free_cycles_ >= object_velocity_release_hysteresis_cycles_) {
+    search_start_speed_cap = std::min(search_start_speed_cap + object_velocity_release_step_, initial_speed_cap);
     attempted_release = search_start_speed_cap > remembered_speed_cap + 1e-6;
   }
 
@@ -811,13 +812,13 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       } else if (speed_cap + 1e-6 < search_start_speed_cap || attempted_release) {
         object_conflict_free_cycles_ = 0;
       } else {
-        object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, release_hysteresis_cycles);
+        object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);
       }
 
-      if (speed_cap <= standstill_threshold) {
+      if (speed_cap <= object_standstill_speed_threshold_) {
         route_plan.path.points.clear();
         RCLCPP_INFO(this->get_logger(), "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.",
-                    speed_cap, standstill_threshold);
+                    speed_cap, object_standstill_speed_threshold_);
         return;
       }
 
@@ -828,7 +829,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       return;
     }
 
-    speed_cap = std::max(speed_cap - reduction_step, 0.0);
+    speed_cap = std::max(speed_cap - object_velocity_reduction_step_, 0.0);
   }
 
   route_plan.path.points = resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line, &speed_cap);
@@ -843,7 +844,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill",
                 conflicts_at_standstill.front().object_id);
   } else {
-    object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, release_hysteresis_cycles);
+    object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
   }
   route_plan.path.points.clear();
