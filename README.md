@@ -62,7 +62,8 @@
 | `consider_objects` | `bool` | true: planner will consider perceived objects on the route; false: planner will ignore objects |
 | `object_timeout` | `double` | time after which a received object list is considered invalid (s) (use `-1.0` for no timeout) |
 | `min_prediction_prob` | `double` | minimum probability for considering an object prediction branch; otherwise the most likely one is used |
-| `object_safety_distance` | `double` | additional clearance around ego/object bounding boxes for conflict detection (m) |
+| `object_longitudinal_safety_distance` | `double` | longitudinal clearance around ego/object bounding boxes for conflict detection (m) |
+| `object_lateral_safety_distance` | `double` | lateral clearance around ego/object bounding boxes for conflict detection (m) |
 | `object_interaction_time_window` | `double` | maximum time offset for counting a spatial overlap as interaction (s) |
 | `object_velocity_reduction_step` | `double` | velocity decrement per object-avoidance iteration (m/s) |
 | `object_velocity_release_step` | `double` | maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
@@ -74,8 +75,6 @@
 | `object_interaction_time_window_growth` | `double` | additional temporal tolerance per prediction second for dynamic object interactions (s/s) |
 | `object_interaction_time_window_max` | `double` | maximum temporal tolerance for dynamic object interactions (s) |
 | `object_conflict_latch_cycles` | `int` | number of cycles an object conflict remains active after a missed detection |
-| `object_oncoming_heading_threshold` | `double` | heading difference above which oncoming-object lateral filtering is applied (rad) |
-| `object_oncoming_min_lateral_overlap` | `double` | minimum uninflated lateral overlap required for oncoming-object conflicts (m) |
 | `publish_object_interaction_markers` | `bool` | publish RViz markers for all conflict points found during object-avoidance iterations |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |

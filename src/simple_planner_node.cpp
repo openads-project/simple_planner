@@ -30,22 +30,10 @@ struct OrientedBox2D {
 
 struct TimedBox2D {
   OrientedBox2D box;
-  double s = 0.0;
   double t = 0.0;
-  double d = 0.0;
   double yaw = 0.0;
-  double path_yaw = 0.0;
   double length = 0.0;
   double width = 0.0;
-  bool has_projection = false;
-};
-
-struct PathProjection {
-  bool valid = false;
-  Eigen::Vector2d point = Eigen::Vector2d::Zero();
-  double s = 0.0;
-  double d = 0.0;
-  double yaw = 0.0;
 };
 
 double wrap_angle_rad(double angle_rad, double min_val = -M_PI, double max_val = M_PI) {
@@ -68,13 +56,13 @@ double getStateRelativeTime(const perception_msgs::msg::ObjectState& state, cons
   return (rclcpp::Time(source_header.stamp) - planning_stamp).seconds();
 }
 
-OrientedBox2D buildOrientedBox(const Eigen::Vector2d& center, double yaw, double length, double width, double safety_distance) {
+OrientedBox2D buildOrientedBox(const Eigen::Vector2d& center, double yaw, double length, double width) {
   OrientedBox2D box;
   box.center = center;
   box.axis_x = rotate(Eigen::Vector2d::UnitX(), yaw);
   box.axis_y = rotate(Eigen::Vector2d::UnitY(), yaw);
-  box.half_length = std::max(length, 0.0) / 2.0 + safety_distance / 2.0;
-  box.half_width = std::max(width, 0.0) / 2.0 + safety_distance / 2.0;
+  box.half_length = std::max(length, 0.0) / 2.0;
+  box.half_width = std::max(width, 0.0) / 2.0;
   return box;
 }
 
@@ -86,66 +74,31 @@ geometry_msgs::msg::Point toPoint(const Eigen::Vector2d& point) {
   return msg;
 }
 
-PathProjection projectPointToPath(const std::vector<simple_planner::SimplePathPoint>& path, const Eigen::Vector2d& point) {
-  PathProjection best;
-  if (path.size() < 2) {
-    return best;
-  }
-
-  double best_dist_sq = std::numeric_limits<double>::max();
-  for (size_t i = 0; i + 1 < path.size(); ++i) {
-    const Eigen::Vector2d segment = path[i + 1].position - path[i].position;
-    const double segment_length_sq = segment.squaredNorm();
-    if (segment_length_sq < 1e-9) {
-      continue;
-    }
-
-    const double alpha = std::clamp((point - path[i].position).dot(segment) / segment_length_sq, 0.0, 1.0);
-    const Eigen::Vector2d projected = path[i].position + alpha * segment;
-    const double dist_sq = (point - projected).squaredNorm();
-    if (dist_sq >= best_dist_sq) {
-      continue;
-    }
-
-    const double segment_length = std::sqrt(segment_length_sq);
-    const Eigen::Vector2d tangent = segment / segment_length;
-    best_dist_sq = dist_sq;
-    best.valid = true;
-    best.point = projected;
-    best.s = path[i].s + alpha * (path[i + 1].s - path[i].s);
-    best.d = tangent.x() * (point.y() - projected.y()) - tangent.y() * (point.x() - projected.x());
-    best.yaw = wrap_angle_rad(std::atan2(tangent.y(), tangent.x()));
-  }
-
-  return best;
-}
-
-TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& rhs, double t, double safety_distance) {
+TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& rhs, double t) {
   const double duration = rhs.t - lhs.t;
   const double alpha = std::abs(duration) > 1e-6 ? std::clamp((t - lhs.t) / duration, 0.0, 1.0) : 0.0;
   TimedBox2D sample;
   sample.t = t;
-  sample.s = lhs.s + alpha * (rhs.s - lhs.s);
-  sample.d = lhs.d + alpha * (rhs.d - lhs.d);
-  sample.has_projection = lhs.has_projection && rhs.has_projection;
   sample.yaw = wrap_angle_rad(lhs.yaw + alpha * wrap_angle_rad(rhs.yaw - lhs.yaw));
-  sample.path_yaw = wrap_angle_rad(lhs.path_yaw + alpha * wrap_angle_rad(rhs.path_yaw - lhs.path_yaw));
   sample.length = lhs.length + alpha * (rhs.length - lhs.length);
   sample.width = lhs.width + alpha * (rhs.width - lhs.width);
   const Eigen::Vector2d center = lhs.box.center + alpha * (rhs.box.center - lhs.box.center);
-  sample.box = buildOrientedBox(center, sample.yaw, sample.length, sample.width, safety_distance);
+  sample.box = buildOrientedBox(center, sample.yaw, sample.length, sample.width);
   return sample;
 }
 
-bool overlaps(const OrientedBox2D& lhs, const OrientedBox2D& rhs) {
-  const Eigen::Vector2d center_delta = rhs.center - lhs.center;
-  const std::array<Eigen::Vector2d, 4> axes = {lhs.axis_x, lhs.axis_y, rhs.axis_x, rhs.axis_y};
+bool overlapsWithEgoSafety(const OrientedBox2D& ego_box, const OrientedBox2D& object_box,
+                           double longitudinal_safety_distance, double lateral_safety_distance) {
+  const Eigen::Vector2d center_delta = object_box.center - ego_box.center;
+  const std::array<Eigen::Vector2d, 4> axes = {ego_box.axis_x, ego_box.axis_y, object_box.axis_x, object_box.axis_y};
   for (const auto& axis : axes) {
-    const double lhs_extent = lhs.half_length * std::abs(axis.dot(lhs.axis_x)) +
-                              lhs.half_width * std::abs(axis.dot(lhs.axis_y));
-    const double rhs_extent = rhs.half_length * std::abs(axis.dot(rhs.axis_x)) +
-                              rhs.half_width * std::abs(axis.dot(rhs.axis_y));
-    if (std::abs(axis.dot(center_delta)) > lhs_extent + rhs_extent + 1e-6) {
+    const double ego_extent = ego_box.half_length * std::abs(axis.dot(ego_box.axis_x)) +
+                              ego_box.half_width * std::abs(axis.dot(ego_box.axis_y));
+    const double object_extent = object_box.half_length * std::abs(axis.dot(object_box.axis_x)) +
+                                 object_box.half_width * std::abs(axis.dot(object_box.axis_y));
+    const double safety_extent = longitudinal_safety_distance * std::abs(axis.dot(ego_box.axis_x)) +
+                                 lateral_safety_distance * std::abs(axis.dot(ego_box.axis_y));
+    if (std::abs(axis.dot(center_delta)) > ego_extent + object_extent + safety_extent + 1e-6) {
       return false;
     }
   }
@@ -194,8 +147,12 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "true: planner will consider perceived objects on the route; false: planner will ignore objects");
   this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
                                 "minimum probability for considering an object prediction branch");
-  this->declareAndLoadParameter("object_safety_distance", object_safety_distance_,
-                                "additional clearance around ego/object bounding boxes for conflict detection (m)");
+  this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
+                                "longitudinal clearance around ego/object bounding boxes for conflict detection (m)",
+                                true, false, false, 0.0, 20.0, 0.1);
+  this->declareAndLoadParameter("object_lateral_safety_distance", object_lateral_safety_distance_,
+                                "lateral clearance around ego/object bounding boxes for conflict detection (m)",
+                                true, false, false, 0.0, 10.0, 0.1);
   this->declareAndLoadParameter("object_interaction_time_window", object_interaction_time_window_,
                                 "maximum time offset for counting a spatial overlap as interaction (s)");
   this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,
@@ -228,12 +185,6 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("object_conflict_latch_cycles", object_conflict_latch_cycles_,
                                 "number of cycles an object conflict is kept after a single missed detection",
                                 true, false, false, 0.0, 100.0, 1.0);
-  this->declareAndLoadParameter("object_oncoming_heading_threshold", object_oncoming_heading_threshold_,
-                                "minimum heading difference for applying oncoming-object lateral filtering (rad)",
-                                true, false, false, 0.0, M_PI, 0.001);
-  this->declareAndLoadParameter("object_oncoming_min_lateral_overlap", object_oncoming_min_lateral_overlap_,
-                                "minimum uninflated lateral overlap required for oncoming-object conflicts (m)",
-                                true, false, false, 0.0, 10.0, 0.1);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
                                 "publish RViz markers for all conflict points found during object-avoidance iterations");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
@@ -649,13 +600,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       sample.yaw = perception_msgs::object_access::getYaw(state);
       sample.length = object_length;
       sample.width = object_width;
-      sample.box = buildOrientedBox(center, sample.yaw, sample.length, sample.width, object_safety_distance_);
+      sample.box = buildOrientedBox(center, sample.yaw, sample.length, sample.width);
       sample.t = getStateRelativeTime(state, fallback_header, stamp);
-      const PathProjection projection = projectPointToPath(base_path_points, center);
-      sample.has_projection = projection.valid;
-      sample.s = projection.valid ? projection.s : 0.0;
-      sample.d = projection.valid ? projection.d : 0.0;
-      sample.path_yaw = projection.valid ? projection.yaw : 0.0;
       return sample;
     };
 
@@ -742,24 +688,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     }
     const double yaw = heading.squaredNorm() > 1e-9 ? wrap_angle_rad(std::atan2(heading.y(), heading.x())) : 0.0;
     const Eigen::Vector2d center = position + rotate(ego_center_offset, yaw);
-    ego_box = buildOrientedBox(center, yaw, ego_data_.length, ego_data_.width, object_safety_distance_);
+    ego_box = buildOrientedBox(center, yaw, ego_data_.length, ego_data_.width);
     ego_point = toPoint(center);
     return true;
-  };
-
-  auto is_relevant_object_overlap = [&](const TimedBox2D& object_sample) {
-    if (!object_sample.has_projection) {
-      return true;
-    }
-
-    const double heading_diff = std::abs(wrap_angle_rad(object_sample.yaw - object_sample.path_yaw));
-    if (heading_diff < object_oncoming_heading_threshold_) {
-      return true;
-    }
-
-    const double uninflated_lateral_overlap =
-        ego_data_.width / 2.0 + object_sample.width / 2.0 - std::abs(object_sample.d);
-    return uninflated_lateral_overlap >= object_oncoming_min_lateral_overlap_;
   };
 
   auto collect_current_conflicts = [&](const std::vector<SimplePathPoint>& ego_path) -> std::vector<ConflictSample> {
@@ -791,10 +722,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
           if (object_trajectory.is_static) {
             const auto& object_sample = object_trajectory.samples.front();
-            if (!overlaps(ego_box, object_sample.box)) {
-              continue;
-            }
-            if (!is_relevant_object_overlap(object_sample)) {
+            if (!overlapsWithEgoSafety(ego_box, object_sample.box, object_longitudinal_safety_distance_,
+                                       object_lateral_safety_distance_)) {
               continue;
             }
             conflicts.push_back({object_trajectory.id, ego_point, toPoint(object_sample.box.center)});
@@ -809,7 +738,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
             TimedBox2D timed_object_sample = object_sample;
             if (next_sample != nullptr && ego_t >= object_sample.t - time_window && ego_t <= next_sample->t + time_window) {
               if (ego_t >= object_sample.t && ego_t <= next_sample->t) {
-                timed_object_sample = interpolateTimedBox(object_sample, *next_sample, ego_t, object_safety_distance_);
+                timed_object_sample = interpolateTimedBox(object_sample, *next_sample, ego_t);
               } else if (std::abs(ego_t - next_sample->t) < std::abs(ego_t - object_sample.t)) {
                 timed_object_sample = *next_sample;
               }
@@ -817,10 +746,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
               continue;
             }
 
-            if (!overlaps(ego_box, timed_object_sample.box)) {
-              continue;
-            }
-            if (!is_relevant_object_overlap(timed_object_sample)) {
+            if (!overlapsWithEgoSafety(ego_box, timed_object_sample.box, object_longitudinal_safety_distance_,
+                                       object_lateral_safety_distance_)) {
               continue;
             }
             conflicts.push_back({object_trajectory.id, ego_point, toPoint(timed_object_sample.box.center)});
