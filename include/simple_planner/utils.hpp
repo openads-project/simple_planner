@@ -158,99 +158,94 @@ void SimplePlannerNode::clearObjectInteractionMarkers(const std_msgs::msg::Heade
   }
 
   visualization_msgs::msg::MarkerArray marker_array;
-  visualization_msgs::msg::Marker delete_all;
-  delete_all.header = target_header;
-  delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
-  marker_array.markers.push_back(delete_all);
+  const std::array<std::string, 4> namespaces = {
+      "object_interaction_ego_safety_box",
+      "object_interaction_ego_box",
+      "object_interaction_object_box",
+      "object_interaction_text"};
+  for (size_t idx = 0; idx < namespaces.size(); ++idx) {
+    visualization_msgs::msg::Marker marker;
+    marker.header = target_header;
+    marker.ns = namespaces[idx];
+    marker.id = static_cast<int>(idx);
+    marker.action = visualization_msgs::msg::Marker::DELETE;
+    marker_array.markers.push_back(marker);
+  }
   object_interaction_marker_pub_->publish(marker_array);
 }
 
 void SimplePlannerNode::publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header,
-                                                        const std::vector<InteractionDebugIteration>& debug_iterations) {
+                                                        const std::optional<ObjectConflictDebugSample>& debug_sample) {
   if (!object_interaction_marker_pub_) {
     return;
   }
 
-  visualization_msgs::msg::MarkerArray marker_array;
-  visualization_msgs::msg::Marker delete_all;
-  delete_all.header = target_header;
-  delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
-  marker_array.markers.push_back(delete_all);
-
   if (!publish_object_interaction_markers_) {
-    object_interaction_marker_pub_->publish(marker_array);
+    clearObjectInteractionMarkers(target_header);
+    return;
+  }
+  if (!debug_sample.has_value()) {
     return;
   }
 
-  int marker_id = 0;
-  const size_t iteration_count = std::max<size_t>(debug_iterations.size(), 1);
-  for (size_t idx = 0; idx < debug_iterations.size(); ++idx) {
-    const auto& debug_iteration = debug_iterations[idx];
-    const double z_offset = 0.1 * static_cast<double>(idx);
-    const float color_mix = static_cast<float>(idx) / static_cast<float>(iteration_count);
+  visualization_msgs::msg::MarkerArray marker_array;
+  const auto& sample = *debug_sample;
+  auto make_box_marker = [&](const std::string& ns, int marker_id, const geometry_msgs::msg::Pose& pose,
+                             double length, double width, double z, float r, float g, float b, float a) {
+    visualization_msgs::msg::Marker marker;
+    marker.header = target_header;
+    marker.ns = ns;
+    marker.id = marker_id;
+    marker.type = visualization_msgs::msg::Marker::CUBE;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+    marker.pose = pose;
+    marker.pose.position.z = z;
+    marker.scale.x = length;
+    marker.scale.y = width;
+    marker.scale.z = 0.08;
+    marker.lifetime.sec = 0;
+    marker.lifetime.nanosec = 500000000;
+    marker.color.r = r;
+    marker.color.g = g;
+    marker.color.b = b;
+    marker.color.a = a;
+    marker_array.markers.push_back(marker);
+  };
 
-    visualization_msgs::msg::Marker ego_marker;
-    ego_marker.header = target_header;
-    ego_marker.ns = "object_interaction_ego";
-    ego_marker.id = marker_id++;
-    ego_marker.type = visualization_msgs::msg::Marker::SPHERE_LIST;
-    ego_marker.action = visualization_msgs::msg::Marker::ADD;
-    ego_marker.pose.orientation.w = 1.0;
-    ego_marker.scale.x = 0.35;
-    ego_marker.scale.y = 0.35;
-    ego_marker.scale.z = 0.35;
-    ego_marker.color.r = 1.0f;
-    ego_marker.color.g = color_mix;
-    ego_marker.color.b = 0.0f;
-    ego_marker.color.a = 0.9f;
-    ego_marker.points = debug_iteration.ego_conflict_points;
-    for (auto& point : ego_marker.points) {
-      point.z = z_offset + 0.15;
-    }
-    marker_array.markers.push_back(ego_marker);
+  make_box_marker("object_interaction_ego_safety_box", 0, sample.ego_pose,
+                  sample.ego_safety_length, sample.ego_safety_width,
+                  0.12, 1.0f, 0.55f, 0.0f, 0.28f);
+  make_box_marker("object_interaction_ego_box", 1, sample.ego_pose,
+                  sample.ego_length, sample.ego_width,
+                  0.18, 1.0f, 0.0f, 0.0f, 0.55f);
+  make_box_marker("object_interaction_object_box", 2, sample.object_pose,
+                  sample.object_length, sample.object_width,
+                  0.24, 0.0f, 0.45f, 1.0f, 0.55f);
 
-    visualization_msgs::msg::Marker object_marker;
-    object_marker.header = target_header;
-    object_marker.ns = "object_interaction_object";
-    object_marker.id = marker_id++;
-    object_marker.type = visualization_msgs::msg::Marker::SPHERE_LIST;
-    object_marker.action = visualization_msgs::msg::Marker::ADD;
-    object_marker.pose.orientation.w = 1.0;
-    object_marker.scale.x = 0.25;
-    object_marker.scale.y = 0.25;
-    object_marker.scale.z = 0.25;
-    object_marker.color.r = 0.0f;
-    object_marker.color.g = 0.6f;
-    object_marker.color.b = 1.0f;
-    object_marker.color.a = 0.9f;
-    object_marker.points = debug_iteration.object_conflict_points;
-    for (auto& point : object_marker.points) {
-      point.z = z_offset + 0.05;
-    }
-    marker_array.markers.push_back(object_marker);
-
-    if (!debug_iteration.ego_conflict_points.empty()) {
-      visualization_msgs::msg::Marker text_marker;
-      text_marker.header = target_header;
-      text_marker.ns = "object_interaction_text";
-      text_marker.id = marker_id++;
-      text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-      text_marker.action = visualization_msgs::msg::Marker::ADD;
-      text_marker.pose.position = debug_iteration.ego_conflict_points.front();
-      text_marker.pose.position.z = z_offset + 0.45;
-      text_marker.pose.orientation.w = 1.0;
-      text_marker.scale.z = 0.3;
-      text_marker.color.r = 1.0f;
-      text_marker.color.g = 1.0f;
-      text_marker.color.b = 1.0f;
-      text_marker.color.a = 0.9f;
-      std::ostringstream text_stream;
-      text_stream << "it=" << debug_iteration.iteration << " v_cap=" << debug_iteration.speed_cap
-                  << " n=" << debug_iteration.ego_conflict_points.size();
-      text_marker.text = text_stream.str();
-      marker_array.markers.push_back(text_marker);
-    }
-  }
+  visualization_msgs::msg::Marker text_marker;
+  text_marker.header = target_header;
+  text_marker.ns = "object_interaction_text";
+  text_marker.id = 3;
+  text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+  text_marker.action = visualization_msgs::msg::Marker::ADD;
+  text_marker.pose = sample.ego_pose;
+  text_marker.pose.position.z = 0.65;
+  text_marker.pose.orientation.x = 0.0;
+  text_marker.pose.orientation.y = 0.0;
+  text_marker.pose.orientation.z = 0.0;
+  text_marker.pose.orientation.w = 1.0;
+  text_marker.scale.z = 0.3;
+  text_marker.lifetime.sec = 0;
+  text_marker.lifetime.nanosec = 500000000;
+  text_marker.color.r = 1.0f;
+  text_marker.color.g = 1.0f;
+  text_marker.color.b = 1.0f;
+  text_marker.color.a = 0.9f;
+  std::ostringstream text_stream;
+  text_stream << "object=" << sample.object_id << " t=" << sample.t
+              << " v_cap=" << sample.speed_cap << " it=" << sample.iteration;
+  text_marker.text = text_stream.str();
+  marker_array.markers.push_back(text_marker);
 
   object_interaction_marker_pub_->publish(marker_array);
 }

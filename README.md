@@ -74,8 +74,7 @@
 | `object_min_length` | `double` | minimum object length used if reported dimensions are missing or too small (m) |
 | `object_interaction_time_window_growth` | `double` | additional temporal tolerance per prediction second for dynamic object interactions (s/s) |
 | `object_interaction_time_window_max` | `double` | maximum temporal tolerance for dynamic object interactions (s) |
-| `object_conflict_latch_cycles` | `int` | number of cycles an object conflict remains active after a missed detection |
-| `publish_object_interaction_markers` | `bool` | publish RViz markers for all conflict points found during object-avoidance iterations |
+| `publish_object_interaction_markers` | `bool` | publish RViz markers for the object conflict that explains the final speed reduction |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
 

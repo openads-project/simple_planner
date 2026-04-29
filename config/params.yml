@@ -39,8 +39,7 @@
     object_min_length: 1.2           # minimum object length used if dimensions are missing or implausibly small (m)
     object_interaction_time_window_growth: 0.1  # additional temporal tolerance per prediction second (s/s)
     object_interaction_time_window_max: 1.0     # maximum temporal tolerance for dynamic object interactions (s)
-    object_conflict_latch_cycles: 3  # cycles an object conflict remains active after one missed detection
-    publish_object_interaction_markers: True  # publish RViz markers for all conflict points found during object-avoidance iterations
+    publish_object_interaction_markers: True  # publish RViz markers for the conflict explaining the final speed reduction
 
     #### lane change parameters
     lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)

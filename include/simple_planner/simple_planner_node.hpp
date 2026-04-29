@@ -66,11 +66,19 @@ class SimplePlannerNode : public rclcpp::Node {
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   };
 
-  struct InteractionDebugIteration {
+  struct ObjectConflictDebugSample {
+    uint64_t object_id = 0;
     size_t iteration = 0;
     double speed_cap = 0.0;
-    std::vector<geometry_msgs::msg::Point> ego_conflict_points;
-    std::vector<geometry_msgs::msg::Point> object_conflict_points;
+    double t = 0.0;
+    geometry_msgs::msg::Pose ego_pose;
+    geometry_msgs::msg::Pose object_pose;
+    double ego_length = 0.0;
+    double ego_width = 0.0;
+    double ego_safety_length = 0.0;
+    double ego_safety_width = 0.0;
+    double object_length = 0.0;
+    double object_width = 0.0;
   };
 
   const std::string kEgoDataTopic = "~/ego_data";
@@ -182,7 +190,7 @@ class SimplePlannerNode : public rclcpp::Node {
   trajectory_planning_msgs::msg::Trajectory buildTrajectoryFromSimplePath(const SimplePath& path);
   void clearObjectInteractionMarkers(const std_msgs::msg::Header& target_header);
   void publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header,
-                                       const std::vector<InteractionDebugIteration>& debug_iterations);
+                                       const std::optional<ObjectConflictDebugSample>& debug_sample);
 
   /**
    * @brief Builds the initial safe-stop path for the current cycle.
@@ -350,7 +358,6 @@ class SimplePlannerNode : public rclcpp::Node {
   double object_min_length_ = 1.2;
   double object_interaction_time_window_growth_ = 0.1;
   double object_interaction_time_window_max_ = 1.0;
-  int object_conflict_latch_cycles_ = 3;
   bool publish_object_interaction_markers_ = true;
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
@@ -366,9 +373,6 @@ class SimplePlannerNode : public rclcpp::Node {
   std::optional<double> last_object_speed_cap_;
   SimplePath latest_path_;
   int object_conflict_free_cycles_ = 0;
-  int object_latched_conflict_cycles_ = 0;
-  std::vector<geometry_msgs::msg::Point> latched_ego_conflict_points_;
-  std::vector<geometry_msgs::msg::Point> latched_object_conflict_points_;
   double dt_;
 };
 

@@ -3,7 +3,6 @@
 #include <array>
 #include <cmath>
 #include <functional>
-#include <limits>
 #include <optional>
 #include <sstream>
 #include <thread>
@@ -72,6 +71,15 @@ geometry_msgs::msg::Point toPoint(const Eigen::Vector2d& point) {
   msg.y = point.y();
   msg.z = 0.0;
   return msg;
+}
+
+geometry_msgs::msg::Pose toPose(const OrientedBox2D& box) {
+  geometry_msgs::msg::Pose pose;
+  pose.position = toPoint(box.center);
+  const double yaw = std::atan2(box.axis_x.y(), box.axis_x.x());
+  pose.orientation.z = std::sin(yaw / 2.0);
+  pose.orientation.w = std::cos(yaw / 2.0);
+  return pose;
 }
 
 TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& rhs, double t) {
@@ -182,11 +190,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("object_interaction_time_window_max", object_interaction_time_window_max_,
                                 "maximum dynamic-object interaction time window (s)",
                                 true, false, false, 0.0, 5.0, 0.01);
-  this->declareAndLoadParameter("object_conflict_latch_cycles", object_conflict_latch_cycles_,
-                                "number of cycles an object conflict is kept after a single missed detection",
-                                true, false, false, 0.0, 100.0, 1.0);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
-                                "publish RViz markers for all conflict points found during object-avoidance iterations");
+                                "publish RViz markers for the conflict explaining the final speed reduction");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
@@ -386,9 +391,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
   if (state != PlannerState::FollowRoute) {
     last_object_speed_cap_.reset();
     object_conflict_free_cycles_ = 0;
-    object_latched_conflict_cycles_ = 0;
-    latched_ego_conflict_points_.clear();
-    latched_object_conflict_points_.clear();
     clearObjectInteractionMarkers(tra.header);
   }
 
@@ -517,9 +519,6 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     if (!consider_objects_ || !object_list_init_) {
       last_object_speed_cap_.reset();
       object_conflict_free_cycles_ = 0;
-      object_latched_conflict_cycles_ = 0;
-      latched_ego_conflict_points_.clear();
-      latched_object_conflict_points_.clear();
     }
     clearObjectInteractionMarkers(target_header);
     return;
@@ -531,9 +530,6 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     RCLCPP_DEBUG(this->get_logger(), "Object list is older than %f seconds. Ignoring objects for this planning cycle.", object_timeout_);
     last_object_speed_cap_.reset();
     object_conflict_free_cycles_ = 0;
-    object_latched_conflict_cycles_ = 0;
-    latched_ego_conflict_points_.clear();
-    latched_object_conflict_points_.clear();
     clearObjectInteractionMarkers(target_header);
     return;
   }
@@ -546,9 +542,6 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     RCLCPP_WARN(this->get_logger(), "Object transformation is not available: %s", ex.what());
     last_object_speed_cap_.reset();
     object_conflict_free_cycles_ = 0;
-    object_latched_conflict_cycles_ = 0;
-    latched_ego_conflict_points_.clear();
-    latched_object_conflict_points_.clear();
     clearObjectInteractionMarkers(target_header);
     return;
   }
@@ -655,9 +648,6 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   if (object_trajectories.empty()) {
     last_object_speed_cap_.reset();
     object_conflict_free_cycles_ = 0;
-    object_latched_conflict_cycles_ = 0;
-    latched_ego_conflict_points_.clear();
-    latched_object_conflict_points_.clear();
     clearObjectInteractionMarkers(target_header);
     return;
   }
@@ -666,12 +656,13 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   const Eigen::Vector2d ego_center_offset(ego_offset_msg.x, ego_offset_msg.y);
   struct ConflictSample {
     uint64_t object_id = 0;
-    geometry_msgs::msg::Point ego_point;
-    geometry_msgs::msg::Point object_point;
+    double t = 0.0;
+    OrientedBox2D ego_box;
+    OrientedBox2D object_box;
   };
 
   auto build_ego_sample = [&](const std::vector<SimplePathPoint>& ego_path, double ego_t,
-                              OrientedBox2D& ego_box, geometry_msgs::msg::Point& ego_point) -> bool {
+                              OrientedBox2D& ego_box) -> bool {
     if (ego_path.empty()) {
       return false;
     }
@@ -689,7 +680,6 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     const double yaw = heading.squaredNorm() > 1e-9 ? wrap_angle_rad(std::atan2(heading.y(), heading.x())) : 0.0;
     const Eigen::Vector2d center = position + rotate(ego_center_offset, yaw);
     ego_box = buildOrientedBox(center, yaw, ego_data_.length, ego_data_.width);
-    ego_point = toPoint(center);
     return true;
   };
 
@@ -710,8 +700,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       for (int step = 0; step <= steps; ++step) {
         const double ego_t = segment_start_t + (segment_end_t - segment_start_t) * static_cast<double>(step) / static_cast<double>(steps);
         OrientedBox2D ego_box;
-        geometry_msgs::msg::Point ego_point;
-        if (!build_ego_sample(ego_path, ego_t, ego_box, ego_point)) {
+        if (!build_ego_sample(ego_path, ego_t, ego_box)) {
           continue;
         }
 
@@ -726,7 +715,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
                                        object_lateral_safety_distance_)) {
               continue;
             }
-            conflicts.push_back({object_trajectory.id, ego_point, toPoint(object_sample.box.center)});
+            conflicts.push_back({object_trajectory.id, ego_t, ego_box, object_sample.box});
             continue;
           }
 
@@ -750,7 +739,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
                                        object_lateral_safety_distance_)) {
               continue;
             }
-            conflicts.push_back({object_trajectory.id, ego_point, toPoint(timed_object_sample.box.center)});
+            conflicts.push_back({object_trajectory.id, ego_t, ego_box, timed_object_sample.box});
           }
         }
       }
@@ -759,46 +748,21 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     return conflicts;
   };
 
-  auto update_latched_conflicts = [&](const std::vector<ConflictSample>& observed_conflicts) {
-    if (object_conflict_latch_cycles_ <= 0) {
-      object_latched_conflict_cycles_ = 0;
-      latched_ego_conflict_points_.clear();
-      latched_object_conflict_points_.clear();
-      return;
-    }
-
-    if (!observed_conflicts.empty()) {
-      object_latched_conflict_cycles_ = object_conflict_latch_cycles_;
-      latched_ego_conflict_points_.clear();
-      latched_object_conflict_points_.clear();
-      latched_ego_conflict_points_.reserve(observed_conflicts.size());
-      latched_object_conflict_points_.reserve(observed_conflicts.size());
-      for (const auto& conflict : observed_conflicts) {
-        latched_ego_conflict_points_.push_back(conflict.ego_point);
-        latched_object_conflict_points_.push_back(conflict.object_point);
-      }
-      return;
-    }
-
-    if (object_latched_conflict_cycles_ > 0) {
-      --object_latched_conflict_cycles_;
-    }
-    if (object_latched_conflict_cycles_ <= 0) {
-      latched_ego_conflict_points_.clear();
-      latched_object_conflict_points_.clear();
-    }
-  };
-
-  auto append_latched_debug_conflicts = [&](InteractionDebugIteration& debug_iteration) {
-    if (object_latched_conflict_cycles_ <= 0) {
-      return;
-    }
-    debug_iteration.ego_conflict_points.insert(debug_iteration.ego_conflict_points.end(),
-                                               latched_ego_conflict_points_.begin(),
-                                               latched_ego_conflict_points_.end());
-    debug_iteration.object_conflict_points.insert(debug_iteration.object_conflict_points.end(),
-                                                  latched_object_conflict_points_.begin(),
-                                                  latched_object_conflict_points_.end());
+  auto build_debug_sample = [&](const ConflictSample& conflict, double debug_speed_cap, size_t iteration) {
+    ObjectConflictDebugSample sample;
+    sample.object_id = conflict.object_id;
+    sample.iteration = iteration;
+    sample.speed_cap = debug_speed_cap;
+    sample.t = conflict.t;
+    sample.ego_pose = toPose(conflict.ego_box);
+    sample.object_pose = toPose(conflict.object_box);
+    sample.ego_length = 2.0 * conflict.ego_box.half_length;
+    sample.ego_width = 2.0 * conflict.ego_box.half_width;
+    sample.ego_safety_length = sample.ego_length + 2.0 * object_longitudinal_safety_distance_;
+    sample.ego_safety_width = sample.ego_width + 2.0 * object_lateral_safety_distance_;
+    sample.object_length = 2.0 * conflict.object_box.half_length;
+    sample.object_width = 2.0 * conflict.object_box.half_width;
+    return sample;
   };
 
   double initial_speed_cap = 0.0;
@@ -822,37 +786,23 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   double speed_cap = search_start_speed_cap;
   size_t iteration_count = 0;
-  std::vector<InteractionDebugIteration> debug_iterations;
-  std::vector<ConflictSample> observed_conflicts_for_latch;
+  std::optional<ObjectConflictDebugSample> conflict_debug_sample;
   while (speed_cap > 0.0) {
     ++iteration_count;
     std::vector<SimplePathPoint> candidate_path = resamplePath(base_path_points, route_plan.stop_at_end,
                                                                route_plan.offset_to_stop_line, &speed_cap);
     const std::vector<ConflictSample> current_candidate_conflicts = collect_current_conflicts(candidate_path);
     std::vector<ConflictSample> conflicts = current_candidate_conflicts;
-    if (!current_candidate_conflicts.empty() && observed_conflicts_for_latch.empty()) {
-      observed_conflicts_for_latch = current_candidate_conflicts;
-    }
     if (!conflicts.empty()) {
-      InteractionDebugIteration debug_iteration;
-      debug_iteration.iteration = iteration_count;
-      debug_iteration.speed_cap = speed_cap;
-      debug_iteration.ego_conflict_points.reserve(conflicts.size());
-      debug_iteration.object_conflict_points.reserve(conflicts.size());
-      for (const auto& conflict : conflicts) {
-        debug_iteration.ego_conflict_points.push_back(conflict.ego_point);
-        debug_iteration.object_conflict_points.push_back(conflict.object_point);
-      }
-      append_latched_debug_conflicts(debug_iteration);
-      debug_iterations.push_back(std::move(debug_iteration));
+      conflict_debug_sample = build_debug_sample(conflicts.front(), speed_cap, iteration_count);
     }
 
     if (conflicts.empty()) {
       const rclcpp::Time iteration_end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
-      publishObjectInteractionMarkers(target_header, debug_iterations);
+      publishObjectInteractionMarkers(target_header,
+                                      speed_cap < initial_speed_cap ? conflict_debug_sample : std::optional<ObjectConflictDebugSample>{});
       RCLCPP_INFO(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
                   (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
-      update_latched_conflicts(observed_conflicts_for_latch);
 
       if (speed_cap < initial_speed_cap) {
         last_object_speed_cap_ = speed_cap;
@@ -887,13 +837,15 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   }
 
   route_plan.path.points = resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line, &speed_cap);
-  publishObjectInteractionMarkers(target_header, debug_iterations);
   const rclcpp::Time iteration_end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   RCLCPP_INFO(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
               (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
   last_object_speed_cap_ = speed_cap;
   const std::vector<ConflictSample> current_conflicts_at_standstill = collect_current_conflicts(route_plan.path.points);
-  update_latched_conflicts(!observed_conflicts_for_latch.empty() ? observed_conflicts_for_latch : current_conflicts_at_standstill);
+  if (!current_conflicts_at_standstill.empty()) {
+    conflict_debug_sample = build_debug_sample(current_conflicts_at_standstill.front(), speed_cap, iteration_count);
+  }
+  publishObjectInteractionMarkers(target_header, conflict_debug_sample);
   if (current_conflicts_at_standstill.empty()) {
     object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
