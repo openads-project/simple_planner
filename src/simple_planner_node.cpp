@@ -548,6 +548,11 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   perception_msgs::msg::ObjectList tf_object_list;
   tf2::doTransform(object_list_, tf_object_list, tf);
+  tf_object_list.objects.erase(
+      std::remove_if(tf_object_list.objects.begin(), tf_object_list.objects.end(), [](const auto& object) {
+        return perception_msgs::object_access::getCenterPosition(object.state).x < 0.0;
+      }),
+      tf_object_list.objects.end());
 
   struct ObjectTrajectory {
     uint64_t id = 0;
@@ -564,11 +569,6 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   std::vector<ObjectTrajectory> object_trajectories;
   for (const auto& object : tf_object_list.objects) {
-    const auto object_center_now = perception_msgs::object_access::getCenterPosition(object.state);
-    if (object_center_now.x <= 0.0 && object.state_predictions.empty()) {
-      continue;
-    }
-
     double object_width = 0.0;
     double object_length = 0.0;
     try {
