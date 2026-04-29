@@ -929,7 +929,13 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
   int i_end = route_element_idx + 1;
   const auto& route_element = tf_route.route_elements[route_element_idx];
   size_t current_lane_idx = route_element.suggested_lane_idx;
-  int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[route_element_idx + 1]);
+  int lane_change_direction = 0;
+  try {
+    lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[route_element_idx + 1]);
+  } catch (const std::exception& ex) {
+    RCLCPP_WARN(this->get_logger(), "Could not determine lane change direction at route element %zu: %s", route_element_idx, ex.what());
+    return false;
+  }
   if (lane_change_direction < 0) {
     suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT;
   } else if (lane_change_direction > 0) {
@@ -939,6 +945,11 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
   double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
   RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
+  if (lane_change_direction == 0) {
+    RCLCPP_WARN(this->get_logger(), "Route element %zu is marked as lane change, but suggested lane does not change. Ignoring lane change marker.",
+                route_element_idx);
+    return true;
+  }
 
   double ds = 0.0;
   int i_start = route_element_idx;
@@ -1033,14 +1044,24 @@ std::vector<SimplePathPoint> SimplePlannerNode::mergeLaneChangeSegments(const ro
   for (const auto& lane_change_indices : lane_change_indices_map) {
     uint64_t lane_change_idx_route = lane_change_indices.first;
     uint64_t start_idx_route = lane_change_indices.second;
-    int start_idx = std::max(static_cast<int>(start_idx_route - tf_route.current_route_element_idx), 0);
-    int end_idx = (lane_change_idx_route + 1) - tf_route.current_route_element_idx;
+    size_t start_idx = start_idx_route > tf_route.current_route_element_idx ? start_idx_route - tf_route.current_route_element_idx : 0;
+    size_t end_idx = lane_change_idx_route + 1 > tf_route.current_route_element_idx ? lane_change_idx_route + 1 - tf_route.current_route_element_idx : 0;
+
+    if (start_idx < current || current > route_points.size()) {
+      RCLCPP_WARN(this->get_logger(), "Skipping overlapping lane change window (%zu, %zu), current path index: %zu.",
+                  start_idx, end_idx, current);
+      continue;
+    }
+
+    start_idx = std::min(start_idx, route_points.size());
     merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.begin() + start_idx);
     std::vector<SimplePathPoint> lane_change_points = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
     merged_points.insert(merged_points.end(), lane_change_points.begin(), lane_change_points.end());
-    current = end_idx + 1;
+    current = std::min(end_idx + 1, route_points.size());
   }
-  merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.end());
+  if (current <= route_points.size()) {
+    merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.end());
+  }
   return merged_points;
 }
 
