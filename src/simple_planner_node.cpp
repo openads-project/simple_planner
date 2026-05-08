@@ -1428,6 +1428,7 @@ void SimplePlannerNode::publishTimerCallback() {
     marker_header.stamp = stamp;
     marker_header.frame_id = trajectory_frame_id_;
     clearObjectInteractionMarkers(marker_header);
+    diagnostic_updater_.force_update();
     return;
   }
 
