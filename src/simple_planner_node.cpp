@@ -212,6 +212,10 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_frequency", ego_data_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming ego-data messages", false, true, true);
   this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.min_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming ego-data messages", false, true, true);
   this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming ego-data messages", false, true, true);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.min_frequency", object_list_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming object-list messages", false, true, true);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.max_frequency", object_list_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming object-list messages", false, true, true);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.min_acceptable_timestamp_delta", object_list_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming object-list messages", false, true, true);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.max_acceptable_timestamp_delta", object_list_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming object-list messages", false, true, true);
   this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_frequency", route_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming route messages", false, true, true);
   this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_frequency", route_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming route messages", false, true, true);
   this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_acceptable_timestamp_delta", route_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming route messages", false, true, true);
@@ -304,6 +308,16 @@ void SimplePlannerNode::setup() {
     diagnostic_updater::TimeStampStatusParam(route_topic_diagnostic_config_.min_acceptable_timestamp_delta, route_topic_diagnostic_config_.max_acceptable_timestamp_delta)
   );
 
+  if (consider_objects_) {
+    const int object_list_topic_diagnostic_frequency_window_size = std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * object_list_topic_diagnostic_config_.min_frequency));
+    object_list_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
+      kObjectListTopic,
+      diagnostic_updater_,
+      diagnostic_updater::FrequencyStatusParam(&object_list_topic_diagnostic_config_.min_frequency, &object_list_topic_diagnostic_config_.max_frequency, 0.0, object_list_topic_diagnostic_frequency_window_size),
+      diagnostic_updater::TimeStampStatusParam(object_list_topic_diagnostic_config_.min_acceptable_timestamp_delta, object_list_topic_diagnostic_config_.max_acceptable_timestamp_delta)
+    );
+  }
+
   const int diagnosed_publisher_frequency_window_size = std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * diagnosed_publisher_config_.min_frequency));
   diagnosed_publisher_ = std::make_unique<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>>(
     pub_,
@@ -343,6 +357,9 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
 }
 
 void SimplePlannerNode::objectListCallback(const perception_msgs::msg::ObjectList::UniquePtr msg) {
+  if (object_list_topic_diagnostic_ != nullptr) {
+    object_list_topic_diagnostic_->tick(msg->header.stamp);
+  }
   object_list_ = *msg;
 
   if (!object_list_init_) {

@@ -449,6 +449,9 @@ class SimplePlannerNode : public rclcpp::Node {
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> ego_data_topic_diagnostic_;
   TopicDiagnosticConfig ego_data_topic_diagnostic_config_{45.0, 55.0, -1.0, 0.02};
 
+  std::unique_ptr<diagnostic_updater::TopicDiagnostic> object_list_topic_diagnostic_;
+  TopicDiagnosticConfig object_list_topic_diagnostic_config_{8.0, 12.0, -1.0, 0.1};
+
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
   TopicDiagnosticConfig route_topic_diagnostic_config_{18.0, 22.0, -1.0, 0.05};
 
