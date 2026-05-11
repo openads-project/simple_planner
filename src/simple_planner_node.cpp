@@ -543,9 +543,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
   if (usable_path.points.empty()) {
     safe_stop_distance_.reset();
     latest_path_.points.clear();
-    RCLCPP_WARN(this->get_logger(), "No usable forward path remains. Publishing standstill trajectory.");
-    health_.key_value_pairs.insert({"PlannerState", plannerStatetoString(PlannerState::Standstill)});
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, "No usable forward path remains. Publishing standstill trajectory.", health_.key_value_pairs);
+    std::string msg = "No usable forward path remains. Publishing standstill trajectory.";
+    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
+    health_.key_value_pairs.insert_or_assign("PlannerState", plannerStatetoString(PlannerState::Standstill));
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
     return buildStandstillTrajectory(path.header);
   }
 
@@ -618,7 +619,7 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   applyObjectConstraints(target_header, merged_points, route_plan);
   if (trigger_turn_signals_) {
     applyIndicatorRequest(route_plan.suggested_turn_signal);
-    health_.key_value_pairs.insert({"SuggestedTurnSignal", turnSignalToString(route_plan.suggested_turn_signal)});
+    health_.key_value_pairs.insert_or_assign("SuggestedTurnSignal", turnSignalToString(route_plan.suggested_turn_signal));
   }
   if (route_plan.stop_at_end) health_.key_value_pairs.insert({"ReasonToStop", route_plan.reason_to_stop});
   return route_plan;
@@ -627,8 +628,8 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
 void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& target_header,
                                                const std::vector<SimplePathPoint>& base_path_points,
                                                FollowRoutePlan& route_plan) {
-  if (!consider_objects_ || !object_list_init_ || route_plan.path.points.empty() || base_path_points.empty()) {
-    if (!consider_objects_ || !object_list_init_) {
+  if (!consider_objects_ || route_plan.path.points.empty() || base_path_points.empty()) {
+    if (!consider_objects_) {
       last_object_speed_cap_.reset();
       object_conflict_free_cycles_ = 0;
     }
@@ -636,10 +637,21 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     return;
   }
 
+  if (!object_list_init_) {
+    std::string msg = "No object list received yet. Ignoring objects for this planning cycle.";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    last_object_speed_cap_.reset();
+    object_conflict_free_cycles_ = 0;
+    clearObjectInteractionMarkers(target_header);
+    return;
+  }
+
   const rclcpp::Time stamp(target_header.stamp);
 
   if (isMessageOutdated(object_list_.header, object_timeout_, stamp)) {
-    RCLCPP_DEBUG(this->get_logger(), "Object list is older than %f seconds. Ignoring objects for this planning cycle.", object_timeout_);
+    std::string msg = "Object list is older than " + std::to_string(object_timeout_) + " seconds. Ignoring objects for this planning cycle.";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
     last_object_speed_cap_.reset();
     object_conflict_free_cycles_ = 0;
     clearObjectInteractionMarkers(target_header);
@@ -651,7 +663,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, object_list_.header.frame_id, object_list_.header.stamp,
                                       fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Object transformation is not available: %s", ex.what());
+    std::string msg = "Object transformation is not available: " + std::string(ex.what()) + ". Ignoring objects for this planning cycle.";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     last_object_speed_cap_.reset();
     object_conflict_free_cycles_ = 0;
     clearObjectInteractionMarkers(target_header);
@@ -932,6 +946,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       }
 
       if (speed_cap <= object_standstill_speed_threshold_) {
+        health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+        health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
         route_plan.path.points.clear();
         RCLCPP_INFO(this->get_logger(), "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.",
                     speed_cap, object_standstill_speed_threshold_);
@@ -940,6 +956,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
       route_plan.path.points = candidate_path;
       if (speed_cap < initial_speed_cap) {
+        health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+        health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(conflict_debug_sample->object_id));
         RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to %f m/s to avoid object conflict", speed_cap);
       }
       return;
@@ -959,9 +977,14 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   }
   publishObjectInteractionMarkers(target_header, conflict_debug_sample);
   if (current_conflicts_at_standstill.empty()) {
+    health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+    health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
     object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
   } else {
+    health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+    health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
+    health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(current_conflicts_at_standstill.front().object_id));
     object_conflict_free_cycles_ = 0;
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill",
                 current_conflicts_at_standstill.front().object_id);
