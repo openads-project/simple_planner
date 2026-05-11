@@ -447,17 +447,17 @@ class SimplePlannerNode : public rclcpp::Node {
   } health_;
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> ego_data_topic_diagnostic_;
-  TopicDiagnosticConfig ego_data_topic_diagnostic_config_{45.0, 55.0, -1.0, 0.02};
+  TopicDiagnosticConfig ego_data_topic_diagnostic_config_{45.45, 55.55, 0.0, 0.002};
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> object_list_topic_diagnostic_;
-  TopicDiagnosticConfig object_list_topic_diagnostic_config_{8.0, 12.0, -1.0, 0.1};
+  TopicDiagnosticConfig object_list_topic_diagnostic_config_{9.09, 11.11, 0.0, 0.01};
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
-  TopicDiagnosticConfig route_topic_diagnostic_config_{18.0, 22.0, -1.0, 0.05};
+  TopicDiagnosticConfig route_topic_diagnostic_config_{18.18, 22.22, 0.0, 0.005};
 
   std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>>
       diagnosed_publisher_;
-  TopicDiagnosticConfig diagnosed_publisher_config_{8.0, 12.0, -1.0, 0.1};
+  TopicDiagnosticConfig diagnosed_publisher_config_{9.09, 11.11, 0.0, 0.01};
 };
 
 }  // namespace simple_planner
