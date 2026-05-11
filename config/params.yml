@@ -49,23 +49,23 @@
     diagnostic_updater:
       topic_diagnostics:
         ego_data:
-          min_frequency: 45.0
-          max_frequency: 55.0
-          min_acceptable_timestamp_delta: -1.0
-          max_acceptable_timestamp_delta: 0.02
+          min_frequency: 45.45 # 22ms
+          max_frequency: 55.55 # 18ms
+          min_acceptable_timestamp_delta: 0.0
+          max_acceptable_timestamp_delta: 0.002
         object_list:
           min_frequency: 8.0
           max_frequency: 12.0
           min_acceptable_timestamp_delta: -1.0
           max_acceptable_timestamp_delta: 0.1
         route:
-          min_frequency: 18.0
-          max_frequency: 22.0
-          min_acceptable_timestamp_delta: -1.0
-          max_acceptable_timestamp_delta: 0.05
+          min_frequency: 18.18 # 55ms
+          max_frequency: 22.22 # 45ms
+          min_acceptable_timestamp_delta: 0.0
+          max_acceptable_timestamp_delta: 0.005
       diagnosed_publishers:
         trajectory:
-          min_frequency: 8.0
-          max_frequency: 12.0
-          min_acceptable_timestamp_delta: -1.0
-          max_acceptable_timestamp_delta: 0.1
+          min_frequency: 9.09 # 110ms
+          max_frequency: 11.11 # 90ms
+          min_acceptable_timestamp_delta: 0.0
+          max_acceptable_timestamp_delta: 0.01
