@@ -47,6 +47,8 @@
 
     #### diagnostic parameters
     diagnostic_updater:
+      period: 1.0
+      use_fqn: false
       topic_diagnostics:
         ego_data:
           min_frequency: 45.45 # 22ms
