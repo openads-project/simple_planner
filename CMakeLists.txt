@@ -23,7 +23,10 @@ find_package(visualization_msgs REQUIRED)
 
 set(TARGET_NAME simple_planner_node)
 
-add_executable(${TARGET_NAME} src/simple_planner_node.cpp)
+add_executable(${TARGET_NAME}
+  src/simple_planner_node.cpp
+  src/object_handling.cpp
+)
 
 target_include_directories(${TARGET_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

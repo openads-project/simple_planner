@@ -26,6 +26,8 @@
 #include <trajectory_planning_msgs_utils/trajectory_access.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
+#include <simple_planner/object_geometry.hpp>
+
 namespace simple_planner {
 
 // only required for parameter handling
@@ -64,21 +66,6 @@ class SimplePlannerNode : public rclcpp::Node {
     bool stop_at_end = false;
     double offset_to_stop_line = 0.0;
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
-  };
-
-  struct ObjectConflictDebugSample {
-    uint64_t object_id = 0;
-    size_t iteration = 0;
-    double speed_cap = 0.0;
-    double t = 0.0;
-    geometry_msgs::msg::Pose ego_pose;
-    geometry_msgs::msg::Pose object_pose;
-    double ego_length = 0.0;
-    double ego_width = 0.0;
-    double ego_safety_length = 0.0;
-    double ego_safety_width = 0.0;
-    double object_length = 0.0;
-    double object_width = 0.0;
   };
 
   const std::string kEgoDataTopic = "~/ego_data";
@@ -190,7 +177,7 @@ class SimplePlannerNode : public rclcpp::Node {
   trajectory_planning_msgs::msg::Trajectory buildTrajectoryFromSimplePath(const SimplePath& path);
   void clearObjectInteractionMarkers(const std_msgs::msg::Header& target_header);
   void publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header,
-                                       const std::optional<ObjectConflictDebugSample>& debug_sample);
+                                       const std::optional<ConflictSample>& conflict);
 
   /**
    * @brief Builds the initial safe-stop path for the current cycle.
@@ -222,6 +209,36 @@ class SimplePlannerNode : public rclcpp::Node {
    */
   void applyObjectConstraints(const std_msgs::msg::Header& target_header, const std::vector<SimplePathPoint>& base_path_points,
                               FollowRoutePlan& route_plan);
+
+  /**
+   * @brief Reduces the perceived object list (in trajectory frame) to timed bounding-box trajectories.
+   *
+   * Static objects (without usable prediction) become a single-sample trajectory; otherwise the
+   * predictions above the probability threshold (or the most likely one) are sampled.
+   *
+   * @param[in] tf_object_list Object list transformed into trajectory frame.
+   * @param[in] stamp Current planning timestamp used to compute relative sample times.
+   * @return Timed bounding-box trajectories for all relevant objects.
+   */
+  std::vector<ObjectTrajectory> buildObjectTrajectories(const perception_msgs::msg::ObjectList& tf_object_list,
+                                                        const rclcpp::Time& stamp) const;
+
+  /**
+   * @brief Returns the first conflict between the (time-sampled) ego path and any object trajectory.
+   *
+   * @param[in] ego_path Time-equidistant ego path candidate.
+   * @param[in] object_trajectories Object trajectories to check against.
+   * @return The first detected conflict, or std::nullopt if the ego path is conflict-free.
+   */
+  std::optional<ConflictSample> firstConflict(const std::vector<SimplePathPoint>& ego_path,
+                                              const std::vector<ObjectTrajectory>& object_trajectories) const;
+
+  /**
+   * @brief Resets the remembered object speed cap / hysteresis state and clears interaction markers.
+   *
+   * @param[in] target_header Header used for the cleared marker messages.
+   */
+  void resetObjectState(const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Appends route-derived path points and stop metadata for the follow-route case.
@@ -347,18 +364,18 @@ class SimplePlannerNode : public rclcpp::Node {
   bool consider_objects_ = true;
   double min_prediction_prob_ = 0.1;
   double object_longitudinal_safety_distance_ = 1.0;
-  double object_lateral_safety_distance_ = 0.2;
-  double object_interaction_time_window_ = 0.5;
-  double object_velocity_reduction_step_ = 0.3;
+  double object_lateral_safety_distance_ = 0.1;
+  double object_interaction_time_window_ = 1.0;
+  double object_velocity_reduction_step_ = 0.1;
   double object_velocity_release_step_ = 0.1;
   double object_standstill_speed_threshold_ = 0.3;
   int object_velocity_release_hysteresis_cycles_ = 3;
-  double object_collision_check_dt_ = 0.05;
-  double object_min_width_ = 0.8;
-  double object_min_length_ = 1.2;
-  double object_interaction_time_window_growth_ = 0.1;
-  double object_interaction_time_window_max_ = 1.0;
   bool publish_object_interaction_markers_ = true;
+
+  // Internal object-handling tuning values (fixed, intentionally not exposed as parameters)
+  static constexpr double kObjectCollisionCheckDt = 0.05;  // maximum time step for swept collision checks (s)
+  static constexpr double kMinObjectWidth = 0.8;           // minimum object width if dimensions are missing/too small (m)
+  static constexpr double kMinObjectLength = 1.2;          // minimum object length if dimensions are missing/too small (m)
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
 

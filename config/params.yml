@@ -34,11 +34,6 @@
     object_velocity_release_step: 0.1  # maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)
     object_standstill_speed_threshold: 0.3  # publish standstill if object avoidance would require a lower speed cap (m/s)
     object_velocity_release_hysteresis_cycles: 3  # number of conflict-free cycles required before increasing the remembered object speed cap
-    object_collision_check_dt: 0.05  # maximum time step for swept collision checks between trajectory samples (s)
-    object_min_width: 0.8            # minimum object width used if dimensions are missing or implausibly small (m)
-    object_min_length: 1.2           # minimum object length used if dimensions are missing or implausibly small (m)
-    object_interaction_time_window_growth: 0.1  # additional temporal tolerance per prediction second (s/s)
-    object_interaction_time_window_max: 1.0     # maximum temporal tolerance for dynamic object interactions (s)
     publish_object_interaction_markers: True  # publish RViz markers for the conflict explaining the final speed reduction
 
     #### lane change parameters
