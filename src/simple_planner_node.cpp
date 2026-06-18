@@ -214,19 +214,6 @@ void SimplePlannerNode::setup() {
 
 }
 
-void SimplePlannerNode::health(diagnostic_updater::DiagnosticStatusWrapper& stat) {
-  stat.summary(health_.status, health_.message);
-  for (const auto& [key, value] : health_.key_value_pairs) {
-    stat.add(key, value);
-  }
-}
-
-void SimplePlannerNode::setHealth(const unsigned char status, const std::string& msg, const std::map<std::string, std::string>& key_value_pairs) {
-  health_.status = status;
-  health_.message = msg;
-  health_.key_value_pairs = key_value_pairs;
-}
-
 /**
  * @brief This callback is invoked when the subscriber receives a new egoData message
  *
@@ -267,36 +254,6 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
     route_init_ = true;
     safe_stop_distance_.reset();
-  }
-}
-
-std::string SimplePlannerNode::plannerStatetoString(const SimplePlannerNode::PlannerState& state) const {
-  switch (state) {
-    case PlannerState::NoPublish:
-      return "NoPublish";
-    case PlannerState::Standstill:
-      return "Standstill";
-    case PlannerState::SafeStop:
-      return "SafeStop";
-    case PlannerState::FollowRoute:
-      return "FollowRoute";
-    default:
-      return "Unknown";
-  }
-}
-
-std::string SimplePlannerNode::turnSignalToString(const uint8_t& turn_signal) const {
-  switch (turn_signal) {
-    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE:
-      return "None";
-    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT:
-      return "Left";
-    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_RIGHT:
-      return "Right";
-    case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_HAZARD:
-      return "Hazard";
-    default:
-      return "Unknown";
   }
 }
 
