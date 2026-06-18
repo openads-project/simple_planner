@@ -78,6 +78,11 @@ class SimplePlannerNode : public rclcpp::Node {
   const std::string kRightTurnIndicatorSrv = "~/enable_right_turn_indicator";
   const std::string kHazardLightsSrv = "~/enable_hazard_lights";
 
+  // Internal object-handling tuning values (fixed, intentionally not exposed as parameters)
+  static constexpr double kObjectCollisionCheckDt = 0.05;  // maximum time step for swept collision checks (s)
+  static constexpr double kMinObjectWidth = 0.8;           // minimum object width if dimensions are missing/too small (m)
+  static constexpr double kMinObjectLength = 1.2;          // minimum object length if dimensions are missing/too small (m)
+
   /**
    * @brief Declares a ROS parameter, loads its value and optionally registers it for runtime updates.
    *
@@ -372,10 +377,6 @@ class SimplePlannerNode : public rclcpp::Node {
   int object_velocity_release_hysteresis_cycles_ = 3;
   bool publish_object_interaction_markers_ = true;
 
-  // Internal object-handling tuning values (fixed, intentionally not exposed as parameters)
-  static constexpr double kObjectCollisionCheckDt = 0.05;  // maximum time step for swept collision checks (s)
-  static constexpr double kMinObjectWidth = 0.8;           // minimum object width if dimensions are missing/too small (m)
-  static constexpr double kMinObjectLength = 1.2;          // minimum object length if dimensions are missing/too small (m)
   double lane_change_distance_factor_ = 6.0;
   double lane_change_min_distance_factor_ = 2.0;
 
