@@ -235,7 +235,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   const rclcpp::Time stamp(target_header.stamp);
   if (isMessageOutdated(object_list_.header, object_timeout_, stamp)) {
-    RCLCPP_DEBUG(this->get_logger(), "Object list is older than %f seconds. Ignoring objects for this planning cycle.", object_timeout_);
+    std::string msg = "Object list is older than " + std::to_string(object_timeout_) + " seconds. Ignoring objects for this planning cycle.";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
     resetObjectState(target_header);
     return;
   }
@@ -245,7 +247,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, object_list_.header.frame_id, object_list_.header.stamp,
                                       fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Object transformation is not available: %s", ex.what());
+    std::string msg = "Object transformation is not available: " + std::string(ex.what()) + ". Ignoring objects for this planning cycle.";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     resetObjectState(target_header);
     return;
   }
@@ -312,6 +316,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     }
 
     if (speed_cap <= object_standstill_speed_threshold_) {
+      health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+      health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
+      health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
       route_plan.path.points.clear();
       RCLCPP_INFO(this->get_logger(), "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.",
                   speed_cap, object_standstill_speed_threshold_);
@@ -320,6 +327,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
     route_plan.path.points = candidate_path;
     if (speed_cap < initial_speed_cap) {
+      health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+      health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
       RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to %f m/s to avoid object conflict", speed_cap);
     }
     return;
@@ -333,12 +342,18 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   last_object_speed_cap_ = speed_cap;
   const std::optional<ConflictSample> standstill_conflict = firstConflict(route_plan.path.points, object_trajectories);
   if (standstill_conflict.has_value()) {
+    health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+    health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
+    health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(standstill_conflict->object_id));
     last_conflict = standstill_conflict;
     object_conflict_free_cycles_ = 0;
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill",
                 standstill_conflict->object_id);
   } else {
     object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);
+    health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
+    health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
+    health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
     RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
   }
   publishObjectInteractionMarkers(target_header, last_conflict);

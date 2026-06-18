@@ -3,6 +3,10 @@
 #include <map>
 #include <optional>
 
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_updater.hpp>
+#include <diagnostic_updater/publisher.hpp>
+
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
@@ -35,6 +39,31 @@ template <typename C> struct is_vector : std::false_type {};
 template <typename T,typename A> struct is_vector< std::vector<T,A> > : std::true_type {};
 template <typename C> inline constexpr bool is_vector_v = is_vector<C>::value;
 
+/**
+ * @brief Configuration parameters for topic diagnostics
+ */
+struct TopicDiagnosticConfig {
+  /**
+   * @brief Minimum acceptable frequency
+   */
+  double min_frequency;
+
+  /**
+   * @brief Maximum acceptable frequency
+   */
+  double max_frequency;
+
+  /**
+   * @brief Minimum acceptable difference between message timestamp and receipt time (in seconds)
+   */
+  double min_acceptable_timestamp_delta;
+
+  /**
+   * @brief Maximum acceptable difference between message timestamp and receipt time (in seconds)
+   */
+  double max_acceptable_timestamp_delta;
+};
+
 struct SimplePathPoint {
   Eigen::Vector2d position;
   double s;
@@ -64,6 +93,7 @@ class SimplePlannerNode : public rclcpp::Node {
   struct FollowRoutePlan {
     SimplePath path;
     bool stop_at_end = false;
+    std::string reason_to_stop = "";
     double offset_to_stop_line = 0.0;
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   };
@@ -323,6 +353,33 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
   SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 
+  /**
+   * @brief Function called by diagnostic updater to populate diagnostics status
+   */
+  void health(diagnostic_updater::DiagnosticStatusWrapper& stat);
+
+  /**
+   * @brief Sets the health information
+   */
+  void setHealth(const unsigned char status, const std::string& msg,
+                 const std::map<std::string, std::string>& key_value_pairs = {});
+
+  /**
+   * @brief Converts a PlannerState enum to a string representation
+   *
+   * @param state
+   * @return std::string
+   */
+  std::string plannerStateToString(const PlannerState& state) const;
+
+  /**
+   * @brief Converts a turn signal value to a string representation
+   *
+   * @param turn_signal
+   * @return std::string
+   */
+  std::string turnSignalToString(const uint8_t& turn_signal) const;
+
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
 
@@ -392,6 +449,33 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePath latest_path_;
   int object_conflict_free_cycles_ = 0;
   double dt_;
+
+  /**
+   * @brief Diagnostic updater
+   */
+  diagnostic_updater::Updater diagnostic_updater_{this};
+
+  /**
+   * @brief Diagnostic status indicating node health
+   */
+  struct DiagnosticStatus {
+    unsigned char status = diagnostic_msgs::msg::DiagnosticStatus::STALE;
+    std::string message = "";
+    std::map<std::string, std::string> key_value_pairs = {};
+  } health_;
+
+  std::unique_ptr<diagnostic_updater::TopicDiagnostic> ego_data_topic_diagnostic_;
+  TopicDiagnosticConfig ego_data_topic_diagnostic_config_{45.45, 55.55, 0.0, 0.002};
+
+  std::unique_ptr<diagnostic_updater::TopicDiagnostic> object_list_topic_diagnostic_;
+  TopicDiagnosticConfig object_list_topic_diagnostic_config_{9.09, 11.11, 0.0, 0.01};
+
+  std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
+  TopicDiagnosticConfig route_topic_diagnostic_config_{18.18, 22.22, 0.0, 0.005};
+
+  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>>
+      diagnosed_publisher_;
+  TopicDiagnosticConfig diagnosed_publisher_config_{9.09, 11.11, 0.0, 0.01};
 };
 
 }  // namespace simple_planner
