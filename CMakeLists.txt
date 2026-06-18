@@ -14,14 +14,19 @@ find_package(route_planning_msgs_utils REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(tf2_perception_msgs REQUIRED)
 find_package(tf2_route_planning_msgs REQUIRED)
 find_package(tracetools REQUIRED)
 find_package(trajectory_planning_msgs REQUIRED)
 find_package(trajectory_planning_msgs_utils REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 set(TARGET_NAME simple_planner_node)
 
-add_executable(${TARGET_NAME} src/simple_planner_node.cpp)
+add_executable(${TARGET_NAME}
+  src/simple_planner_node.cpp
+  src/object_handling.cpp
+)
 
 target_include_directories(${TARGET_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -38,10 +43,12 @@ ament_target_dependencies(${TARGET_NAME}
   route_planning_msgs_utils
   std_msgs
   std_srvs
+  tf2_perception_msgs
   tf2_route_planning_msgs
   tracetools
   trajectory_planning_msgs
   trajectory_planning_msgs_utils
+  visualization_msgs
 )
 
 install(TARGETS ${TARGET_NAME}

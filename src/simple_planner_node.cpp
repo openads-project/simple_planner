@@ -1,6 +1,10 @@
 #include <chrono>
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
+#include <optional>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -30,6 +34,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
   this->declareAndLoadParameter("route_timeout", route_timeout_, "Time after which a received route is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("ego_data_timeout", ego_data_timeout_, "Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout)");
+  this->declareAndLoadParameter("object_timeout", object_timeout_, "Time after which a received object list is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline",
@@ -47,6 +52,32 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
   this->declareAndLoadParameter("consider_future_states", consider_future_states_,
                                 "true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state");
+  this->declareAndLoadParameter("consider_objects", consider_objects_,
+                                "true: planner will consider perceived objects on the route; false: planner will ignore objects");
+  this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
+                                "minimum probability for considering an object prediction branch");
+  this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
+                                "longitudinal clearance around ego/object bounding boxes for conflict detection (m)",
+                                true, false, false, 0.0, 20.0, 0.1);
+  this->declareAndLoadParameter("object_lateral_safety_distance", object_lateral_safety_distance_,
+                                "lateral clearance around ego/object bounding boxes for conflict detection (m)",
+                                true, false, false, 0.0, 10.0, 0.1);
+  this->declareAndLoadParameter("object_interaction_time_window", object_interaction_time_window_,
+                                "maximum time offset for counting a spatial overlap as interaction (s)");
+  this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,
+                                "velocity decrement per object-avoidance iteration (m/s)",
+                                true, false, false, 1e-3, 40.0, 1e-3);
+  this->declareAndLoadParameter("object_velocity_release_step", object_velocity_release_step_,
+                                "maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)",
+                                true, false, false, 1e-3, 40.0, 1e-3);
+  this->declareAndLoadParameter("object_standstill_speed_threshold", object_standstill_speed_threshold_,
+                                "publish standstill if object avoidance would require a lower speed cap (m/s)",
+                                true, false, false, 0.0, 10.0, 1e-3);
+  this->declareAndLoadParameter("object_velocity_release_hysteresis_cycles", object_velocity_release_hysteresis_cycles_,
+                                "number of conflict-free cycles required before increasing the remembered object speed cap",
+                                true, false, false, 0.0, 100.0, 1.0);
+  this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
+                                "publish RViz markers for the conflict explaining the final speed reduction");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
                                 "factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
@@ -79,6 +110,8 @@ void SimplePlannerNode::setup() {
   // create a publisher for publishing output trajectory
   pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(kOutputTopic, 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
+  object_interaction_marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(kObjectInteractionMarkerTopic, 10);
+  RCLCPP_INFO(this->get_logger(), "Publishing object interaction markers to '%s'", object_interaction_marker_pub_->get_topic_name());
 
   // create a timer for repeatedly invoking a callback to publish messages
   publish_timer_ = this->create_wall_timer(std::chrono::duration<double>(1.0 / freq_),
@@ -89,6 +122,10 @@ void SimplePlannerNode::setup() {
   sub_egoData_ = this->create_subscription<perception_msgs::msg::EgoData>(
       kEgoDataTopic, 10, std::bind(&SimplePlannerNode::egoDataCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_egoData_->get_topic_name());
+
+  sub_object_list_ = this->create_subscription<perception_msgs::msg::ObjectList>(
+      kObjectListTopic, 10, std::bind(&SimplePlannerNode::objectListCallback, this, std::placeholders::_1));
+  RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_object_list_->get_topic_name());
 
   // create subscriber for route
   sub_route_ = this->create_subscription<route_planning_msgs::msg::Route>(
@@ -110,6 +147,7 @@ void SimplePlannerNode::setup() {
   // Annotate message links for tracing: Trajectory is published periodically based on subscriptions to egoData and route
   std::vector<const void *> link_subs = {
       static_cast<const void *>(sub_egoData_->get_subscription_handle().get()),
+      static_cast<const void *>(sub_object_list_->get_subscription_handle().get()),
       static_cast<const void *>(sub_route_->get_subscription_handle().get())
   };
   std::vector<const void *> link_pubs = {
@@ -129,6 +167,15 @@ void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::Uni
   if (!ego_data_init_) {
     ego_data_init_ = true;
     RCLCPP_INFO(this->get_logger(), "Received first ego data message, initialized global variable");
+  }
+}
+
+void SimplePlannerNode::objectListCallback(const perception_msgs::msg::ObjectList::UniquePtr msg) {
+  object_list_ = *msg;
+
+  if (!object_list_init_) {
+    object_list_init_ = true;
+    RCLCPP_INFO(this->get_logger(), "Received first object list message, initialized global variable");
   }
 }
 
@@ -226,6 +273,10 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
   trajectory_planning_msgs::msg::Trajectory tra;
   tra.header.stamp = stamp;
   tra.header.frame_id = trajectory_frame_id_;
+
+  if (state != PlannerState::FollowRoute) {
+    resetObjectState(tra.header);
+  }
 
   switch (state) {
     case PlannerState::Standstill:
@@ -338,6 +389,7 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
   recalculateS(merged_points);
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
+  applyObjectConstraints(target_header, merged_points, route_plan);
   if (trigger_turn_signals_) {
     applyIndicatorRequest(route_plan.suggested_turn_signal);
   }
@@ -416,7 +468,13 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
   int i_end = route_element_idx + 1;
   const auto& route_element = tf_route.route_elements[route_element_idx];
   size_t current_lane_idx = route_element.suggested_lane_idx;
-  int lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[route_element_idx + 1]);
+  int lane_change_direction = 0;
+  try {
+    lane_change_direction = route_planning_msgs::route_access::getLaneChangeDirection(route_element, tf_route.route_elements[route_element_idx + 1]);
+  } catch (const std::exception& ex) {
+    RCLCPP_WARN(this->get_logger(), "Could not determine lane change direction at route element %zu: %s", route_element_idx, ex.what());
+    return false;
+  }
   if (lane_change_direction < 0) {
     suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_LEFT;
   } else if (lane_change_direction > 0) {
@@ -426,6 +484,11 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
   double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
   RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
+  if (lane_change_direction == 0) {
+    RCLCPP_WARN(this->get_logger(), "Route element %zu is marked as lane change, but suggested lane does not change. Ignoring lane change marker.",
+                route_element_idx);
+    return true;
+  }
 
   double ds = 0.0;
   int i_start = route_element_idx;
@@ -520,14 +583,24 @@ std::vector<SimplePathPoint> SimplePlannerNode::mergeLaneChangeSegments(const ro
   for (const auto& lane_change_indices : lane_change_indices_map) {
     uint64_t lane_change_idx_route = lane_change_indices.first;
     uint64_t start_idx_route = lane_change_indices.second;
-    int start_idx = std::max(static_cast<int>(start_idx_route - tf_route.current_route_element_idx), 0);
-    int end_idx = (lane_change_idx_route + 1) - tf_route.current_route_element_idx;
+    size_t start_idx = start_idx_route > tf_route.current_route_element_idx ? start_idx_route - tf_route.current_route_element_idx : 0;
+    size_t end_idx = lane_change_idx_route + 1 > tf_route.current_route_element_idx ? lane_change_idx_route + 1 - tf_route.current_route_element_idx : 0;
+
+    if (start_idx < current || current > route_points.size()) {
+      RCLCPP_WARN(this->get_logger(), "Skipping overlapping lane change window (%zu, %zu), current path index: %zu.",
+                  start_idx, end_idx, current);
+      continue;
+    }
+
+    start_idx = std::min(start_idx, route_points.size());
     merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.begin() + start_idx);
     std::vector<SimplePathPoint> lane_change_points = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
     merged_points.insert(merged_points.end(), lane_change_points.begin(), lane_change_points.end());
-    current = end_idx + 1;
+    current = std::min(end_idx + 1, route_points.size());
   }
-  merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.end());
+  if (current <= route_points.size()) {
+    merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.end());
+  }
   return merged_points;
 }
 
@@ -615,7 +688,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
 
   // Interpolate between the two elements
   for (int i = start_idx; i <= end_idx; ++i) {
-    if ((i - route.current_route_element_idx) < 0) continue;
+    if (i < static_cast<int>(route.current_route_element_idx)) continue;
 
     const auto& route_element = route.route_elements[i];
     const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
@@ -641,7 +714,8 @@ void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
   }
 }
 
-std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line) {
+std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line,
+                                                             const double* speed_cap) {
   rclcpp::Time begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
   if (path.empty()) {
     RCLCPP_WARN(this->get_logger(), "Route is empty. No resampling possible.");
@@ -668,7 +742,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     int idx = -1;
     for (size_t j = 0; j < path.size() - 1; ++j) {
       if (s >= path[j].s && s <= path[j + 1].s) {
-        idx = j;
+        idx = static_cast<int>(j);
         break;
       }
     }
@@ -676,6 +750,9 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     double v = v_ref_; // option 1: use predefined constant velocity
     if (v_ref_ < 0.0 && idx >= 0) { // option 2: use velocity from route if predefined velocity is negative
       v = path[idx].v + (path[idx + 1].v - path[idx].v) / (path[idx + 1].s - path[idx].s) * (s - path[idx].s);
+    }
+    if (speed_cap != nullptr) {
+      v = std::min(v, std::max(*speed_cap, 0.0));
     }
 
     double distance_to_stop = -0.5 * std::pow(v, 2) / a_decel_ + offset_to_stop_line;
@@ -718,6 +795,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     resampled_path.push_back(simple_path_point);
 
     // increment s and v for next iteration
+    if (v <= 1e-6 && ds <= 1e-6) break;
     s = s + ds;
     if (s == path.back().s && v == 0.0) break; // stop at end of route
   }
@@ -727,6 +805,9 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
 
   if (stop_at_end) {
     SimplePathPoint stop_point = path.back();
+    if (!resampled_path.empty() && (offset_to_stop_line > 0.0 || (speed_cap != nullptr && *speed_cap <= 1e-6))) {
+      stop_point = resampled_path.back();
+    }
     stop_point.v = 0.0;
     if (resampled_path.empty() || resampled_path.back().s < stop_point.s || resampled_path.back().v != 0.0) {
       resampled_path.push_back(stop_point);
@@ -744,6 +825,10 @@ void SimplePlannerNode::publishTimerCallback() {
   const rclcpp::Time stamp = now();
   PlannerState planner_state = determinePlannerState(stamp);
   if (planner_state == PlannerState::NoPublish) {
+    std_msgs::msg::Header marker_header;
+    marker_header.stamp = stamp;
+    marker_header.frame_id = trajectory_frame_id_;
+    clearObjectInteractionMarkers(marker_header);
     return;
   }
 

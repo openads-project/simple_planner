@@ -14,7 +14,7 @@
     interpolation_type: 1           # 0: linear, 1: cubic spline
     v_ref: 5.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
     a_decel: -0.5                   # desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0
-    a_max_decel: -0.75              # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel
+    a_max_decel: -1.0               # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel
     trigger_turn_signals: True      # true: planner will request turn signal services; false: planner will not trigger turn signals
 
     #### traffic light parameters
@@ -22,6 +22,19 @@
     offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)
     ignore_stop_line_threshold: 0.5 # a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)
     consider_future_states: False   # true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state
+
+    #### object parameters
+    consider_objects: True          # true: planner will consider perceived objects on the route; false: planner will ignore objects
+    object_timeout: 1.0             # time after which a received object list is considered invalid (s) (use -1 for no timeout)
+    min_prediction_prob: 0.0        # minimum probability for considering an object prediction branch; otherwise the most likely one is used
+    object_longitudinal_safety_distance: 1.5  # longitudinal clearance around ego/object boxes for conflict detection (m)
+    object_lateral_safety_distance: 0.0  # lateral clearance around ego/object boxes for conflict detection (m)
+    object_interaction_time_window: 0.5  # maximum time offset for counting a spatial overlap as interaction (s)
+    object_velocity_reduction_step: 0.1  # velocity decrement per object-avoidance iteration (m/s)
+    object_velocity_release_step: 0.5  # maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)
+    object_standstill_speed_threshold: 0.2  # publish standstill if object avoidance would require a lower speed cap (m/s)
+    object_velocity_release_hysteresis_cycles: 3  # number of conflict-free cycles required before increasing the remembered object speed cap
+    publish_object_interaction_markers: True  # publish RViz markers for the conflict explaining the final speed reduction
 
     #### lane change parameters
     lane_change_distance_factor: 6.0     # factor multiplied with the current velocity to determine the lane change distance (m)

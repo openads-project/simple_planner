@@ -23,6 +23,7 @@
 | Topic | Type | Description |
 | --- | --- | --- |
 | `~/ego_data` | `perception_msgs/msg/ego_data` | Input EgoData |
+| `~/object_list` | `perception_msgs/msg/object_list` | Input ObjectList |
 | `~/route` | `route_planning_msgs/msg/route` | Input Route |
 
 #### Published Topics
@@ -30,6 +31,7 @@
 | Topic | Type | Description |
 | --- | --- | --- |
 | `~/trajectory` | `trajectory_planning_msgs/msg/trajectory` | Output Trajectory |
+| `~/object_interaction_markers` | `visualization_msgs/msg/MarkerArray` | RViz markers for object-conflict positions during the speed-reduction loop |
 
 #### Service Clients
 | Service | Type | Description |
@@ -57,6 +59,17 @@
 | `offset_to_stop_line` | `double` | additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
 | `ignore_stop_line_threshold` | `double` | a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
 | `consider_future_states` | `bool` | true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
+| `consider_objects` | `bool` | true: planner will consider perceived objects on the route; false: planner will ignore objects |
+| `object_timeout` | `double` | time after which a received object list is considered invalid (s) (use `-1.0` for no timeout) |
+| `min_prediction_prob` | `double` | minimum probability for considering an object prediction branch; otherwise the most likely one is used |
+| `object_longitudinal_safety_distance` | `double` | longitudinal clearance around ego/object bounding boxes for conflict detection (m) |
+| `object_lateral_safety_distance` | `double` | lateral clearance around ego/object bounding boxes for conflict detection (m) |
+| `object_interaction_time_window` | `double` | maximum time offset for counting a spatial overlap as interaction (s) |
+| `object_velocity_reduction_step` | `double` | velocity decrement per object-avoidance iteration (m/s) |
+| `object_velocity_release_step` | `double` | maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
+| `object_standstill_speed_threshold` | `double` | publish standstill if object avoidance would require a lower speed cap (m/s) |
+| `object_velocity_release_hysteresis_cycles` | `int` | number of conflict-free cycles required before increasing the remembered object speed cap |
+| `publish_object_interaction_markers` | `bool` | publish RViz markers for the object conflict that explains the final speed reduction |
 | `lane_change_distance_factor` | `double` | factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `double` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
 
