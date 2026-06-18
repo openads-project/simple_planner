@@ -166,7 +166,7 @@ void SimplePlannerNode::setHealth(const unsigned char status, const std::string&
   health_.key_value_pairs = key_value_pairs;
 }
 
-std::string SimplePlannerNode::plannerStatetoString(const SimplePlannerNode::PlannerState& state) const {
+std::string SimplePlannerNode::plannerStateToString(const SimplePlannerNode::PlannerState& state) const {
   switch (state) {
     case PlannerState::NoPublish:
       return "NoPublish";

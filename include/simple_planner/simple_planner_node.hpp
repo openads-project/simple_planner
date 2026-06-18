@@ -370,7 +370,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param state
    * @return std::string
    */
-  std::string plannerStatetoString(const PlannerState& state) const;
+  std::string plannerStateToString(const PlannerState& state) const;
 
   /**
    * @brief Converts a turn signal value to a string representation

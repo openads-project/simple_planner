@@ -260,7 +260,7 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
 SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const rclcpp::Time& stamp) {
   // ego data missing -> no publish
   if (!ego_data_init_) {
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No ego data received yet", { {"PlannerState", plannerStatetoString(PlannerState::NoPublish)} });
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No ego data received yet", { {"PlannerState", plannerStateToString(PlannerState::NoPublish)} });
     return PlannerState::NoPublish;
   }
 
@@ -269,13 +269,13 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     ego_data_init_ = false;
     std::string msg = "EgoData is older than " + std::to_string(ego_data_timeout_) + " seconds. Skip publishing until fresh ego data arrives.";
     RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, { {"PlannerState", plannerStatetoString(PlannerState::NoPublish)} });
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, { {"PlannerState", plannerStateToString(PlannerState::NoPublish)} });
     return PlannerState::NoPublish;
   }
 
   // no route received and no ongoing safe stop -> no publish
   if (!route_init_ && !safe_stop_distance_.has_value()) {
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No route received and no ongoing safe stop", { {"PlannerState", plannerStatetoString(PlannerState::NoPublish)} });
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No route received and no ongoing safe stop", { {"PlannerState", plannerStateToString(PlannerState::NoPublish)} });
     return PlannerState::NoPublish;
   }
 
@@ -287,7 +287,7 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
       latest_path_.points.clear();
       std::string msg = "Route is older than " + std::to_string(route_timeout_) + " seconds and ego vehicle is stationary. Publishing standstill trajectory.";
       RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
-      setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, msg, { {"PlannerState", plannerStatetoString(PlannerState::Standstill)} });
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, msg, { {"PlannerState", plannerStateToString(PlannerState::Standstill)} });
       return PlannerState::Standstill;
     }
     route_init_ = false;
@@ -295,7 +295,7 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     // route outdated and vehicle still moving -> safe stop
     std::string msg = "Route is older than " + std::to_string(route_timeout_) + " seconds but ego vehicle is still moving. Executing safe stop trajectory.";
     RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, { {"PlannerState", plannerStatetoString(PlannerState::SafeStop)} });
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, { {"PlannerState", plannerStateToString(PlannerState::SafeStop)} });
     return PlannerState::SafeStop;
   }
 
@@ -306,7 +306,7 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     latest_path_.points.clear();
     std::string msg = "Received route has no route elements. Publishing standstill trajectory.";
     RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, msg, { {"PlannerState", plannerStatetoString(PlannerState::Standstill)} });
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, msg, { {"PlannerState", plannerStateToString(PlannerState::Standstill)} });
     return PlannerState::Standstill;
   }
 
@@ -317,17 +317,17 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
       latest_path_.points.clear();
       std::string msg = "Safe stop finished. Ego vehicle is considered stationary. Publishing standstill trajectory.";
       RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
-      setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, msg, { {"PlannerState", plannerStatetoString(PlannerState::Standstill)} });
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, msg, { {"PlannerState", plannerStateToString(PlannerState::Standstill)} });
       return PlannerState::Standstill;
     }
     std::string msg = "No fresh route available, but safe stop already started. Executing safe stop trajectory.";
     RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, { {"PlannerState", plannerStatetoString(PlannerState::SafeStop)} });
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, { {"PlannerState", plannerStateToString(PlannerState::SafeStop)} });
     return PlannerState::SafeStop;
   }
 
   // fresh ego data and valid route available -> follow route
-  setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, "Input information up to date. Following route.", { {"PlannerState", plannerStatetoString(PlannerState::FollowRoute)} });
+  setHealth(diagnostic_msgs::msg::DiagnosticStatus::OK, "Input information up to date. Following route.", { {"PlannerState", plannerStateToString(PlannerState::FollowRoute)} });
   return PlannerState::FollowRoute;
 }
 
@@ -403,7 +403,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
     latest_path_.points.clear();
     std::string msg = "No usable forward path remains. Publishing standstill trajectory.";
     RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-    health_.key_value_pairs.insert_or_assign("PlannerState", plannerStatetoString(PlannerState::Standstill));
+    health_.key_value_pairs.insert_or_assign("PlannerState", plannerStateToString(PlannerState::Standstill));
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
     return buildStandstillTrajectory(path.header);
   }
@@ -953,7 +953,7 @@ void SimplePlannerNode::publishTimerCallback() {
   } catch (const std::runtime_error& e) {
     std::string msg = "Error while creating trajectory: " + std::string(e.what());
     RCLCPP_ERROR(this->get_logger(), "%s", msg.c_str());
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::ERROR, msg, { {"PlannerState", plannerStatetoString(planner_state)} });
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::ERROR, msg, { {"PlannerState", plannerStateToString(planner_state)} });
   }
   diagnostic_updater_.force_update();
 }
