@@ -317,8 +317,10 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
     if (speed_cap <= object_standstill_speed_threshold_) {
       health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
-      health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
-      health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
+      if (last_conflict.has_value()) {
+        health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
+        health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
+      }
       route_plan.path.points.clear();
       RCLCPP_INFO(this->get_logger(), "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.",
                   speed_cap, object_standstill_speed_threshold_);
@@ -328,8 +330,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     route_plan.path.points = candidate_path;
     if (speed_cap < initial_speed_cap) {
       health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
-      health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
-      RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to %f m/s to avoid object conflict", speed_cap);
+      if (last_conflict.has_value()) {
+        health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
+      }
     }
     return;
   }
@@ -352,9 +355,10 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   } else {
     object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);
     health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
-    health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
-    health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
-    RCLCPP_INFO(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
+    if (last_conflict.has_value()) {
+      health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
+      health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
+    }
   }
   publishObjectInteractionMarkers(target_header, last_conflict);
   route_plan.path.points.clear();
