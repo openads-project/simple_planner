@@ -576,7 +576,7 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
 
   double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
-  RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
+  RCLCPP_DEBUG(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
   if (lane_change_direction == 0) {
     RCLCPP_WARN(this->get_logger(), "Route element %zu is marked as lane change, but suggested lane does not change. Ignoring lane change marker.",
                 route_element_idx);
