@@ -220,7 +220,9 @@ void SimplePlannerNode::setup() {
  * @param[in] msg   egoData
  */
 void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg) {
-  ego_data_topic_diagnostic_->tick(msg->header.stamp);
+  if (ego_data_topic_diagnostic_ != nullptr) {
+    ego_data_topic_diagnostic_->tick(msg->header.stamp);
+  }
   ego_data_ = *msg;
 
   if (!ego_data_init_) {
@@ -247,8 +249,10 @@ void SimplePlannerNode::objectListCallback(const perception_msgs::msg::ObjectLis
  * @param[in] msg   route
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
-  route_topic_diagnostic_->tick(msg->header.stamp);
-  route_ = *msg; 
+  if (route_topic_diagnostic_ != nullptr) {
+    route_topic_diagnostic_->tick(msg->header.stamp);
+  }
+  route_ = *msg;
 
   if (!route_init_) {
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
