@@ -94,22 +94,22 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   }
 
   // diagnostics parameters
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.min_frequency", ego_data_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming ego-data messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_frequency", ego_data_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming ego-data messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.min_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming ego-data messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming ego-data messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.min_frequency", object_list_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming object-list messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.max_frequency", object_list_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming object-list messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.min_acceptable_timestamp_delta", object_list_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming object-list messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.max_acceptable_timestamp_delta", object_list_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming object-list messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_frequency", route_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming route messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_frequency", route_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming route messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_acceptable_timestamp_delta", route_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming route messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_acceptable_timestamp_delta", route_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming route messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.min_frequency", diagnosed_publisher_config_.min_frequency, "Minimum frequency for published trajectory messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.max_frequency", diagnosed_publisher_config_.max_frequency, "Maximum frequency for published trajectory messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.min_acceptable_timestamp_delta", diagnosed_publisher_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for published trajectory messages", false, true, true);
-  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.max_acceptable_timestamp_delta", diagnosed_publisher_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for published trajectory messages", false, true, true);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.min_frequency", ego_data_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming ego-data messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_frequency", ego_data_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming ego-data messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.min_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming ego-data messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.ego_data.max_acceptable_timestamp_delta", ego_data_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming ego-data messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.min_frequency", object_list_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming object-list messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.max_frequency", object_list_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming object-list messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.min_acceptable_timestamp_delta", object_list_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming object-list messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.object_list.max_acceptable_timestamp_delta", object_list_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming object-list messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_frequency", route_topic_diagnostic_config_.min_frequency, "Minimum frequency for incoming route messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_frequency", route_topic_diagnostic_config_.max_frequency, "Maximum frequency for incoming route messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.min_acceptable_timestamp_delta", route_topic_diagnostic_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for incoming route messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_acceptable_timestamp_delta", route_topic_diagnostic_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for incoming route messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.min_frequency", diagnosed_publisher_config_.min_frequency, "Minimum frequency for published trajectory messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.max_frequency", diagnosed_publisher_config_.max_frequency, "Maximum frequency for published trajectory messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.min_acceptable_timestamp_delta", diagnosed_publisher_config_.min_acceptable_timestamp_delta, "Minimum acceptable timestamp delta for published trajectory messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.max_acceptable_timestamp_delta", diagnosed_publisher_config_.max_acceptable_timestamp_delta, "Maximum acceptable timestamp delta for published trajectory messages", false);
 
   this->setup();
 }
@@ -220,7 +220,9 @@ void SimplePlannerNode::setup() {
  * @param[in] msg   egoData
  */
 void SimplePlannerNode::egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg) {
-  ego_data_topic_diagnostic_->tick(msg->header.stamp);
+  if (ego_data_topic_diagnostic_ != nullptr) {
+    ego_data_topic_diagnostic_->tick(msg->header.stamp);
+  }
   ego_data_ = *msg;
 
   if (!ego_data_init_) {
@@ -247,8 +249,10 @@ void SimplePlannerNode::objectListCallback(const perception_msgs::msg::ObjectLis
  * @param[in] msg   route
  */
 void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg) {
-  route_topic_diagnostic_->tick(msg->header.stamp);
-  route_ = *msg; 
+  if (route_topic_diagnostic_ != nullptr) {
+    route_topic_diagnostic_->tick(msg->header.stamp);
+  }
+  route_ = *msg;
 
   if (!route_init_) {
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
@@ -576,7 +580,7 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
 
   double ego_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   double lane_change_distance = std::max(lane_change_min_distance_factor_ * ego_data_.length, lane_change_distance_factor_ * ego_velocity);
-  RCLCPP_INFO(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
+  RCLCPP_DEBUG(this->get_logger(), "Lane change direction: %d, lane change distance: %f", lane_change_direction, lane_change_distance);
   if (lane_change_direction == 0) {
     RCLCPP_WARN(this->get_logger(), "Route element %zu is marked as lane change, but suggested lane does not change. Ignoring lane change marker.",
                 route_element_idx);
@@ -942,7 +946,6 @@ void SimplePlannerNode::publishTimerCallback() {
     marker_header.stamp = stamp;
     marker_header.frame_id = trajectory_frame_id_;
     clearObjectInteractionMarkers(marker_header);
-    diagnostic_updater_.force_update();
     return;
   }
 
@@ -955,7 +958,6 @@ void SimplePlannerNode::publishTimerCallback() {
     RCLCPP_ERROR(this->get_logger(), "%s", msg.c_str());
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::ERROR, msg, { {"PlannerState", plannerStateToString(planner_state)} });
   }
-  diagnostic_updater_.force_update();
 }
 
 }  // namespace simple_planner
