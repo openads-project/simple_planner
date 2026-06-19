@@ -946,7 +946,6 @@ void SimplePlannerNode::publishTimerCallback() {
     marker_header.stamp = stamp;
     marker_header.frame_id = trajectory_frame_id_;
     clearObjectInteractionMarkers(marker_header);
-    diagnostic_updater_.force_update();
     return;
   }
 
@@ -959,7 +958,6 @@ void SimplePlannerNode::publishTimerCallback() {
     RCLCPP_ERROR(this->get_logger(), "%s", msg.c_str());
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::ERROR, msg, { {"PlannerState", plannerStateToString(planner_state)} });
   }
-  diagnostic_updater_.force_update();
 }
 
 }  // namespace simple_planner
