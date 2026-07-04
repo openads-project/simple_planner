@@ -1,6 +1,6 @@
 # `simple_planner`
 
-Plans a reference trajectory to follow a route
+Generates route-following reference trajectories with safe-stop, traffic-light, turn-signal, and object-aware speed handling.
 
 ## Nodes
 
@@ -21,15 +21,15 @@ flowchart LR
 
 | Topic | Type | Description |
 | --- | --- | --- |
-| `~/ego_data` | `perception_msgs/msg/EgoData` | TODO |
-| `~/object_list` | `perception_msgs/msg/ObjectList` | TODO |
-| `~/route` | `route_planning_msgs/msg/Route` | TODO |
+| `~/ego_data` | `perception_msgs/msg/EgoData` | Current ego state used for planning, timeout checks, and safe-stop fallback |
+| `~/object_list` | `perception_msgs/msg/ObjectList` | Perceived objects with predictions used for object-aware speed reduction |
+| `~/route` | `route_planning_msgs/msg/Route` | Route with lane, speed-limit, lane-change, and regulatory information |
 
 #### Published Topics
 
 | Topic | Type | Description |
 | --- | --- | --- |
-| `~/trajectory` | `trajectory_planning_msgs/msg/Trajectory` | TODO |
+| `~/trajectory` | `trajectory_planning_msgs/msg/Trajectory` | Planned reference trajectory for the ego vehicle |
 | `~/object_interaction_markers` | `visualization_msgs/msg/MarkerArray` | RViz markers for object-conflict positions during the speed-reduction loop |
 
 #### Parameters
@@ -88,14 +88,14 @@ flowchart LR
 
 | Argument | Default | Description |
 | --- | --- | --- |
-| `ego_data_topic` | `"~/ego_data"` | TODO |
-| `object_list_topic` | `"~/object_list"` | TODO |
-| `route_topic` | `"~/route"` | TODO |
-| `trajectory_topic` | `"~/trajectory"` | TODO |
-| `object_interaction_markers_topic` | `"~/object_interaction_markers"` | TODO |
-| `left_turn_indicator_service` | `"~/enable_left_turn_indicator"` | TODO |
-| `right_turn_indicator_service` | `"~/enable_right_turn_indicator"` | TODO |
-| `hazard_lights_service` | `"~/enable_hazard_lights"` | TODO |
+| `ego_data_topic` | `"~/ego_data"` | Remapped input topic for ego state |
+| `object_list_topic` | `"~/object_list"` | Remapped input topic for perceived objects |
+| `route_topic` | `"~/route"` | Remapped input topic for the route |
+| `trajectory_topic` | `"~/trajectory"` | Remapped output topic for the planned trajectory |
+| `object_interaction_markers_topic` | `"~/object_interaction_markers"` | Remapped output topic for object-conflict RViz markers |
+| `left_turn_indicator_service` | `"~/enable_left_turn_indicator"` | Remapped service for requesting the left turn indicator |
+| `right_turn_indicator_service` | `"~/enable_right_turn_indicator"` | Remapped service for requesting the right turn indicator |
+| `hazard_lights_service` | `"~/enable_hazard_lights"` | Remapped service for requesting hazard lights |
 | `name` | `"simple_planner"` | node name |
 | `namespace` | `""` | node namespace |
 | `params` | `os.path.join(get_package_share_directory("simple_planner"), "config", "params.yml")` | path to parameter file |

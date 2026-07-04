@@ -12,14 +12,25 @@
   <a href="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml/badge.svg"/></a>
 </p>
 
-**TODO: Repository tagline/description**
+**ROS 2 route-following reference trajectory planner for automated driving.**
 
-TODO: High-level repository introduction paragraph
+This repository provides a lightweight ROS 2 planner that converts an route, the current ego state, and optional environment information into a periodically published reference trajectory. It is intended as a deterministic upstream reference generator for downstream trajectory optimization and control modules. Key features:
+- **Route following**: creates reference trajectories from route lane geometry and speed limits.
+- **Safe-stop behavior**: publishes standstill or safe-stop trajectories when required inputs are missing, outdated, or a stop is needed.
+- **Traffic-light handling**: stops at relevant traffic-light regulatory elements with configurable stop-line offsets and state prediction support.
+- **Lane changes and indicators**: inserts simple lane-change transitions and requests turn-signal or hazard-light services based on route semantics.
+- **Object-aware speed handling**: checks perceived objects and predictions against the ego trajectory and applies a conservative speed cap when conflicts are detected.
+- **Diagnostics and visualization**: provides topic/publisher diagnostics and optional RViz markers for object-interaction conflicts.
+
+The ROS 2 node uses the open-source ROS 2 message definitions [perception_interfaces](https://github.com/ika-rwth-aachen/perception_interfaces) and [planning_interfaces](https://github.com/ika-rwth-aachen/planning_interfaces) for its inputs and outputs, making it straightforward to integrate into larger ROS 2-based automated-driving systems.
 
 <p align="center">
   <strong>🚀 <a href="#-quick-start">Quick Start</a></strong> • <strong>💻 <a href="#-development">Development</a></strong> • <strong>📝 <a href="#-documentation">Documentation</a></strong>
-</p>> [!IMPORTANT]
+</p>
+
+> [!IMPORTANT]
 > This repository is part of [***OpenADS***](https://github.com/openads-project), the *Open Automated Driving Systems* project. *OpenADS* and its modules have been initiated and are currently being maintained by the [**Institute for Automotive Engineering (ika) at RWTH Aachen University**](https://www.ika.rwth-aachen.de/de/).
+
 ## 🚀 Quick Start
 
 1. Start a container of the pre-built runtime image.
@@ -30,23 +41,6 @@ TODO: High-level repository introduction paragraph
     ```bash
     ros2 launch simple_planner simple_planner.launch.py
     ```
-
-<!-- TODO: replace default quick start with repo-specific demo (Docker Compose)
-
-1. Launch a container of the pre-built runtime image in the provided demo [Docker Compose](demo/docker-compose.yml) setup.
-    ```bash
-    cd demo
-    xhost +local: # allow GUI forwarding from containers
-    docker compose up
-    ```
-1. Observe ...
-1. Stop the demo and clean up.
-    > *Ctrl+C*
-    ```bash
-    docker compose down
-    xhost -local: # revoke GUI forwarding permissions
-    ```
--->
 
 ## 💻 Development
 
@@ -95,7 +89,7 @@ Package and node interfaces are documented in the respective package READMEs lis
 
 | Package | Description |
 | --- | --- |
-| [simple_planner](simple_planner/README.md) | Plans a reference trajectory to follow a route |
+| [simple_planner](simple_planner/README.md) | Generates route-following reference trajectories with safe-stop, traffic-light, turn-signal, and object-aware speed handling. |
 
 ## ⚖️ Licensing
 
@@ -107,11 +101,13 @@ Development and maintenance of this repository are supported by the following pr
 
 | Project | Funding Institution | Grant Number |
 | --- | --- | --- |
-| TODO | TODO | TODO |
+| [AIGGREGATE](https://aiggregate.eu/) | 🇪🇺 European Union | 101202457 |
+| [AIthena](https://aithena.eu/) | 🇪🇺 European Union | 101076754 |
+| [autotech.agil](https://www.autotechagil.de/) | 🇩🇪 Federal Ministry for Research, Technology and Space (BMFTR) | 01IS22088A |
 
 <p>
   <img src="https://www.drought.uni-freiburg.de/stressres/images/bmftr-logo/image" height=70>
   <img src="https://ec.europa.eu/regional_policy/images/information-sources/logo-download-center/eu_funded_en.jpg" height=70>
 </p>
 
-<sub><sup>Funded by the European Union. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Climate, Infrastructure and Environment Executive Agency (CINEA). Neither the European Union nor CINEA can be held responsible for them.</sup></sub>
+<sup><sub>Funded by the European Union. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Climate, Infrastructure and Environment Executive Agency (CINEA). Neither the European Union nor CINEA can be held responsible for them.</sup></sup>
