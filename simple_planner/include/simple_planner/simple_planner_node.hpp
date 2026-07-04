@@ -72,11 +72,19 @@ struct SimplePathPoint {
   double s;
   double v;
 
-  // custom constructor
+  /**
+   * @brief Creates a path point from position, path distance, and velocity.
+   *
+   * @param[in] pos Point position in the path frame.
+   * @param[in] s Accumulated path distance.
+   * @param[in] v Target velocity at the point.
+   */
   SimplePathPoint(const Eigen::Vector2d& pos, double s = -1.0, double v = -1.0)
   : position(pos), s(s), v(v) {}
 
-  // default constructor
+  /**
+   * @brief Creates a path point with default-initialized members.
+   */
   SimplePathPoint() = default;
 };
 
@@ -213,7 +221,22 @@ class SimplePlannerNode : public rclcpp::Node {
    * @return trajectory_planning_msgs::msg::Trajectory Generated trajectory message.
    */
   trajectory_planning_msgs::msg::Trajectory buildTrajectoryFromSimplePath(const SimplePath& path);
+
+  /**
+   * @brief Deletes the currently published object interaction markers.
+   *
+   * @param[in] target_header Header used for the marker delete messages.
+   */
   void clearObjectInteractionMarkers(const std_msgs::msg::Header& target_header);
+
+  /**
+   * @brief Publishes RViz markers for the current object interaction conflict.
+   *
+   * If marker publishing is disabled or no conflict exists, existing markers are cleared.
+   *
+   * @param[in] target_header Header used for the marker messages.
+   * @param[in] conflict Optional conflict sample to visualize.
+   */
   void publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header,
                                        const std::optional<ConflictSample>& conflict);
 
@@ -347,13 +370,62 @@ class SimplePlannerNode : public rclcpp::Node {
    */
   void trimPathBehindEgo(SimplePath& path);
 
+  /**
+   * @brief Resamples a path into trajectory time steps and applies optional stopping behavior.
+   *
+   * @param[in] path Input path with accumulated `s` values.
+   * @param[in] stop_at_end Whether the output should brake to a stop at the path end.
+   * @param[in] offset_to_stop_line Additional offset used when computing the braking point.
+   * @param[in] speed_cap Optional upper velocity limit for all sampled points.
+   * @return Time-resampled path points.
+   */
   std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0,
                                             const double* speed_cap = nullptr);
+
+  /**
+   * @brief Generates interpolated points for a lane-change section of the route.
+   *
+   * @param[in] start_idx Route element index where the lane change starts.
+   * @param[in] turn_idx Route element index that indicates the lane-change turn.
+   * @param[in] route Route in trajectory frame.
+   * @return Lane-change path points, or an empty vector if the indices are invalid.
+   */
   std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
+
+  /**
+   * @brief Recomputes accumulated path distance from point positions.
+   *
+   * @param[in,out] path Path whose `s` values are updated in-place.
+   */
   void recalculateS(std::vector<SimplePathPoint>& path);
+
+  /**
+   * @brief Creates a minimal safe-stop path along the current ego heading.
+   *
+   * @param[in] ego_data Latest ego state.
+   * @param[in] safe_stop_distance Distance available for the stop maneuver.
+   * @param[in] target_header Target output header for the planning cycle.
+   * @return Safe-stop path in the ego state frame.
+   */
   SimplePath calculateSafeStopAlongEgoHeading(const perception_msgs::msg::EgoData& ego_data, const double safe_stop_distance, const std_msgs::msg::Header& target_header);
+
+  /**
+   * @brief Truncates and resamples an existing path to stop within the safe-stop distance.
+   *
+   * @param[in] path Route path to use as stop corridor.
+   * @param[in] safe_stop_distance Distance available for the stop maneuver.
+   * @return Safe-stop path along the route.
+   */
   SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
+
+  /**
+   * @brief Transforms a simple path into the requested target frame and timestamp.
+   *
+   * @param[in] path Path to transform.
+   * @param[in] target_header Target frame and timestamp.
+   * @return Transformed path, or the original path if the transform fails.
+   */
   SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 
   /**

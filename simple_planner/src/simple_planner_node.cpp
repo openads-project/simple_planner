@@ -965,6 +965,13 @@ void SimplePlannerNode::publishTimerCallback() {
 
 }  // namespace simple_planner
 
+/**
+ * @brief Starts the simple planner ROS node.
+ *
+ * @param[in] argc Number of command-line arguments.
+ * @param[in] argv Command-line arguments.
+ * @return Process exit code.
+ */
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<simple_planner::SimplePlannerNode>());

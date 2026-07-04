@@ -128,6 +128,13 @@ rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(c
   return result;
 }
 
+/**
+ * @brief Transforms a simple path into the requested target frame and timestamp.
+ *
+ * @param[in] path Path to transform.
+ * @param[in] target_header Target frame and timestamp.
+ * @return Transformed path, or the original path if the transform fails.
+ */
 SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header) {
   SimplePath transformed_path;
   transformed_path.header = target_header;

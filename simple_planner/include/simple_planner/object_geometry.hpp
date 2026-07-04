@@ -56,6 +56,12 @@ struct ConflictSample {
   OrientedBox2D object_box;
 };
 
+/**
+ * @brief Wraps an angle to the range [-pi, pi].
+ *
+ * @param[in] angle_rad Angle in radians.
+ * @return Wrapped angle in radians.
+ */
 inline double wrap_angle_rad(double angle_rad) {
   double capped_angle_rad = angle_rad;
   while (capped_angle_rad > M_PI) capped_angle_rad -= 2 * M_PI;
@@ -63,12 +69,27 @@ inline double wrap_angle_rad(double angle_rad) {
   return capped_angle_rad;
 }
 
+/**
+ * @brief Rotates a 2D vector by the given yaw angle.
+ *
+ * @param[in] vec Vector to rotate.
+ * @param[in] yaw Rotation angle in radians.
+ * @return Rotated vector.
+ */
 inline Eigen::Vector2d rotate(const Eigen::Vector2d& vec, double yaw) {
   const double c = std::cos(yaw);
   const double s = std::sin(yaw);
   return Eigen::Vector2d(c * vec.x() - s * vec.y(), s * vec.x() + c * vec.y());
 }
 
+/**
+ * @brief Computes an object state's time relative to the planning stamp.
+ *
+ * @param[in] state Object state whose stamp should be used if available.
+ * @param[in] fallback_header Header used when the state has no own stamp.
+ * @param[in] planning_stamp Reference time of the planning cycle.
+ * @return Relative time in seconds.
+ */
 inline double getStateRelativeTime(const perception_msgs::msg::ObjectState& state, const std_msgs::msg::Header& fallback_header,
                                    const rclcpp::Time& planning_stamp) {
   const bool has_state_stamp = state.header.stamp.sec != 0 || state.header.stamp.nanosec != 0;
@@ -76,6 +97,15 @@ inline double getStateRelativeTime(const perception_msgs::msg::ObjectState& stat
   return (rclcpp::Time(source_header.stamp) - planning_stamp).seconds();
 }
 
+/**
+ * @brief Builds an oriented 2D bounding box from center pose and dimensions.
+ *
+ * @param[in] center Box center in the target frame.
+ * @param[in] yaw Box heading in radians.
+ * @param[in] length Box length.
+ * @param[in] width Box width.
+ * @return Oriented bounding box.
+ */
 inline OrientedBox2D buildOrientedBox(const Eigen::Vector2d& center, double yaw, double length, double width) {
   OrientedBox2D box;
   box.center = center;
@@ -86,6 +116,12 @@ inline OrientedBox2D buildOrientedBox(const Eigen::Vector2d& center, double yaw,
   return box;
 }
 
+/**
+ * @brief Converts an oriented box center and heading to a ROS pose.
+ *
+ * @param[in] box Box to convert.
+ * @return Pose at the box center with the box heading.
+ */
 inline geometry_msgs::msg::Pose toPose(const OrientedBox2D& box) {
   geometry_msgs::msg::Pose pose;
   pose.position.x = box.center.x();
@@ -97,6 +133,14 @@ inline geometry_msgs::msg::Pose toPose(const OrientedBox2D& box) {
   return pose;
 }
 
+/**
+ * @brief Interpolates a timed box sample at the requested relative time.
+ *
+ * @param[in] lhs Earlier or first sample.
+ * @param[in] rhs Later or second sample.
+ * @param[in] t Relative time to sample.
+ * @return Interpolated timed box.
+ */
 inline TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& rhs, double t) {
   const double duration = rhs.t - lhs.t;
   const double alpha = std::abs(duration) > 1e-6 ? std::clamp((t - lhs.t) / duration, 0.0, 1.0) : 0.0;
@@ -110,7 +154,16 @@ inline TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& r
   return sample;
 }
 
-// Separating-axis test between the (longitudinally/laterally inflated) ego box and an object box.
+/**
+ * @brief Checks whether an object box overlaps the ego box including safety margins.
+ *
+ * @param[in] ego_box Ego bounding box.
+ * @param[in] object_box Object bounding box.
+ * @param[in] longitudinal_safety_distance Extra ego-aligned longitudinal margin.
+ * @param[in] lateral_safety_distance Extra ego-aligned lateral margin.
+ * @return true if the boxes overlap after applying the safety margins.
+ * @return false if a separating axis exists.
+ */
 inline bool overlapsWithEgoSafety(const OrientedBox2D& ego_box, const OrientedBox2D& object_box,
                                   double longitudinal_safety_distance, double lateral_safety_distance) {
   const Eigen::Vector2d center_delta = object_box.center - ego_box.center;
@@ -129,7 +182,16 @@ inline bool overlapsWithEgoSafety(const OrientedBox2D& ego_box, const OrientedBo
   return true;
 }
 
-// Builds a timed bounding box for a single object state in trajectory frame.
+/**
+ * @brief Builds a timed bounding-box sample for a single object state.
+ *
+ * @param[in] state Object state in the trajectory frame.
+ * @param[in] fallback_header Header used if the state has no own stamp.
+ * @param[in] stamp Planning stamp used as relative time reference.
+ * @param[in] length Object length.
+ * @param[in] width Object width.
+ * @return Timed box sample for the object state.
+ */
 inline TimedBox2D buildObjectSample(const perception_msgs::msg::ObjectState& state, const std_msgs::msg::Header& fallback_header,
                                     const rclcpp::Time& stamp, double length, double width) {
   const auto center_msg = perception_msgs::object_access::getCenterPosition(state);
