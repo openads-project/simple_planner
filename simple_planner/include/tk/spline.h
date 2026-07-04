@@ -157,9 +157,11 @@ class band_matrix {
   std::vector<std::vector<double> > m_upper;  // upper band
   std::vector<std::vector<double> > m_lower;  // lower band
  public:
+  // clang-format off
   band_matrix(){};                         // constructor
   band_matrix(int dim, int n_u, int n_l);  // constructor
   ~band_matrix(){};                        // destructor
+  // clang-format on
   void resize(int dim, int n_u, int n_l);  // init with dim,n_u,n_l
   int dim() const;                         // matrix dimension
   int num_upper() const { return (int)m_upper.size() - 1; }

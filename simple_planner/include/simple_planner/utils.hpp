@@ -173,7 +173,7 @@ void SimplePlannerNode::setHealth(const unsigned char status,
   health_.key_value_pairs = key_value_pairs;
 }
 
-std::string SimplePlannerNode::plannerStateToString(const SimplePlannerNode::PlannerState& state) const {
+std::string SimplePlannerNode::plannerStateToString(const SimplePlannerNode::PlannerState& state) {
   switch (state) {
     case PlannerState::NoPublish:
       return "NoPublish";
@@ -188,7 +188,7 @@ std::string SimplePlannerNode::plannerStateToString(const SimplePlannerNode::Pla
   }
 }
 
-std::string SimplePlannerNode::turnSignalToString(const uint8_t& turn_signal) const {
+std::string SimplePlannerNode::turnSignalToString(const uint8_t& turn_signal) {
   switch (turn_signal) {
     case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE:
       return "None";

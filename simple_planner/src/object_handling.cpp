@@ -33,11 +33,12 @@ void SimplePlannerNode::clearObjectInteractionMarkers(const std_msgs::msg::Heade
   visualization_msgs::msg::MarkerArray marker_array;
   const std::array<std::string, 3> namespaces = {"object_interaction_ego_safety_box", "object_interaction_ego_box",
                                                  "object_interaction_object_box"};
-  for (size_t idx = 0; idx < namespaces.size(); ++idx) {
+  int marker_id = 0;
+  for (const auto& marker_namespace : namespaces) {
     visualization_msgs::msg::Marker marker;
     marker.header = target_header;
-    marker.ns = namespaces[idx];
-    marker.id = static_cast<int>(idx);
+    marker.ns = marker_namespace;
+    marker.id = marker_id++;
     marker.action = visualization_msgs::msg::Marker::DELETE;
     marker_array.markers.push_back(marker);
   }
@@ -82,10 +83,10 @@ void SimplePlannerNode::publishObjectInteractionMarkers(const std_msgs::msg::Hea
   const double ego_length = 2.0 * conflict->ego_box.half_length;
   const double ego_width = 2.0 * conflict->ego_box.half_width;
   make_box_marker("object_interaction_ego_safety_box", 0, ego_pose, ego_length + 2.0 * object_longitudinal_safety_distance_,
-                  ego_width + 2.0 * object_lateral_safety_distance_, 0.12, 1.0f, 0.55f, 0.0f, 0.28f);
-  make_box_marker("object_interaction_ego_box", 1, ego_pose, ego_length, ego_width, 0.18, 1.0f, 0.0f, 0.0f, 0.55f);
+                  ego_width + 2.0 * object_lateral_safety_distance_, 0.12, 1.0F, 0.55F, 0.0F, 0.28F);
+  make_box_marker("object_interaction_ego_box", 1, ego_pose, ego_length, ego_width, 0.18, 1.0F, 0.0F, 0.0F, 0.55F);
   make_box_marker("object_interaction_object_box", 2, toPose(conflict->object_box), 2.0 * conflict->object_box.half_length,
-                  2.0 * conflict->object_box.half_width, 0.24, 0.0f, 0.45f, 1.0f, 0.55f);
+                  2.0 * conflict->object_box.half_width, 0.24, 0.0F, 0.45F, 1.0F, 0.55F);
 
   object_interaction_marker_pub_->publish(marker_array);
 }

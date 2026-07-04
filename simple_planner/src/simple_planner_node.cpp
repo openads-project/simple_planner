@@ -42,8 +42,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "Time after which a received object list is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
-  this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline", true, false, false,
-                                (std::optional<uint8_t>)0, (std::optional<uint8_t>)1);
+  this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline");
   this->declareAndLoadParameter(
       "v_ref", v_ref_,
       "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
@@ -394,7 +393,7 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
   return PlannerState::FollowRoute;
 }
 
-bool SimplePlannerNode::isMessageOutdated(const std_msgs::msg::Header& header, double timeout, const rclcpp::Time& stamp) const {
+bool SimplePlannerNode::isMessageOutdated(const std_msgs::msg::Header& header, double timeout, const rclcpp::Time& stamp) {
   if (timeout == -1.0) {
     return false;
   }
@@ -474,8 +473,9 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
 
   latest_path_ = usable_path;
   std::vector<SimplePathPoint> path_points = latest_path_.points;
-  if ((size_t)n_states_ < path_points.size()) {
-    path_points.erase(path_points.begin() + n_states_, path_points.end());
+  const auto n_states_size = static_cast<size_t>(n_states_);
+  if (n_states_size < path_points.size()) {
+    path_points.resize(n_states_size);
   }
 
   int type_id = trajectory_planning_msgs::REFERENCE::TYPE_ID;
@@ -484,7 +484,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
   tra.header = usable_path.header;
 
   for (int i = 0; i < n_states_; i++) {
-    int idx = (size_t)i < path_points.size() ? i : path_points.size() - 1;
+    const size_t idx = static_cast<size_t>(i) < path_points.size() ? static_cast<size_t>(i) : path_points.size() - 1;
     trajectory_planning_msgs::trajectory_access::setT(tra, dt_ * i, i);
     trajectory_planning_msgs::trajectory_access::setX(tra, path_points[idx].position.x(), i);
     trajectory_planning_msgs::trajectory_access::setY(tra, path_points[idx].position.y(), i);
@@ -635,7 +635,7 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
     return false;
   }
 
-  int i_end = route_element_idx + 1;
+  const size_t i_end = route_element_idx + 1;
   const auto& route_element = tf_route.route_elements[route_element_idx];
   size_t current_lane_idx = route_element.suggested_lane_idx;
   int lane_change_direction = 0;
@@ -666,7 +666,7 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
   }
 
   double ds = 0.0;
-  int i_start = route_element_idx;
+  size_t i_start = route_element_idx;
   while (ds < lane_change_distance && i_start > 0) {
     if (auto result = route_planning_msgs::route_access::getPrecedingLaneElementIdx(current_lane_idx,
                                                                                     tf_route.route_elements[i_start - 1])) {
@@ -678,7 +678,7 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
       setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
       break;
     }
-    if ((i_start - 2) >= 0 && tf_route.route_elements[i_start - 2].will_change_suggested_lane) {
+    if (i_start >= 2 && tf_route.route_elements[i_start - 2].will_change_suggested_lane) {
       std::string msg = "Found previous lane change in route element " + std::to_string(i_start - 2) +
                         ". Could not extend lane change over this element.";
       RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
@@ -805,13 +805,16 @@ std::vector<SimplePathPoint> SimplePlannerNode::mergeLaneChangeSegments(
     }
 
     start_idx = std::min(start_idx, route_points.size());
-    merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.begin() + start_idx);
+    const auto current_offset = static_cast<std::vector<SimplePathPoint>::difference_type>(current);
+    const auto start_offset = static_cast<std::vector<SimplePathPoint>::difference_type>(start_idx);
+    merged_points.insert(merged_points.end(), route_points.begin() + current_offset, route_points.begin() + start_offset);
     std::vector<SimplePathPoint> lane_change_points = generateLaneChangePath(start_idx_route, lane_change_idx_route, tf_route);
     merged_points.insert(merged_points.end(), lane_change_points.begin(), lane_change_points.end());
     current = std::min(end_idx + 1, route_points.size());
   }
   if (current <= route_points.size()) {
-    merged_points.insert(merged_points.end(), route_points.begin() + current, route_points.end());
+    const auto current_offset = static_cast<std::vector<SimplePathPoint>::difference_type>(current);
+    merged_points.insert(merged_points.end(), route_points.begin() + current_offset, route_points.end());
   }
   return merged_points;
 }
@@ -860,7 +863,8 @@ SimplePath SimplePlannerNode::calculateSafeStopAlongRoute(const SimplePath& path
   for (size_t i = 0; i < safe_stop_path.points.size(); i++) {
     if (safe_stop_path.points[i].s > start_s + safe_stop_distance) {
       // remove all points after the point where the safe stop distance is reached
-      safe_stop_path.points.erase(safe_stop_path.points.begin() + i, safe_stop_path.points.end());
+      const auto erase_offset = static_cast<std::vector<SimplePathPoint>::difference_type>(i);
+      safe_stop_path.points.erase(safe_stop_path.points.begin() + erase_offset, safe_stop_path.points.end());
       break;
     }
   }
@@ -895,12 +899,12 @@ SimplePath SimplePlannerNode::calculateSafeStopAlongEgoHeading(const perception_
   return safe_stop_path;
 }
 
-std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int start_idx,
-                                                                       const int turn_idx,
+std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(size_t start_idx,
+                                                                       size_t turn_idx,
                                                                        const route_planning_msgs::msg::Route& route) {
   std::vector<SimplePathPoint> lane_change_path;
-  int end_idx = turn_idx + 1;  // lane change should end at the next route element
-  if (start_idx >= end_idx || start_idx < 0 || end_idx >= static_cast<int>(route.route_elements.size())) {
+  const size_t end_idx = turn_idx + 1;  // lane change should end at the next route element
+  if (start_idx >= end_idx || end_idx >= route.route_elements.size()) {
     std::string msg = "Invalid lane change indices: start_idx=" + std::to_string(start_idx) +
                       ", end_idx=" + std::to_string(end_idx) + ". Cannot generate lane change path.";
     RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
@@ -912,8 +916,8 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
                                                                                         route.route_elements[turn_idx + 1]);
 
   // Interpolate between the two elements
-  for (int i = start_idx; i <= end_idx; ++i) {
-    if (i < static_cast<int>(route.current_route_element_idx)) continue;
+  for (size_t i = start_idx; i <= end_idx; ++i) {
+    if (i < route.current_route_element_idx) continue;
 
     const auto& route_element = route.route_elements[i];
     const auto& suggested_lane = route_planning_msgs::route_access::getSuggestedLaneElement(route_element);
@@ -922,7 +926,8 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(const int
         route_element, route.route_elements[i].suggested_lane_idx, lane_change_direction);
     Eigen::Vector2d suggested_lane_pos(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     Eigen::Vector2d adjacent_lane_pos(adjacent_lane.reference_pose.position.x, adjacent_lane.reference_pose.position.y);
-    double alpha = 0.5 * (1.0 + std::cos(M_PI * static_cast<double>(i - start_idx) / (end_idx - start_idx)));
+    const double lane_change_progress = static_cast<double>(i - start_idx) / static_cast<double>(end_idx - start_idx);
+    double alpha = 0.5 * (1.0 + std::cos(M_PI * lane_change_progress));
     Eigen::Vector2d interpolated_pos = alpha * suggested_lane_pos + (1.0 - alpha) * adjacent_lane_pos;
     lane_change_path.push_back(
         SimplePathPoint(interpolated_pos, route_element.s, suggested_lane.speed_limit / 3.6));  // convert km/h to m/s

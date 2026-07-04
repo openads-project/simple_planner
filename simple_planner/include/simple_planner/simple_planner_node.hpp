@@ -82,7 +82,7 @@ struct SimplePathPoint {
    * @param[in] s Accumulated path distance.
    * @param[in] v Target velocity at the point.
    */
-  SimplePathPoint(const Eigen::Vector2d& pos, double s = -1.0, double v = -1.0) : position(pos), s(s), v(v) {}
+  explicit SimplePathPoint(const Eigen::Vector2d& pos, double s = -1.0, double v = -1.0) : position(pos), s(s), v(v) {}
 
   /**
    * @brief Creates a path point with default-initialized members.
@@ -106,7 +106,7 @@ class SimplePlannerNode : public rclcpp::Node {
   struct FollowRoutePlan {
     SimplePath path;
     bool stop_at_end = false;
-    std::string reason_to_stop = "";
+    std::string reason_to_stop;
     double offset_to_stop_line = 0.0;
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   };
@@ -194,7 +194,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @return true if the message is outdated.
    * @return false if the message is still valid.
    */
-  bool isMessageOutdated(const std_msgs::msg::Header& header, double timeout, const rclcpp::Time& stamp) const;
+  static bool isMessageOutdated(const std_msgs::msg::Header& header, double timeout, const rclcpp::Time& stamp);
 
   /**
    * @brief Creates a trajectory for the already determined planner state.
@@ -211,7 +211,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] target_header Output header for the generated trajectory.
    * @return trajectory_planning_msgs::msg::Trajectory Standstill trajectory message.
    */
-  trajectory_planning_msgs::msg::Trajectory buildStandstillTrajectory(const std_msgs::msg::Header& target_header);
+  static trajectory_planning_msgs::msg::Trajectory buildStandstillTrajectory(const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Builds a trajectory message from a simple path.
@@ -376,7 +376,7 @@ class SimplePlannerNode : public rclcpp::Node {
    *
    * @param[in,out] path Path to be trimmed in-place.
    */
-  void trimPathBehindEgo(SimplePath& path);
+  static void trimPathBehindEgo(SimplePath& path);
 
   /**
    * @brief Resamples a path into trajectory time steps and applies optional stopping behavior.
@@ -400,8 +400,8 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] route Route in trajectory frame.
    * @return Lane-change path points, or an empty vector if the indices are invalid.
    */
-  std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx,
-                                                      const int turn_idx,
+  std::vector<SimplePathPoint> generateLaneChangePath(size_t start_idx,
+                                                      size_t turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
 
   /**
@@ -409,7 +409,7 @@ class SimplePlannerNode : public rclcpp::Node {
    *
    * @param[in,out] path Path whose `s` values are updated in-place.
    */
-  void recalculateS(std::vector<SimplePathPoint>& path);
+  static void recalculateS(std::vector<SimplePathPoint>& path);
 
   /**
    * @brief Creates a minimal safe-stop path along the current ego heading.
@@ -459,7 +459,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param state
    * @return std::string
    */
-  std::string plannerStateToString(const PlannerState& state) const;
+  static std::string plannerStateToString(const PlannerState& state);
 
   /**
    * @brief Converts a turn signal value to a string representation
@@ -467,7 +467,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param turn_signal
    * @return std::string
    */
-  std::string turnSignalToString(const uint8_t& turn_signal) const;
+  static std::string turnSignalToString(const uint8_t& turn_signal);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
@@ -549,8 +549,8 @@ class SimplePlannerNode : public rclcpp::Node {
    */
   struct DiagnosticStatus {
     unsigned char status = diagnostic_msgs::msg::DiagnosticStatus::STALE;
-    std::string message = "";
-    std::map<std::string, std::string> key_value_pairs = {};
+    std::string message;
+    std::map<std::string, std::string> key_value_pairs;
   } health_;
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> ego_data_topic_diagnostic_;
