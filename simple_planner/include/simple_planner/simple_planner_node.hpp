@@ -38,9 +38,12 @@
 namespace simple_planner {
 
 // only required for parameter handling
-template <typename C> struct is_vector : std::false_type {};
-template <typename T,typename A> struct is_vector< std::vector<T,A> > : std::true_type {};
-template <typename C> inline constexpr bool is_vector_v = is_vector<C>::value;
+template <typename C>
+struct is_vector : std::false_type {};
+template <typename T, typename A>
+struct is_vector<std::vector<T, A>> : std::true_type {};
+template <typename C>
+inline constexpr bool is_vector_v = is_vector<C>::value;
 
 /**
  * @brief Configuration parameters for topic diagnostics
@@ -79,8 +82,7 @@ struct SimplePathPoint {
    * @param[in] s Accumulated path distance.
    * @param[in] v Target velocity at the point.
    */
-  SimplePathPoint(const Eigen::Vector2d& pos, double s = -1.0, double v = -1.0)
-  : position(pos), s(s), v(v) {}
+  SimplePathPoint(const Eigen::Vector2d& pos, double s = -1.0, double v = -1.0) : position(pos), s(s), v(v) {}
 
   /**
    * @brief Creates a path point with default-initialized members.
@@ -140,16 +142,16 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] additional_constraints Additional free-form constraint text for the parameter descriptor.
    */
   template <typename T>
-  void declareAndLoadParameter(const std::string &name,
-                               T &param,
-                               const std::string &description,
+  void declareAndLoadParameter(const std::string& name,
+                               T& param,
+                               const std::string& description,
                                const bool add_to_auto_reconfigurable_params = true,
                                const bool is_required = false,
                                const bool read_only = false,
-                               const std::optional<double> &from_value = std::nullopt,
-                               const std::optional<double> &to_value = std::nullopt,
-                               const std::optional<double> &step_value = std::nullopt,
-                               const std::string &additional_constraints = "");
+                               const std::optional<double>& from_value = std::nullopt,
+                               const std::optional<double>& to_value = std::nullopt,
+                               const std::optional<double>& step_value = std::nullopt,
+                               const std::string& additional_constraints = "");
 
   /**
    * @brief Handles reconfiguration when a parameter value is changed
@@ -237,8 +239,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] target_header Header used for the marker messages.
    * @param[in] conflict Optional conflict sample to visualize.
    */
-  void publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header,
-                                       const std::optional<ConflictSample>& conflict);
+  void publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header, const std::optional<ConflictSample>& conflict);
 
   /**
    * @brief Builds the initial safe-stop path for the current cycle.
@@ -268,7 +269,8 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param base_path_points Route path before time-based resampling.
    * @param route_plan Mutable route plan to be constrained by dynamic objects.
    */
-  void applyObjectConstraints(const std_msgs::msg::Header& target_header, const std::vector<SimplePathPoint>& base_path_points,
+  void applyObjectConstraints(const std_msgs::msg::Header& target_header,
+                              const std::vector<SimplePathPoint>& base_path_points,
                               FollowRoutePlan& route_plan);
 
   /**
@@ -308,7 +310,8 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in,out] route_plan Mutable route planning result to extend.
    * @param[out] lane_change_indices_map Output lane-change windows to be merged later.
    */
-  void appendRoutePoints(const route_planning_msgs::msg::Route& tf_route, FollowRoutePlan& route_plan,
+  void appendRoutePoints(const route_planning_msgs::msg::Route& tf_route,
+                         FollowRoutePlan& route_plan,
                          std::map<uint64_t, uint64_t>& lane_change_indices_map);
 
   /**
@@ -321,8 +324,10 @@ class SimplePlannerNode : public rclcpp::Node {
    * @return true if the lane change could be registered.
    * @return false if the route data is insufficient and processing should stop.
    */
-  bool tryRegisterLaneChange(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
-                             std::map<uint64_t, uint64_t>& lane_change_indices_map, uint8_t& suggested_turn_signal);
+  bool tryRegisterLaneChange(const route_planning_msgs::msg::Route& tf_route,
+                             size_t route_element_idx,
+                             std::map<uint64_t, uint64_t>& lane_change_indices_map,
+                             uint8_t& suggested_turn_signal);
 
   /**
    * @brief Updates stop-at-end and stop-line offset state for traffic-light regulatory elements.
@@ -335,10 +340,13 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in,out] stop_at_end Whether the path should stop at its current end.
    * @param[in,out] offset_to_stop_line Effective offset used for braking towards the stop line.
    */
-  void updateForTrafficLights(const route_planning_msgs::msg::Route& tf_route, size_t route_element_idx,
+  void updateForTrafficLights(const route_planning_msgs::msg::Route& tf_route,
+                              size_t route_element_idx,
                               const route_planning_msgs::msg::LaneElement& suggested_lane,
-                              const SimplePathPoint& simple_path_point, double t_total,
-                              bool& stop_at_end, double& offset_to_stop_line);
+                              const SimplePathPoint& simple_path_point,
+                              double t_total,
+                              bool& stop_at_end,
+                              double& offset_to_stop_line);
 
   /**
    * @brief Merges interpolated lane-change segments into the base route path.
@@ -379,7 +387,9 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] speed_cap Optional upper velocity limit for all sampled points.
    * @return Time-resampled path points.
    */
-  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path, bool stop_at_end, double offset_to_stop_line = 0.0,
+  std::vector<SimplePathPoint> resamplePath(const std::vector<SimplePathPoint>& path,
+                                            bool stop_at_end,
+                                            double offset_to_stop_line = 0.0,
                                             const double* speed_cap = nullptr);
 
   /**
@@ -390,7 +400,8 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] route Route in trajectory frame.
    * @return Lane-change path points, or an empty vector if the indices are invalid.
    */
-  std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx, const int turn_idx,
+  std::vector<SimplePathPoint> generateLaneChangePath(const int start_idx,
+                                                      const int turn_idx,
                                                       const route_planning_msgs::msg::Route& route);
 
   /**
@@ -408,7 +419,9 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] target_header Target output header for the planning cycle.
    * @return Safe-stop path in the ego state frame.
    */
-  SimplePath calculateSafeStopAlongEgoHeading(const perception_msgs::msg::EgoData& ego_data, const double safe_stop_distance, const std_msgs::msg::Header& target_header);
+  SimplePath calculateSafeStopAlongEgoHeading(const perception_msgs::msg::EgoData& ego_data,
+                                              const double safe_stop_distance,
+                                              const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Truncates and resamples an existing path to stop within the safe-stop distance.
@@ -436,7 +449,8 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Sets the health information
    */
-  void setHealth(const unsigned char status, const std::string& msg,
+  void setHealth(const unsigned char status,
+                 const std::string& msg,
                  const std::map<std::string, std::string>& key_value_pairs = {});
 
   /**
@@ -473,7 +487,7 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Auto-reconfigurable parameters for dynamic reconfiguration
    */
-  std::vector<std::tuple<std::string, std::function<void(const rclcpp::Parameter &)>>> auto_reconfigurable_params_;
+  std::vector<std::tuple<std::string, std::function<void(const rclcpp::Parameter&)>>> auto_reconfigurable_params_;
 
   /**
    * @brief Callback handle for dynamic parameter reconfiguration
@@ -548,8 +562,7 @@ class SimplePlannerNode : public rclcpp::Node {
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
   TopicDiagnosticConfig route_topic_diagnostic_config_{18.18, 22.22, 0.0, 0.005};
 
-  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>>
-      diagnosed_publisher_;
+  std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>> diagnosed_publisher_;
   TopicDiagnosticConfig diagnosed_publisher_config_{9.09, 11.11, 0.0, 0.01};
 };
 

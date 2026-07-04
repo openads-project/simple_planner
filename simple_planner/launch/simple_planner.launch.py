@@ -15,6 +15,7 @@ from tracetools_launch.action import Trace
 
 
 def generate_launch_description():
+    """Generate the launch description for the simple_planner."""
 
     remappable_topics = [
         DeclareLaunchArgument("ego_data_topic", default_value="~/ego_data"),
@@ -30,8 +31,14 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument("name", default_value="simple_planner", description="node name"),
         DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
-        DeclareLaunchArgument("params", default_value=os.path.join(get_package_share_directory("simple_planner"), "config", "params.yml"), description="path to parameter file"),
-        DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
+        DeclareLaunchArgument(
+            "params",
+            default_value=os.path.join(get_package_share_directory("simple_planner"), "config", "params.yml"),
+            description="path to parameter file",
+        ),
+        DeclareLaunchArgument(
+            "log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"
+        ),
         DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),
         DeclareLaunchArgument("trace", default_value="false", description="Enable tracing"),
         *remappable_topics,
@@ -50,14 +57,16 @@ def generate_launch_description():
             emulate_tty=True,
         ),
         Trace(
-            session_name='trace',
+            session_name="trace",
             dual_session=True,
             condition=IfCondition(LaunchConfiguration("trace")),
         ),
     ]
 
-    return LaunchDescription([
-        *args,
-        SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
-        *nodes,
-    ])
+    return LaunchDescription(
+        [
+            *args,
+            SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
+            *nodes,
+        ]
+    )

@@ -90,7 +90,8 @@ inline Eigen::Vector2d rotate(const Eigen::Vector2d& vec, double yaw) {
  * @param[in] planning_stamp Reference time of the planning cycle.
  * @return Relative time in seconds.
  */
-inline double getStateRelativeTime(const perception_msgs::msg::ObjectState& state, const std_msgs::msg::Header& fallback_header,
+inline double getStateRelativeTime(const perception_msgs::msg::ObjectState& state,
+                                   const std_msgs::msg::Header& fallback_header,
                                    const rclcpp::Time& planning_stamp) {
   const bool has_state_stamp = state.header.stamp.sec != 0 || state.header.stamp.nanosec != 0;
   const auto& source_header = has_state_stamp ? state.header : fallback_header;
@@ -164,13 +165,15 @@ inline TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& r
  * @return true if the boxes overlap after applying the safety margins.
  * @return false if a separating axis exists.
  */
-inline bool overlapsWithEgoSafety(const OrientedBox2D& ego_box, const OrientedBox2D& object_box,
-                                  double longitudinal_safety_distance, double lateral_safety_distance) {
+inline bool overlapsWithEgoSafety(const OrientedBox2D& ego_box,
+                                  const OrientedBox2D& object_box,
+                                  double longitudinal_safety_distance,
+                                  double lateral_safety_distance) {
   const Eigen::Vector2d center_delta = object_box.center - ego_box.center;
   const std::array<Eigen::Vector2d, 4> axes = {ego_box.axis_x, ego_box.axis_y, object_box.axis_x, object_box.axis_y};
   for (const auto& axis : axes) {
-    const double ego_extent = ego_box.half_length * std::abs(axis.dot(ego_box.axis_x)) +
-                              ego_box.half_width * std::abs(axis.dot(ego_box.axis_y));
+    const double ego_extent =
+        ego_box.half_length * std::abs(axis.dot(ego_box.axis_x)) + ego_box.half_width * std::abs(axis.dot(ego_box.axis_y));
     const double object_extent = object_box.half_length * std::abs(axis.dot(object_box.axis_x)) +
                                  object_box.half_width * std::abs(axis.dot(object_box.axis_y));
     const double safety_extent = longitudinal_safety_distance * std::abs(axis.dot(ego_box.axis_x)) +
@@ -192,8 +195,11 @@ inline bool overlapsWithEgoSafety(const OrientedBox2D& ego_box, const OrientedBo
  * @param[in] width Object width.
  * @return Timed box sample for the object state.
  */
-inline TimedBox2D buildObjectSample(const perception_msgs::msg::ObjectState& state, const std_msgs::msg::Header& fallback_header,
-                                    const rclcpp::Time& stamp, double length, double width) {
+inline TimedBox2D buildObjectSample(const perception_msgs::msg::ObjectState& state,
+                                    const std_msgs::msg::Header& fallback_header,
+                                    const rclcpp::Time& stamp,
+                                    double length,
+                                    double width) {
   const auto center_msg = perception_msgs::object_access::getCenterPosition(state);
   TimedBox2D sample;
   sample.yaw = perception_msgs::object_access::getYaw(state);
