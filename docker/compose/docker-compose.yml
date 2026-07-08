@@ -1,7 +1,7 @@
 services:
 
   simple-planner:
-    image: ghcr.io/openads-project/simple_planner:v1.1.0
+    image: ghcr.io/openads-project/simple_planner:v1.3.0
     environment:
       # --- name ------
       NAMESPACE: /
@@ -12,7 +12,7 @@ services:
       ROUTE_TOPIC: ~/route
       # --- outputs ---
       TRAJECTORY_TOPIC: ~/trajectory
-      OBJECT_INTERACTION_MARKERS_TOPIC: ~/object_interaction_markers
+      OBJECT_INTERACTION_MARKERS_TOPIC: ~/viz/object_interaction_markers
       # --- other -----
       LEFT_TURN_INDICATOR_SERVICE: ~/enable_left_turn_indicator
       RIGHT_TURN_INDICATOR_SERVICE: ~/enable_right_turn_indicator

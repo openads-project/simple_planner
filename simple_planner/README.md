@@ -13,7 +13,7 @@ flowchart LR
     S1:::hidden -->|~/object_list| NODE
     S2:::hidden -->|~/route| NODE
     NODE -->|~/trajectory| P0:::hidden
-    NODE -->|~/object_interaction_markers| P1:::hidden
+    NODE -->|~/viz/object_interaction_markers| P1:::hidden
     classDef hidden display: none;
 ```
 
@@ -30,7 +30,7 @@ flowchart LR
 | Topic | Type | Description |
 | --- | --- | --- |
 | `~/trajectory` | `trajectory_planning_msgs/msg/Trajectory` | Planned reference trajectory for the ego vehicle |
-| `~/object_interaction_markers` | `visualization_msgs/msg/MarkerArray` | RViz markers for object-conflict positions during the speed-reduction loop |
+| `~/viz/object_interaction_markers` | `visualization_msgs/msg/MarkerArray` | RViz markers for object-conflict positions during the speed-reduction loop |
 
 #### Parameters
 
@@ -92,7 +92,7 @@ flowchart LR
 | `object_list_topic` | `"~/object_list"` | Remapped input topic for perceived objects |
 | `route_topic` | `"~/route"` | Remapped input topic for the route |
 | `trajectory_topic` | `"~/trajectory"` | Remapped output topic for the planned trajectory |
-| `object_interaction_markers_topic` | `"~/object_interaction_markers"` | Remapped output topic for object-conflict RViz markers |
+| `object_interaction_markers_topic` | `"~/viz/object_interaction_markers"` | Remapped output topic for object-conflict RViz markers |
 | `left_turn_indicator_service` | `"~/enable_left_turn_indicator"` | Remapped service for requesting the left turn indicator |
 | `right_turn_indicator_service` | `"~/enable_right_turn_indicator"` | Remapped service for requesting the right turn indicator |
 | `hazard_lights_service` | `"~/enable_hazard_lights"` | Remapped service for requesting hazard lights |
