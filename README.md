@@ -12,17 +12,16 @@
   <a href="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml/badge.svg"/></a>
 </p>
 
-**ROS 2 route-following reference trajectory planner for automated driving.**
+**ROS 2 Reference Trajectory Planning for Automated Driving**
 
-This repository provides a lightweight ROS 2 planner that converts an route, the current ego state, and optional environment information into a periodically published reference trajectory. It is intended as a deterministic upstream reference generator for downstream trajectory optimization and control modules. Key features:
+This repository provides a lightweight ROS 2 planner that combines route information, the current ego state, and optional environment information to periodically generate a reference trajectory. It is intended as a deterministic upstream reference planner for downstream trajectory optimization and control modules. Key features:
 - **Route following**: creates reference trajectories from route lane geometry and speed limits.
 - **Safe-stop behavior**: publishes standstill or safe-stop trajectories when required inputs are missing, outdated, or a stop is needed.
 - **Traffic-light handling**: stops at relevant traffic-light regulatory elements with configurable stop-line offsets and state prediction support.
-- **Lane changes and indicators**: inserts simple lane-change transitions and requests turn-signal or hazard-light services based on route semantics.
+- **Lane changes and indicators**: inserts simple lane-change transitions and trigger turn-signal or hazard-light services based on route semantics.
 - **Object-aware speed handling**: checks perceived objects and predictions against the ego trajectory and applies a conservative speed cap when conflicts are detected.
-- **Diagnostics and visualization**: provides topic/publisher diagnostics and optional RViz markers for object-interaction conflicts.
 
-The ROS 2 node uses the open-source ROS 2 message definitions [perception_interfaces](https://github.com/ika-rwth-aachen/perception_interfaces) and [planning_interfaces](https://github.com/ika-rwth-aachen/planning_interfaces) for its inputs and outputs, making it straightforward to integrate into larger ROS 2-based automated-driving systems.
+The ROS 2 node uses the open-source ROS 2 message definitions [perception_interfaces](https://github.com/ika-rwth-aachen/perception_interfaces) and [planning_interfaces](https://github.com/ika-rwth-aachen/planning_interfaces) for its in- and outputs, making it straightforward to integrate into larger ROS 2-based automated-driving systems.
 
 <p align="center">
   <strong>🚀 <a href="#-quick-start">Quick Start</a></strong> • <strong>💻 <a href="#-development">Development</a></strong> • <strong>📝 <a href="#-documentation">Documentation</a></strong>

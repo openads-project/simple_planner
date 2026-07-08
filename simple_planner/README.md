@@ -38,33 +38,33 @@ flowchart LR
 | --- | --- | --- | --- |
 | `trajectory_frame_id` | `string` | `"base_link"` | Frame ID of published reference trajectory |
 | `fixed_over_time_frame_id` | `string` | `"map"` | Frame ID of frame that is fixed over time for finding temporal transforms |
-| `frequency` | `float` | `10.0` | frequency of publishing trajectory |
+| `frequency` | `float` | `10.0` | Frequency of reference planning cycle (Hz) |
 | `route_timeout` | `float` | `1.0` | Time after which a received route is considered invalid (s) (use -1 for no timeout) |
 | `ego_data_timeout` | `float` | `1.0` | Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout) |
 | `object_timeout` | `float` | `1.0` | Time after which a received object list is considered invalid (s) (use -1 for no timeout) |
-| `trajectory_horizon` | `float` | `10.0` | time horizon of the reference trajectory (s) |
-| `n_states` | `int` | `51` | number of states in the trajectory |
+| `trajectory_horizon` | `float` | `10.0` | Time horizon of the reference trajectory (s) |
+| `n_states` | `int` | `51` | Number of states in the output trajectory |
 | `interpolation_type` | `int` | `1` | 0: linear, 1: cubic spline |
-| `v_ref` | `float` | `13.89` | reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route. |
-| `a_decel` | `float` | `-0.5` | desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0 |
-| `a_max_decel` | `float` | `-1.0` | maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel |
-| `trigger_turn_signals` | `bool` | `true` | true: planner will trigger turn signal services; false: planner will not request turn signals |
-| `consider_traffic_lights` | `bool` | `true` | true: planner will consider traffic lights; false: planner will ignore traffic lights |
-| `offset_to_stop_line` | `float` | `0.0` | additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
-| `ignore_stop_line_threshold` | `float` | `0.5` | a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
-| `consider_future_states` | `bool` | `false` | true: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
-| `consider_objects` | `bool` | `true` | true: planner will consider perceived objects on the route; false: planner will ignore objects |
-| `min_prediction_prob` | `float` | `0.0` | minimum probability for considering an object prediction branch |
-| `object_longitudinal_safety_distance` | `float` | `1.5` | longitudinal clearance around ego/object bounding boxes for conflict detection (m) |
-| `object_lateral_safety_distance` | `float` | `0.0` | lateral clearance around ego/object bounding boxes for conflict detection (m) |
-| `object_interaction_time_window` | `float` | `0.5` | maximum time offset for counting a spatial overlap as interaction (s) |
-| `object_velocity_reduction_step` | `float` | `0.1` | velocity decrement per object-avoidance iteration (m/s) |
-| `object_velocity_release_step` | `float` | `0.5` | maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
-| `object_standstill_speed_threshold` | `float` | `0.2` | publish standstill if object avoidance would require a lower speed cap (m/s) |
-| `object_velocity_release_hysteresis_cycles` | `int` | `3` | number of conflict-free cycles required before increasing the remembered object speed cap |
-| `publish_object_interaction_markers` | `bool` | `true` | publish RViz markers for the conflict explaining the final speed reduction |
-| `lane_change_distance_factor` | `float` | `6.0` | factor multiplied with the current velocity to determine the lane change distance (m) |
-| `lane_change_min_distance_factor` | `float` | `2.0` | factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
+| `v_ref` | `float` | `13.89` | Reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route. |
+| `a_decel` | `float` | `-0.5` | Desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0 |
+| `a_max_decel` | `float` | `-1.0` | Maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel |
+| `trigger_turn_signals` | `bool` | `true` | True: planner will trigger turn signal services; false: planner will not request turn signals |
+| `consider_traffic_lights` | `bool` | `true` | True: planner will consider traffic lights; false: planner will ignore traffic lights |
+| `offset_to_stop_line` | `float` | `0.0` | Additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
+| `ignore_stop_line_threshold` | `float` | `0.5` | A stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
+| `consider_future_states` | `bool` | `false` | True: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
+| `consider_objects` | `bool` | `true` | True: planner will consider perceived objects on the route; false: planner will ignore objects |
+| `min_prediction_prob` | `float` | `0.0` | Minimum probability for considering an object prediction branch |
+| `object_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal clearance around ego/object bounding boxes for conflict detection (m) |
+| `object_lateral_safety_distance` | `float` | `0.0` | Lateral clearance around ego/object bounding boxes for conflict detection (m) |
+| `object_interaction_time_window` | `float` | `0.5` | Maximum time offset for counting a spatial overlap as interaction (s) |
+| `object_velocity_reduction_step` | `float` | `0.1` | Velocity decrement per object-avoidance iteration (m/s) |
+| `object_velocity_release_step` | `float` | `0.5` | Maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
+| `object_standstill_speed_threshold` | `float` | `0.2` | Publish standstill if object avoidance would require a lower speed cap (m/s) |
+| `object_velocity_release_hysteresis_cycles` | `int` | `3` | Number of conflict-free cycles required before increasing the remembered object speed cap |
+| `publish_object_interaction_markers` | `bool` | `true` | Publish RViz markers for the conflict explaining the final speed reduction |
+| `lane_change_distance_factor` | `float` | `6.0` | Factor multiplied with the current velocity to determine the lane change distance (m) |
+| `lane_change_min_distance_factor` | `float` | `2.0` | Factor multiplied with the vehicle length to determine the minimum lane change distance (m) |
 | `diagnostic_updater.topic_diagnostics.ego_data.min_frequency` | `float` | - | Minimum frequency for incoming ego-data messages |
 | `diagnostic_updater.topic_diagnostics.ego_data.max_frequency` | `float` | - | Maximum frequency for incoming ego-data messages |
 | `diagnostic_updater.topic_diagnostics.ego_data.min_acceptable_timestamp_delta` | `float` | - | Minimum acceptable timestamp delta for incoming ego-data messages |

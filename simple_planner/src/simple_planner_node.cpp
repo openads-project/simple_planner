@@ -33,65 +33,65 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("trajectory_frame_id", trajectory_frame_id_, "Frame ID of published reference trajectory");
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
-  this->declareAndLoadParameter("frequency", freq_, "frequency of publishing trajectory");
+  this->declareAndLoadParameter("frequency", freq_, "Frequency of reference planning cycle (Hz)");
   this->declareAndLoadParameter("route_timeout", route_timeout_,
                                 "Time after which a received route is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("ego_data_timeout", ego_data_timeout_,
                                 "Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("object_timeout", object_timeout_,
                                 "Time after which a received object list is considered invalid (s) (use -1 for no timeout)");
-  this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "time horizon of the reference trajectory (s)");
-  this->declareAndLoadParameter("n_states", n_states_, "number of states in the trajectory");
+  this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "Time horizon of the reference trajectory (s)");
+  this->declareAndLoadParameter("n_states", n_states_, "Number of states in the output trajectory");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline");
   this->declareAndLoadParameter(
       "v_ref", v_ref_,
-      "reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
+      "Reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_decel", a_decel_,
-                                "desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
+                                "Desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_,
-                                "maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
+                                "Maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
   this->declareAndLoadParameter("trigger_turn_signals", trigger_turn_signals_,
-                                "true: planner will trigger turn signal services; false: planner will not request turn signals");
+                                "True: planner will trigger turn signal services; false: planner will not request turn signals");
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_,
-                                "true: planner will consider traffic lights; false: planner will ignore traffic lights");
+                                "True: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
-                                "additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
+                                "Additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
                                 "front of vehicle at stop line)");
   this->declareAndLoadParameter(
       "ignore_stop_line_threshold", ignore_stop_line_threshold_,
-      "a stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
+      "A stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
   this->declareAndLoadParameter("consider_future_states", consider_future_states_,
-                                "true: trajectory will consider forecast of traffic light states; false: trajectory will only "
+                                "True: trajectory will consider forecast of traffic light states; false: trajectory will only "
                                 "consider current traffic light state");
   this->declareAndLoadParameter("consider_objects", consider_objects_,
-                                "true: planner will consider perceived objects on the route; false: planner will ignore objects");
+                                "True: planner will consider perceived objects on the route; false: planner will ignore objects");
   this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
-                                "minimum probability for considering an object prediction branch");
+                                "Minimum probability for considering an object prediction branch");
   this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
-                                "longitudinal clearance around ego/object bounding boxes for conflict detection (m)", true, false,
+                                "Longitudinal clearance around ego/object bounding boxes for conflict detection (m)", true, false,
                                 false, 0.0, 20.0, 0.1);
   this->declareAndLoadParameter("object_lateral_safety_distance", object_lateral_safety_distance_,
-                                "lateral clearance around ego/object bounding boxes for conflict detection (m)", true, false,
+                                "Lateral clearance around ego/object bounding boxes for conflict detection (m)", true, false,
                                 false, 0.0, 10.0, 0.1);
   this->declareAndLoadParameter("object_interaction_time_window", object_interaction_time_window_,
-                                "maximum time offset for counting a spatial overlap as interaction (s)");
+                                "Maximum time offset for counting a spatial overlap as interaction (s)");
   this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,
-                                "velocity decrement per object-avoidance iteration (m/s)", true, false, false, 1e-3, 40.0, 1e-3);
+                                "Velocity decrement per object-avoidance iteration (m/s)", true, false, false, 1e-3, 40.0, 1e-3);
   this->declareAndLoadParameter("object_velocity_release_step", object_velocity_release_step_,
-                                "maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)", true,
+                                "Maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)", true,
                                 false, false, 1e-3, 40.0, 1e-3);
   this->declareAndLoadParameter("object_standstill_speed_threshold", object_standstill_speed_threshold_,
-                                "publish standstill if object avoidance would require a lower speed cap (m/s)", true, false,
+                                "Publish standstill if object avoidance would require a lower speed cap (m/s)", true, false,
                                 false, 0.0, 10.0, 1e-3);
   this->declareAndLoadParameter("object_velocity_release_hysteresis_cycles", object_velocity_release_hysteresis_cycles_,
-                                "number of conflict-free cycles required before increasing the remembered object speed cap", true,
+                                "Number of conflict-free cycles required before increasing the remembered object speed cap", true,
                                 false, false, 0.0, 100.0, 1.0);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
-                                "publish RViz markers for the conflict explaining the final speed reduction");
+                                "Publish RViz markers for the conflict explaining the final speed reduction");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
-                                "factor multiplied with the current velocity to determine the lane change distance (m)");
+                                "Factor multiplied with the current velocity to determine the lane change distance (m)");
   this->declareAndLoadParameter("lane_change_min_distance_factor", lane_change_min_distance_factor_,
-                                "factor multiplied with the vehicle length to determine the minimum lane change distance (m)");
+                                "Factor multiplied with the vehicle length to determine the minimum lane change distance (m)");
 
   // check parameters
   if (a_decel_ >= 0.0) {
