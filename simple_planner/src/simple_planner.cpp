@@ -16,7 +16,7 @@
 #include <tk/spline.h>
 #include <tracetools/tracetools.h>
 
-#include <simple_planner/simple_planner_node.hpp>
+#include <simple_planner/simple_planner.hpp>
 #include <simple_planner/utils.hpp>
 
 /**
@@ -168,10 +168,10 @@ void SimplePlannerNode::setup() {
   dt_ = trajectory_horizon_ / (n_states_ - 1);
 
   // create a publisher for publishing output trajectory
-  pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>(kOutputTopic, 10);
+  pub_ = this->create_publisher<trajectory_planning_msgs::msg::Trajectory>("~/trajectory", 10);
   RCLCPP_INFO(this->get_logger(), "Publishing to '%s'", pub_->get_topic_name());
   object_interaction_marker_pub_ =
-      this->create_publisher<visualization_msgs::msg::MarkerArray>(kObjectInteractionMarkerTopic, 10);
+      this->create_publisher<visualization_msgs::msg::MarkerArray>("~/viz/object_interaction_markers", 10);
   RCLCPP_INFO(this->get_logger(), "Publishing object interaction markers to '%s'",
               object_interaction_marker_pub_->get_topic_name());
 
@@ -182,24 +182,24 @@ void SimplePlannerNode::setup() {
 
   // create subscriber for egoData
   sub_egoData_ = this->create_subscription<perception_msgs::msg::EgoData>(
-      kEgoDataTopic, 10, std::bind(&SimplePlannerNode::egoDataCallback, this, std::placeholders::_1));
+      "~/ego_data", 10, std::bind(&SimplePlannerNode::egoDataCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_egoData_->get_topic_name());
 
   sub_object_list_ = this->create_subscription<perception_msgs::msg::ObjectList>(
-      kObjectListTopic, 10, std::bind(&SimplePlannerNode::objectListCallback, this, std::placeholders::_1));
+      "~/object_list", 10, std::bind(&SimplePlannerNode::objectListCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_object_list_->get_topic_name());
 
   // create subscriber for route
   sub_route_ = this->create_subscription<route_planning_msgs::msg::Route>(
-      kRouteTopic, 10, std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
+      "~/route", 10, std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
   // create service clients for turn indicators and hazard lights
-  left_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kLeftTurnIndicatorSrv);
+  left_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>("~/enable_left_turn_indicator");
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", left_turn_indicator_service_client_->get_service_name());
-  right_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>(kRightTurnIndicatorSrv);
+  right_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>("~/enable_right_turn_indicator");
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", right_turn_indicator_service_client_->get_service_name());
-  hazard_lights_service_client_ = this->create_client<std_srvs::srv::SetBool>(kHazardLightsSrv);
+  hazard_lights_service_client_ = this->create_client<std_srvs::srv::SetBool>("~/enable_hazard_lights");
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", hazard_lights_service_client_->get_service_name());
 
   // create a callback for dynamic parameter configuration

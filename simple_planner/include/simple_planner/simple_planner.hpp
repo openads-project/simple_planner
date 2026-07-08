@@ -111,16 +111,6 @@ class SimplePlannerNode : public rclcpp::Node {
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   };
 
-  const std::string kEgoDataTopic = "~/ego_data";
-  const std::string kObjectListTopic = "~/object_list";
-  const std::string kRouteTopic = "~/route";
-  const std::string kOutputTopic = "~/trajectory";
-  const std::string kObjectInteractionMarkerTopic = "~/object_interaction_markers";
-
-  const std::string kLeftTurnIndicatorSrv = "~/enable_left_turn_indicator";
-  const std::string kRightTurnIndicatorSrv = "~/enable_right_turn_indicator";
-  const std::string kHazardLightsSrv = "~/enable_hazard_lights";
-
   // Internal object-handling tuning values (fixed, intentionally not exposed as parameters)
   static constexpr double kObjectCollisionCheckDt = 0.05;  // maximum time step for swept collision checks (s)
   static constexpr double kMinObjectWidth = 0.8;           // minimum object width if dimensions are missing/too small (m)

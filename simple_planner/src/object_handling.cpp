@@ -10,7 +10,7 @@
 
 #include <Eigen/Dense>
 
-#include <simple_planner/simple_planner_node.hpp>
+#include <simple_planner/simple_planner.hpp>
 #include <tf2_perception_msgs/tf2_perception_msgs.hpp>
 
 // Object-handling part of SimplePlannerNode: turning the perceived object list into a speed cap

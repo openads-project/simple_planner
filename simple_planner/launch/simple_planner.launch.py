@@ -22,7 +22,7 @@ def generate_launch_description():
         DeclareLaunchArgument("object_list_topic", default_value="~/object_list"),
         DeclareLaunchArgument("route_topic", default_value="~/route"),
         DeclareLaunchArgument("trajectory_topic", default_value="~/trajectory"),
-        DeclareLaunchArgument("object_interaction_markers_topic", default_value="~/object_interaction_markers"),
+        DeclareLaunchArgument("object_interaction_markers_topic", default_value="~/viz/object_interaction_markers"),
         DeclareLaunchArgument("left_turn_indicator_service", default_value="~/enable_left_turn_indicator"),
         DeclareLaunchArgument("right_turn_indicator_service", default_value="~/enable_right_turn_indicator"),
         DeclareLaunchArgument("hazard_lights_service", default_value="~/enable_hazard_lights"),

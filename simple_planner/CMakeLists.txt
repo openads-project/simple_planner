@@ -26,7 +26,7 @@ find_package(visualization_msgs REQUIRED)
 set(TARGET_NAME simple_planner_node)
 
 add_executable(${TARGET_NAME}
-  src/simple_planner_node.cpp
+  src/simple_planner.cpp
   src/object_handling.cpp
 )
 
@@ -40,8 +40,8 @@ target_compile_features(${TARGET_NAME} PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(${TARGET_NAME}
   diagnostic_msgs
   diagnostic_updater
-  perception_msgs  
-  perception_msgs_utils  
+  perception_msgs
+  perception_msgs_utils
   rclcpp
   route_planning_msgs
   route_planning_msgs_utils
