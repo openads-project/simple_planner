@@ -220,7 +220,7 @@ void SimplePlannerNode::setup() {
   const int ego_data_topic_diagnostic_frequency_window_size =
       std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * ego_data_topic_diagnostic_config_.min_frequency));
   ego_data_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
-      kEgoDataTopic, diagnostic_updater_,
+      "~/ego_data", diagnostic_updater_,
       diagnostic_updater::FrequencyStatusParam(&ego_data_topic_diagnostic_config_.min_frequency,
                                                &ego_data_topic_diagnostic_config_.max_frequency, 0.0,
                                                ego_data_topic_diagnostic_frequency_window_size),
@@ -230,7 +230,7 @@ void SimplePlannerNode::setup() {
   const int route_topic_diagnostic_frequency_window_size =
       std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * route_topic_diagnostic_config_.min_frequency));
   route_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
-      kRouteTopic, diagnostic_updater_,
+      "~/route", diagnostic_updater_,
       diagnostic_updater::FrequencyStatusParam(&route_topic_diagnostic_config_.min_frequency,
                                                &route_topic_diagnostic_config_.max_frequency, 0.0,
                                                route_topic_diagnostic_frequency_window_size),
@@ -241,7 +241,7 @@ void SimplePlannerNode::setup() {
     const int object_list_topic_diagnostic_frequency_window_size =
         std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * object_list_topic_diagnostic_config_.min_frequency));
     object_list_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
-        kObjectListTopic, diagnostic_updater_,
+        "~/object_list", diagnostic_updater_,
         diagnostic_updater::FrequencyStatusParam(&object_list_topic_diagnostic_config_.min_frequency,
                                                  &object_list_topic_diagnostic_config_.max_frequency, 0.0,
                                                  object_list_topic_diagnostic_frequency_window_size),
