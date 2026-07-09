@@ -1,3 +1,6 @@
+// Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
+// SPDX-License-Identifier: Apache-2.0
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -7,7 +10,7 @@
 
 #include <Eigen/Dense>
 
-#include <simple_planner/simple_planner_node.hpp>
+#include <simple_planner/simple_planner.hpp>
 #include <tf2_perception_msgs/tf2_perception_msgs.hpp>
 
 // Object-handling part of SimplePlannerNode: turning the perceived object list into a speed cap
@@ -28,15 +31,14 @@ void SimplePlannerNode::clearObjectInteractionMarkers(const std_msgs::msg::Heade
   }
 
   visualization_msgs::msg::MarkerArray marker_array;
-  const std::array<std::string, 3> namespaces = {
-      "object_interaction_ego_safety_box",
-      "object_interaction_ego_box",
-      "object_interaction_object_box"};
-  for (size_t idx = 0; idx < namespaces.size(); ++idx) {
+  const std::array<std::string, 3> namespaces = {"object_interaction_ego_safety_box", "object_interaction_ego_box",
+                                                 "object_interaction_object_box"};
+  int marker_id = 0;
+  for (const auto& marker_namespace : namespaces) {
     visualization_msgs::msg::Marker marker;
     marker.header = target_header;
-    marker.ns = namespaces[idx];
-    marker.id = static_cast<int>(idx);
+    marker.ns = marker_namespace;
+    marker.id = marker_id++;
     marker.action = visualization_msgs::msg::Marker::DELETE;
     marker_array.markers.push_back(marker);
   }
@@ -55,8 +57,8 @@ void SimplePlannerNode::publishObjectInteractionMarkers(const std_msgs::msg::Hea
   }
 
   visualization_msgs::msg::MarkerArray marker_array;
-  auto make_box_marker = [&](const std::string& ns, int marker_id, const geometry_msgs::msg::Pose& pose,
-                             double length, double width, double z, float r, float g, float b, float a) {
+  auto make_box_marker = [&](const std::string& ns, int marker_id, const geometry_msgs::msg::Pose& pose, double length,
+                             double width, double z, float r, float g, float b, float a) {
     visualization_msgs::msg::Marker marker;
     marker.header = target_header;
     marker.ns = ns;
@@ -80,14 +82,11 @@ void SimplePlannerNode::publishObjectInteractionMarkers(const std_msgs::msg::Hea
   const geometry_msgs::msg::Pose ego_pose = toPose(conflict->ego_box);
   const double ego_length = 2.0 * conflict->ego_box.half_length;
   const double ego_width = 2.0 * conflict->ego_box.half_width;
-  make_box_marker("object_interaction_ego_safety_box", 0, ego_pose,
-                  ego_length + 2.0 * object_longitudinal_safety_distance_, ego_width + 2.0 * object_lateral_safety_distance_,
-                  0.12, 1.0f, 0.55f, 0.0f, 0.28f);
-  make_box_marker("object_interaction_ego_box", 1, ego_pose,
-                  ego_length, ego_width, 0.18, 1.0f, 0.0f, 0.0f, 0.55f);
-  make_box_marker("object_interaction_object_box", 2, toPose(conflict->object_box),
-                  2.0 * conflict->object_box.half_length, 2.0 * conflict->object_box.half_width,
-                  0.24, 0.0f, 0.45f, 1.0f, 0.55f);
+  make_box_marker("object_interaction_ego_safety_box", 0, ego_pose, ego_length + 2.0 * object_longitudinal_safety_distance_,
+                  ego_width + 2.0 * object_lateral_safety_distance_, 0.12, 1.0F, 0.55F, 0.0F, 0.28F);
+  make_box_marker("object_interaction_ego_box", 1, ego_pose, ego_length, ego_width, 0.18, 1.0F, 0.0F, 0.0F, 0.55F);
+  make_box_marker("object_interaction_object_box", 2, toPose(conflict->object_box), 2.0 * conflict->object_box.half_length,
+                  2.0 * conflict->object_box.half_width, 0.24, 0.0F, 0.45F, 1.0F, 0.55F);
 
   object_interaction_marker_pub_->publish(marker_array);
 }
@@ -122,9 +121,9 @@ std::vector<ObjectTrajectory> SimplePlannerNode::buildObjectTrajectories(const p
       if (prediction.probability >= min_prediction_prob_) selected_predictions.push_back(&prediction);
     }
     if (selected_predictions.empty() && !object.state_predictions.empty()) {
-      selected_predictions.push_back(&*std::max_element(
-          object.state_predictions.begin(), object.state_predictions.end(),
-          [](const auto& lhs, const auto& rhs) { return lhs.probability < rhs.probability; }));
+      selected_predictions.push_back(
+          &*std::max_element(object.state_predictions.begin(), object.state_predictions.end(),
+                             [](const auto& lhs, const auto& rhs) { return lhs.probability < rhs.probability; }));
     }
 
     if (selected_predictions.empty()) {
@@ -179,7 +178,8 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
     const int steps = std::max(1, static_cast<int>(std::ceil((segment_end_t - segment_start_t) / check_dt)));
 
     for (int step = 0; step <= steps; ++step) {
-      const double ego_t = segment_start_t + (segment_end_t - segment_start_t) * static_cast<double>(step) / static_cast<double>(steps);
+      const double ego_t =
+          segment_start_t + (segment_end_t - segment_start_t) * static_cast<double>(step) / static_cast<double>(steps);
       const OrientedBox2D ego_box = ego_box_at(ego_t);
 
       for (const auto& object_trajectory : object_trajectories) {
@@ -187,7 +187,8 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
 
         if (object_trajectory.is_static) {
           const auto& object_sample = object_trajectory.samples.front();
-          if (overlapsWithEgoSafety(ego_box, object_sample.box, object_longitudinal_safety_distance_, object_lateral_safety_distance_)) {
+          if (overlapsWithEgoSafety(ego_box, object_sample.box, object_longitudinal_safety_distance_,
+                                    object_lateral_safety_distance_)) {
             return ConflictSample{object_trajectory.id, ego_box, object_sample.box};
           }
           continue;
@@ -195,7 +196,8 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
 
         for (size_t sample_idx = 0; sample_idx < object_trajectory.samples.size(); ++sample_idx) {
           const auto& object_sample = object_trajectory.samples[sample_idx];
-          const TimedBox2D* next_sample = sample_idx + 1 < object_trajectory.samples.size() ? &object_trajectory.samples[sample_idx + 1] : nullptr;
+          const TimedBox2D* next_sample =
+              sample_idx + 1 < object_trajectory.samples.size() ? &object_trajectory.samples[sample_idx + 1] : nullptr;
 
           TimedBox2D timed_object_sample = object_sample;
           if (next_sample != nullptr && ego_t >= object_sample.t - object_interaction_time_window_ &&
@@ -209,7 +211,8 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
             continue;
           }
 
-          if (overlapsWithEgoSafety(ego_box, timed_object_sample.box, object_longitudinal_safety_distance_, object_lateral_safety_distance_)) {
+          if (overlapsWithEgoSafety(ego_box, timed_object_sample.box, object_longitudinal_safety_distance_,
+                                    object_lateral_safety_distance_)) {
             return ConflictSample{object_trajectory.id, ego_box, timed_object_sample.box};
           }
         }
@@ -235,7 +238,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   const rclcpp::Time stamp(target_header.stamp);
   if (isMessageOutdated(object_list_.header, object_timeout_, stamp)) {
-    std::string msg = "Object list is older than " + std::to_string(object_timeout_) + " seconds. Ignoring objects for this planning cycle.";
+    std::string msg =
+        "Object list is older than " + std::to_string(object_timeout_) + " seconds. Ignoring objects for this planning cycle.";
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
     RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
     resetObjectState(target_header);
@@ -244,10 +248,11 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   geometry_msgs::msg::TransformStamped tf;
   try {
-    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, object_list_.header.frame_id, object_list_.header.stamp,
-                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
+    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, object_list_.header.frame_id,
+                                      object_list_.header.stamp, fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
   } catch (tf2::TransformException& ex) {
-    std::string msg = "Object transformation is not available: " + std::string(ex.what()) + ". Ignoring objects for this planning cycle.";
+    std::string msg =
+        "Object transformation is not available: " + std::string(ex.what()) + ". Ignoring objects for this planning cycle.";
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
     RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     resetObjectState(target_header);
@@ -258,9 +263,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   tf2::doTransform(object_list_, tf_object_list, tf);
   // Ignore objects whose center is behind the ego vehicle (trajectory frame, +x ahead).
   tf_object_list.objects.erase(
-      std::remove_if(tf_object_list.objects.begin(), tf_object_list.objects.end(), [](const auto& object) {
-        return perception_msgs::object_access::getCenterPosition(object.state).x < 0.0;
-      }),
+      std::remove_if(tf_object_list.objects.begin(), tf_object_list.objects.end(),
+                     [](const auto& object) { return perception_msgs::object_access::getCenterPosition(object.state).x < 0.0; }),
       tf_object_list.objects.end());
 
   const std::vector<ObjectTrajectory> object_trajectories = buildObjectTrajectories(tf_object_list, stamp);
@@ -291,8 +295,8 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   std::optional<ConflictSample> last_conflict;
   while (speed_cap > 0.0) {
     ++iteration_count;
-    std::vector<SimplePathPoint> candidate_path = resamplePath(base_path_points, route_plan.stop_at_end,
-                                                               route_plan.offset_to_stop_line, &speed_cap);
+    std::vector<SimplePathPoint> candidate_path =
+        resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line, &speed_cap);
     const std::optional<ConflictSample> conflict = firstConflict(candidate_path, object_trajectories);
     if (conflict.has_value()) {
       last_conflict = conflict;
@@ -322,8 +326,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
         health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
       }
       route_plan.path.points.clear();
-      RCLCPP_DEBUG(this->get_logger(), "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.",
-                   speed_cap, object_standstill_speed_threshold_);
+      RCLCPP_DEBUG(this->get_logger(),
+                   "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.", speed_cap,
+                   object_standstill_speed_threshold_);
       return;
     }
 

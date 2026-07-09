@@ -1,3 +1,6 @@
+// Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
+// SPDX-License-Identifier: Apache-2.0
+
 namespace simple_planner {
 
 template <typename T>
@@ -11,7 +14,6 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name,
                                                 const std::optional<double>& to_value,
                                                 const std::optional<double>& step_value,
                                                 const std::string& additional_constraints) {
-
   rcl_interfaces::msg::ParameterDescriptor param_desc;
   param_desc.description = description;
   param_desc.additional_constraints = additional_constraints;
@@ -20,12 +22,12 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name,
   auto type = rclcpp::ParameterValue(param).get_type();
 
   if (from_value.has_value() && to_value.has_value()) {
-    if constexpr(std::is_integral_v<T>) {
+    if constexpr (std::is_integral_v<T>) {
       rcl_interfaces::msg::IntegerRange range;
       T step = static_cast<T>(step_value.has_value() ? step_value.value() : 1);
       range.set__from_value(static_cast<T>(from_value.value())).set__to_value(static_cast<T>(to_value.value())).set__step(step);
       param_desc.integer_range = {range};
-    } else if constexpr(std::is_floating_point_v<T>) {
+    } else if constexpr (std::is_floating_point_v<T>) {
       rcl_interfaces::msg::FloatingPointRange range;
       T step = static_cast<T>(step_value.has_value() ? step_value.value() : 1.0);
       range.set__from_value(static_cast<T>(from_value.value())).set__to_value(static_cast<T>(to_value.value())).set__step(step);
@@ -41,7 +43,7 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name,
     param = this->get_parameter(name).get_value<T>();
     std::stringstream ss;
     ss << "Loaded parameter '" << name << "': ";
-    if constexpr(is_vector_v<T>) {
+    if constexpr (is_vector_v<T>) {
       ss << "[";
       for (const auto& element : param) ss << element << (&element != &param.back() ? ", " : "");
       ss << "]";
@@ -56,7 +58,7 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name,
     } else {
       std::stringstream ss;
       ss << "Missing parameter '" << name << "', using default value: ";
-      if constexpr(is_vector_v<T>) {
+      if constexpr (is_vector_v<T>) {
         ss << "[";
         for (const auto& element : param) ss << element << (&element != &param.back() ? ", " : "");
         ss << "]";
@@ -69,21 +71,16 @@ void SimplePlannerNode::declareAndLoadParameter(const std::string& name,
   }
 
   if (add_to_auto_reconfigurable_params) {
-    std::function<void(const rclcpp::Parameter&)> setter = [&param](const rclcpp::Parameter& p) {
-      param = p.get_value<T>();
-    };
+    std::function<void(const rclcpp::Parameter&)> setter = [&param](const rclcpp::Parameter& p) { param = p.get_value<T>(); };
     auto_reconfigurable_params_.push_back(std::make_tuple(name, setter));
   }
 }
 
-
 rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(const std::vector<rclcpp::Parameter>& parameters) {
-
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = false;
 
   for (const auto& param : parameters) {
-
     // check for specific parameter constraints
     if (param.get_name() == "a_decel") {
       if (param.as_double() >= 0.0) {
@@ -93,7 +90,8 @@ rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(c
         break;
       } else if (a_max_decel_ > param.as_double()) {
         result.successful = false;
-        result.reason = "a_max_decel (" + std::to_string(a_max_decel_) + ") must be <= a_decel (" + std::to_string(param.as_double()) + ")";
+        result.reason =
+            "a_max_decel (" + std::to_string(a_max_decel_) + ") must be <= a_decel (" + std::to_string(param.as_double()) + ")";
         RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_decel': %s", result.reason.c_str());
         break;
       }
@@ -105,7 +103,8 @@ rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(c
         break;
       } else if (param.as_double() > a_decel_) {
         result.successful = false;
-        result.reason = "a_max_decel (" + std::to_string(param.as_double()) + ") must be <= a_decel (" + std::to_string(a_decel_) + ")";
+        result.reason =
+            "a_max_decel (" + std::to_string(param.as_double()) + ") must be <= a_decel (" + std::to_string(a_decel_) + ")";
         RCLCPP_WARN(this->get_logger(), "Rejected parameter change for 'a_max_decel': %s", result.reason.c_str());
         break;
       }
@@ -125,6 +124,13 @@ rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(c
   return result;
 }
 
+/**
+ * @brief Transforms a simple path into the requested target frame and timestamp.
+ *
+ * @param[in] path Path to transform.
+ * @param[in] target_header Target frame and timestamp.
+ * @return Transformed path, or the original path if the transform fails.
+ */
 SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header) {
   SimplePath transformed_path;
   transformed_path.header = target_header;
@@ -152,7 +158,6 @@ SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_ms
   return transformed_path;
 }
 
-
 void SimplePlannerNode::health(diagnostic_updater::DiagnosticStatusWrapper& stat) {
   stat.summary(health_.status, health_.message);
   for (const auto& [key, value] : health_.key_value_pairs) {
@@ -160,13 +165,15 @@ void SimplePlannerNode::health(diagnostic_updater::DiagnosticStatusWrapper& stat
   }
 }
 
-void SimplePlannerNode::setHealth(const unsigned char status, const std::string& msg, const std::map<std::string, std::string>& key_value_pairs) {
+void SimplePlannerNode::setHealth(const unsigned char status,
+                                  const std::string& msg,
+                                  const std::map<std::string, std::string>& key_value_pairs) {
   health_.status = status;
   health_.message = msg;
   health_.key_value_pairs = key_value_pairs;
 }
 
-std::string SimplePlannerNode::plannerStateToString(const SimplePlannerNode::PlannerState& state) const {
+std::string SimplePlannerNode::plannerStateToString(const SimplePlannerNode::PlannerState& state) {
   switch (state) {
     case PlannerState::NoPublish:
       return "NoPublish";
@@ -181,7 +188,7 @@ std::string SimplePlannerNode::plannerStateToString(const SimplePlannerNode::Pla
   }
 }
 
-std::string SimplePlannerNode::turnSignalToString(const uint8_t& turn_signal) const {
+std::string SimplePlannerNode::turnSignalToString(const uint8_t& turn_signal) {
   switch (turn_signal) {
     case route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE:
       return "None";
@@ -196,4 +203,4 @@ std::string SimplePlannerNode::turnSignalToString(const uint8_t& turn_signal) co
   }
 }
 
-} // namespace simple_planner
+}  // namespace simple_planner

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
+# SPDX-License-Identifier: Apache-2.0
+
 import os
 
 from ament_index_python import get_package_share_directory
@@ -12,13 +15,14 @@ from tracetools_launch.action import Trace
 
 
 def generate_launch_description():
+    """Generate the launch description for the simple_planner."""
 
     remappable_topics = [
         DeclareLaunchArgument("ego_data_topic", default_value="~/ego_data"),
         DeclareLaunchArgument("object_list_topic", default_value="~/object_list"),
         DeclareLaunchArgument("route_topic", default_value="~/route"),
         DeclareLaunchArgument("trajectory_topic", default_value="~/trajectory"),
-        DeclareLaunchArgument("object_interaction_markers_topic", default_value="~/object_interaction_markers"),
+        DeclareLaunchArgument("object_interaction_markers_topic", default_value="~/viz/object_interaction_markers"),
         DeclareLaunchArgument("left_turn_indicator_service", default_value="~/enable_left_turn_indicator"),
         DeclareLaunchArgument("right_turn_indicator_service", default_value="~/enable_right_turn_indicator"),
         DeclareLaunchArgument("hazard_lights_service", default_value="~/enable_hazard_lights"),
@@ -27,8 +31,14 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument("name", default_value="simple_planner", description="node name"),
         DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
-        DeclareLaunchArgument("params", default_value=os.path.join(get_package_share_directory("simple_planner"), "config", "params.yml"), description="path to parameter file"),
-        DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
+        DeclareLaunchArgument(
+            "params",
+            default_value=os.path.join(get_package_share_directory("simple_planner"), "config", "params.yml"),
+            description="path to parameter file",
+        ),
+        DeclareLaunchArgument(
+            "log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"
+        ),
         DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),
         DeclareLaunchArgument("trace", default_value="false", description="Enable tracing"),
         *remappable_topics,
@@ -47,14 +57,16 @@ def generate_launch_description():
             emulate_tty=True,
         ),
         Trace(
-            session_name='trace',
+            session_name="trace",
             dual_session=True,
             condition=IfCondition(LaunchConfiguration("trace")),
         ),
     ]
 
-    return LaunchDescription([
-        *args,
-        SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
-        *nodes,
-    ])
+    return LaunchDescription(
+        [
+            *args,
+            SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
+            *nodes,
+        ]
+    )
