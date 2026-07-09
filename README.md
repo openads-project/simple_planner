@@ -32,7 +32,9 @@ The ROS 2 node uses the open-source ROS 2 message definitions [perception_interf
 
 ## 🚀 Quick Start
 
-![Teaser Image](assets/simple-planner-teaser.gif)
+<p align="center">
+  <img src="assets/simple-planner-teaser.gif" alt="teaser" />
+</p>
 
 1. Launch the `demo/docker-compose.yml` setup. This will open RViz with a visualization of a Lanelet2 map.
     ```bash
