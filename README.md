@@ -32,13 +32,15 @@ The ROS 2 node uses the open-source ROS 2 message definitions [perception_interf
 
 ## 🚀 Quick Start
 
-1. Launch the `demo/docker-compose.yml` setup. This will open RViz with a visualization of a Lanelet2 map. 
+![Teaser Image](assets/simple-planner-teaser.gif)
+
+1. Launch the `demo/docker-compose.yml` setup. This will open RViz with a visualization of a Lanelet2 map.
     ```bash
     cd demo
     xhost +local: # allow GUI forwarding from containers
     docker compose up -d
     ```
-2. Select the *Plan Route* tool in RViz and click on a destination on the map to plan a route, which will be visualized as a green line. This is the basis for the reference trajectory planned by the `simple_planner`. The reference trajectory is visualized in RViz as a red line with red dots.
+2. Select the *Plan Route* tool in RViz and click on a destination on the map to plan a route, which will be visualized as a green line. This is the basis for the reference trajectory planned by the `simple_planner`. The reference trajectory is visualized in RViz as a red line with red dots. The hight of the dots indicates the speed along the trajectory.
 
 3. Stop the demo and clean up.
     ```bash
