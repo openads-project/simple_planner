@@ -32,13 +32,18 @@ The ROS 2 node uses the open-source ROS 2 message definitions [perception_interf
 
 ## 🚀 Quick Start
 
-1. Start a container of the pre-built runtime image.
+1. Launch the `demo/docker-compose.yml` setup. This will open RViz with a visualization of a Lanelet2 map. 
     ```bash
-    docker run --rm -it ghcr.io/openads-project/simple_planner:latest bash
+    cd demo
+    xhost +local: # allow GUI forwarding from containers
+    docker compose up -d
     ```
-1. Inside the container, launch the pre-built nodes.
+2. Select the *Plan Route* tool in RViz and click on a destination on the map to plan a route, which will be visualized as a green line. This is the basis for the reference trajectory planned by the `simple_planner`. The reference trajectory is visualized in RViz as a red line with red dots.
+
+3. Stop the demo and clean up.
     ```bash
-    ros2 launch simple_planner simple_planner.launch.py
+    docker compose down
+    xhost -local: # revoke GUI forwarding permissions
     ```
 
 ## 💻 Development

@@ -1,0 +1,56 @@
+services:
+
+  simple-planner:
+    image: ghcr.io/openads-project/simple_planner:v1.3.0
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    command: |
+      ros2 launch simple_planner simple_planner.launch.py
+        namespace:=/planning
+        ego_data_topic:=/localization/ego_data
+        route_topic:=/planning/lanelet2_route_planning/route
+
+  lanelet2-route-planning:
+    image: ghcr.io/openads-project/lanelet2_route_planning:v1.2.0
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    command: |
+      ros2 launch lanelet2_route_planning lanelet2_route_planning_launch.py
+        namespace:=/planning
+        ego_data_topic:=/localization/ego_data
+
+  lanelet2-map-server:
+    image: ghcr.io/openads-project/lanelet2_map_server:v1.2.2
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    command: |
+      ros2 launch lanelet2_map_server lanelet2_map_server_launch.py
+        namespace:=/localization
+
+  ego-data-publisher:
+    image: ghcr.io/openads-project/monitoring:v1.0.0
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    command: |
+      ros2 topic pub -r 10
+        /localization/ego_data
+        perception_msgs/msg/EgoData
+        "{header: {stamp: 'now', frame_id: 'map'}, state: {model_id: 1, continuous_state: [80.0, 90.0, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5708, 0.0, 0.0, 0.0], discrete_state: [0, 0, 0, 0]}, length: 4.0, width: 1.8, height: 1.5}"
+
+  base-link-transform-publisher:
+    image: ghcr.io/openads-project/monitoring:v1.0.0
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    command: |
+      ros2 run tf2_ros static_transform_publisher
+        80.0 88.54 0.0 1.5708 0.0 0.0 map base_link
+
+  rviz:
+    image: ghcr.io/openads-project/monitoring:v1.0.0
+    environment:
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      DISPLAY: ${DISPLAY}
+    command: rviz2 -d /config.rviz
+    volumes:
+      - ./rviz/config.rviz:/config.rviz
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw

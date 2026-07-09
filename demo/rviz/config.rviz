@@ -1,0 +1,389 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 138
+    Name: Displays
+    Property Tree Widget:
+      Expanded: ~
+      Splitter Ratio: 0.5420944690704346
+    Tree Height: 2265
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Expanded:
+      - /2D Goal Pose1
+      - /Publish Point1
+      - /Plan Route1
+      - /Plan Route1/Action server1
+    Name: Tool Properties
+    Splitter Ratio: 0.5870130062103271
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+  - Class: rviz_common/Time
+    Experimental: false
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 1
+      Class: lanelet2_rviz_display/Lanelet2MapDisplay
+      Enabled: true
+      Fill Lanelets (Road):
+        Road Color: 56; 56; 56
+        Value: false
+      Name: Lanelet2Map
+      Name of lanelet2_map_server: /localization/lanelet2_map_server
+      Show Map in 3D: true
+      Value: true
+      Visualize Areas:
+        Area Color: 230; 127; 25
+        Area Width: 0.30000001192092896
+        Fill Areas: false
+        Value: true
+      Visualize Crosswalks:
+        Crosswalk Color: 255; 255; 255
+        Value: true
+      Visualize Lanelet-IDs:
+        Character Height: 1
+        ID Color: 255; 255; 255
+        Value: false
+      Visualize Lanelet-Linestrings:
+        LL Color Left: 255; 255; 255
+        LL Color Right: 255; 255; 255
+        Linestring Width: 0.10000000149011612
+        Value: true
+      Visualize Lanelet-Separators:
+        Linestring Width: 0.20000000298023224
+        Separators Color: 25; 25; 230
+        Value: false
+      Visualize Parking:
+        Fill Parking: true
+        Parking Color: 0; 179; 76
+        Parking Width: 0.30000001192092896
+        Value: true
+      Visualize Sidewalks:
+        Sidewalk Color: 191; 191; 191
+        Value: true
+      Visualize Stop lines:
+        Stop Line Color: 255; 25; 25
+        Stop Line Width: 0.20000000298023224
+        Value: true
+      Visualize Traffic Lights:
+        Traffic Light Color: 102; 102; 102
+        Traffic Light Height: 3
+        Value: true
+    - Acceleration arrow:
+        Acceleration Color: 255; 0; 0
+        Acceleration scale: 10
+        Use acceleration color: true
+        Value: false
+      Alpha: 1
+      Bounding box: true
+      Class: perception_msgs/EgoData
+      Color: 255; 0; 25
+      Enabled: true
+      Name: EgoData
+      Orientation: true
+      Planned Trajectory:
+        Alpha: 0.10000000149011612
+        Color Coding: Velocity-dependent Coloring
+        Color Options:
+          Base Color: 0; 170; 0
+          Negative dynamics: 0; 0; 0
+          Positive dynamics: 255; 0; 0
+          Value: " "
+        End Cap:
+          Round Segments: 16
+          Value: Straight
+        Fade Out:
+          Fade Length [m]: 5
+          Value: false
+        Parameter Options:
+          Value: " "
+          max. acceleration [m/s²]: 5
+          max. velocity  [km/h]: 50
+        Value: true
+      Text information:
+        Char height: 4
+        Value: false
+        Velocity: true
+      Timeout:
+        Duration: 1
+        Value: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /localization/ego_data
+      Value: true
+      Velocity arrow:
+        Set height with Velocity: false
+        Use velocity color: true
+        Value: false
+        Velocity Color: 255; 0; 255
+        Velocity scale: 1
+      Visualize Z dimension: true
+    - Adjacent Lanes:
+        Boundaries:
+          Lines:
+            Color: 255; 170; 0
+            Scale: 0.20000000298023224
+            Value: true
+          Points:
+            Color: 255; 170; 0
+            Scale: 0.20000000298023224
+            Value: false
+          Value: true
+        Reference Line:
+          Line:
+            Color: 255; 255; 0
+            Scale: 0.05000000074505806
+            Value: true
+          Poses:
+            Color: 255; 255; 0
+            Scale: 0.5
+            Value: false
+          Value: true
+        Regulatory Elements:
+          Default Color: 200; 200; 200
+          Positions: true
+          Scale: 0.10000000149011612
+          Validity stamp:
+            Color: 255; 255; 255
+            Scale: 0.6000000238418579
+            Value: false
+          Value: true
+        Speed Limit:
+          Color: 255; 255; 255
+          Scale: 0.5
+          Value: false
+        Turn Signals:
+          Color: 255; 255; 0
+          Scale: 1
+          Value: false
+        Value: true
+      Class: route_planning_msgs/Route
+      Destination:
+        Color (final): 255; 0; 255
+        Color (intermediate): 150; 0; 255
+        Scale (final): 1
+        Scale (intermediate): 1
+        Value: true
+      Drivable Space:
+        Lines:
+          Color: 255; 0; 0
+          Scale: 0.10000000149011612
+          Value: true
+        Points:
+          Color: 255; 0; 0
+          Scale: 0.20000000298023224
+          Value: false
+        Value: false
+      Enabled: true
+      Name: Route
+      Suggested Lane:
+        Boundaries:
+          Lines:
+            Color: 0; 170; 0
+            Scale: 0.20000000298023224
+            Value: true
+          Points:
+            Color: 0; 170; 0
+            Scale: 0.25
+            Value: false
+          Value: true
+        Lane Change:
+          Color: 0; 255; 0
+          Scale: 0.20000000298023224
+          Value: true
+        Reference Line:
+          Line:
+            Color: 0; 255; 0
+            Scale: 0.10000000149011612
+            Value: true
+          Poses:
+            Color: 0; 255; 0
+            Scale: 0.5
+            Value: false
+          Value: true
+        Regulatory Elements:
+          Default Color: 200; 200; 200
+          Positions: true
+          Scale: 0.20000000298023224
+          Validity stamp:
+            Color: 255; 255; 255
+            Scale: 0.6000000238418579
+            Value: false
+          Value: true
+        Speed Limit:
+          Color: 255; 255; 255
+          Scale: 0.6000000238418579
+          Value: false
+        Turn Signals:
+          Color: 255; 255; 0
+          Scale: 0.5
+          Value: true
+        Value: true
+      Timeout:
+        Duration: 1
+        Value: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /planning/lanelet2_route_planning/route
+      Traveled Route:
+        Opacity: 0.5
+        Value: true
+      Value: true
+    - Background Alpha: 0.8999999761581421
+      Background Color: 20; 20; 20
+      Class: route_planning_msgs/RouteOverlay
+      Enabled: true
+      Height: 125
+      Name: RouteOverlay
+      Right: 10
+      Top: 10
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /planning/lanelet2_route_planning/route
+      Value: true
+      Width: 135
+    - Alpha: 1
+      Class: trajectory_planning_msgs/Trajectory
+      Enabled: true
+      Name: Trajectory
+      Point-Size: 0.5
+      Show acceleration trajectory:
+        Color acceleration trajectory/samples: 255; 255; 0
+        Show acceleration samples: false
+        Value: false
+      Show distance trajectory:
+        Color distance trajectory/samples: 255; 0; 0
+        Show distance samples: false
+        Value: false
+      Show time trajectory:
+        Color time trajectory/samples: 0; 0; 255
+        Show time samples: false
+        Value: false
+      Show velocity trajectory:
+        Color velocity trajectory/samples: 255; 0; 0
+        Show velocity samples: true
+        Show yaw arrows:
+          Color yaw arrows: 255; 85; 0
+          Scale: 0.5
+          Value: false
+        Value: true
+      Timeout:
+        Duration: 1
+        Value: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /planning/simple_planner/trajectory
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /clicked_point
+    - Action server:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /planning/lanelet2_route_planning/plan_route
+      Class: route_planning_msgs/PlanRoute
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/ThirdPersonFollower
+      Distance: 53.71553039550781
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: false
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 0.47979649901390076
+      Target Frame: base_link
+      Value: ThirdPersonFollower (rviz_default_plugins)
+      Yaw: 3.6253974437713623
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 2742
+  Hide Left Dock: false
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd0000000400000000000001e9000009c7fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b000000ab00fffffffb0000001e0054006f006f006c002000500072006f00700065007200740069006500730200000859000001de0000018500000145fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c0061007900730100000069000009c70000017800fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000014d000009c7fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a005600690065007700730000000069000009c70000012300fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e100000197000000030000137c00000051fc0100000002fb0000000800540069006d006501000000000000137c0000046000fffffffb0000000800540069006d0065010000000000000450000000000000000000001187000009c700000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Time:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: true
+  Width: 4988
+  X: 3972
+  Y: 64
