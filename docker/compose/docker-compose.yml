@@ -10,6 +10,7 @@ services:
       EGO_DATA_TOPIC: ~/ego_data
       OBJECT_LIST_TOPIC: ~/object_list
       ROUTE_TOPIC: ~/route
+      GRID_MAP_TOPIC: ~/grid_map
       # --- outputs ---
       TRAJECTORY_TOPIC: ~/trajectory
       OBJECT_INTERACTION_MARKERS_TOPIC: ~/viz/object_interaction_markers
@@ -35,6 +36,7 @@ services:
           ego_data_topic:=$${EGO_DATA_TOPIC} \
           object_list_topic:=$${OBJECT_LIST_TOPIC} \
           route_topic:=$${ROUTE_TOPIC} \
+          grid_map_topic:=$${GRID_MAP_TOPIC} \
           trajectory_topic:=$${TRAJECTORY_TOPIC} \
           object_interaction_markers_topic:=$${OBJECT_INTERACTION_MARKERS_TOPIC} \
           left_turn_indicator_service:=$${LEFT_TURN_INDICATOR_SERVICE} \
