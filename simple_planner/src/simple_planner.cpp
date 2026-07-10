@@ -500,20 +500,17 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
       tra = buildStandstillTrajectory(tra.header);
       break;
     case PlannerState::SafeStop:
-      tra = buildTrajectoryFromSimplePath(getSafeStopPath(tra.header));
+      if (!safe_stop_distance_.has_value()) {
+        tra = buildTrajectoryFromSimplePath(buildSafeStopPath(tra.header));
+      } else {
+        RCLCPP_DEBUG(this->get_logger(), "Executing safe stop.");
+        tra = buildTrajectoryFromSimplePath(transformPath(latest_path_, tra.header));
+      }
       break;
     case PlannerState::FollowRoute: {
       safe_stop_distance_.reset();
-      const auto route_plan = buildRoutePlan(tra.header);
-      if (!route_plan.has_value()) {
-        if (perception_msgs::object_access::getStandstill(ego_data_)) {
-          tra = buildStandstillTrajectory(tra.header);
-        } else {
-          tra = buildTrajectoryFromSimplePath(getSafeStopPath(tra.header));
-        }
-        break;
-      }
-      tra = buildTrajectoryFromSimplePath(route_plan->path);
+      FollowRoutePlan route_plan = buildRoutePlan(tra.header);
+      tra = buildTrajectoryFromSimplePath(route_plan.path);
       break;
     }
     case PlannerState::NoPublish:
@@ -576,15 +573,6 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::buildTrajectoryFrom
   return tra;
 }
 
-SimplePath SimplePlannerNode::getSafeStopPath(const std_msgs::msg::Header& target_header) {
-  if (!safe_stop_distance_.has_value()) {
-    return buildSafeStopPath(target_header);
-  }
-
-  RCLCPP_DEBUG(this->get_logger(), "Executing safe stop.");
-  return transformPath(latest_path_, target_header);
-}
-
 SimplePath SimplePlannerNode::buildSafeStopPath(const std_msgs::msg::Header& target_header) {
   double current_velocity = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
   safe_stop_distance_ = -0.5 * std::pow(current_velocity, 2) / a_max_decel_;
@@ -605,7 +593,7 @@ SimplePath SimplePlannerNode::buildSafeStopPath(const std_msgs::msg::Header& tar
   return latest_path_;
 }
 
-std::optional<SimplePlannerNode::FollowRoutePlan> SimplePlannerNode::buildRoutePlan(const std_msgs::msg::Header& target_header) {
+SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_msgs::msg::Header& target_header) {
   RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
 
   geometry_msgs::msg::TransformStamped tf;
@@ -616,7 +604,6 @@ std::optional<SimplePlannerNode::FollowRoutePlan> SimplePlannerNode::buildRouteP
     std::string msg = "Transformation is not available: " + std::string(ex.what()) + ".";
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
     RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-    return std::nullopt;
   }
 
   route_planning_msgs::msg::Route tf_route;
@@ -635,7 +622,6 @@ std::optional<SimplePlannerNode::FollowRoutePlan> SimplePlannerNode::buildRouteP
     std::string msg = "Grid map transformation is not available: " + std::string(ex.what()) + ".";
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
     RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-    return std::nullopt;
   }
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
   applyObjectConstraints(target_header, merged_points, route_plan);

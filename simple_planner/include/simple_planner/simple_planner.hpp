@@ -253,14 +253,6 @@ class SimplePlannerNode : public rclcpp::Node {
   void publishObjectInteractionMarkers(const std_msgs::msg::Header& target_header, const std::optional<ConflictSample>& conflict);
 
   /**
-   * @brief Returns the current safe-stop path for the planning cycle.
-   *
-   * @param[in] target_header Output header for the generated safe-stop path.
-   * @return SimplePath Safe-stop path in trajectory frame.
-   */
-  SimplePath getSafeStopPath(const std_msgs::msg::Header& target_header);
-
-  /**
    * @brief Builds the initial safe-stop path for the current cycle.
    *
    * @param[in] target_header Output header for the generated safe-stop path.
@@ -272,9 +264,9 @@ class SimplePlannerNode : public rclcpp::Node {
    * @brief Builds the complete route-following plan including stop and turn information.
    *
    * @param[in] target_header Output header for the generated route plan.
-   * @return Planned route path including stop and turn information, or std::nullopt if planning must fall back to safe stop.
+   * @return FollowRoutePlan Planned route path including stop and turn information.
    */
-  std::optional<FollowRoutePlan> buildRoutePlan(const std_msgs::msg::Header& target_header);
+  FollowRoutePlan buildRoutePlan(const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Checks whether a fresh, structurally valid grid map is currently available.
