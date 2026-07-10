@@ -44,6 +44,7 @@ flowchart LR
 | `route_timeout` | `float` | `1.0` | Time after which a received route is considered invalid (s) (use -1 for no timeout) |
 | `ego_data_timeout` | `float` | `1.0` | Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout) |
 | `object_timeout` | `float` | `1.0` | Time after which a received object list is considered invalid (s) (use -1 for no timeout) |
+| `grid_map_timeout` | `float` | `1.0` | Time after which a received grid map is considered invalid (s) (use -1 for no timeout) |
 | `trajectory_horizon` | `float` | `10.0` | Time horizon of the reference trajectory (s) |
 | `n_states` | `int` | `51` | Number of states in the output trajectory |
 | `interpolation_type` | `int` | `1` | 0: linear, 1: cubic spline |
@@ -51,6 +52,11 @@ flowchart LR
 | `a_decel` | `float` | `-0.5` | Desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0 |
 | `a_max_decel` | `float` | `-1.0` | Maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel |
 | `trigger_turn_signals` | `bool` | `true` | True: planner will trigger turn signal services; false: planner will not request turn signals |
+| `consider_grid_map` | `bool` | `false` | True: planner will consider grid map; false: planner will ignore grid map |
+| `grid_occupied_threshold` | `int` | `50` | Minimum occupancy value that is considered as blocked within the grid map |
+| `consider_out_of_grid` | `bool` | `false` | True: path points falling outside the grid map are treated as blocked; false: points outside the grid map are treated as free to drive |
+| `grid_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal clearance between ego box and occupied grid cells for collision checks (m) |
+| `grid_lateral_safety_distance` | `float` | `0.0` | Lateral clearance between ego box and occupied grid cells for collision checks (m) |
 | `consider_traffic_lights` | `bool` | `true` | True: planner will consider traffic lights; false: planner will ignore traffic lights |
 | `offset_to_stop_line` | `float` | `0.0` | Additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
 | `ignore_stop_line_threshold` | `float` | `0.5` | A stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
