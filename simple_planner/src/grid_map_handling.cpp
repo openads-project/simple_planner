@@ -15,23 +15,19 @@
 
 #include <simple_planner/simple_planner.hpp>
 
-namespace {
-
-Eigen::Vector2d transformToGridLocal(const Eigen::Vector2d& point_in_grid_frame,
-                                     const Eigen::Vector2d& grid_origin,
-                                     double grid_origin_yaw) {
-  return simple_planner::rotate(point_in_grid_frame - grid_origin, -grid_origin_yaw);
-}
-
-Eigen::Vector2d transformToGridFrame(const Eigen::Vector2d& point_in_grid_local,
-                                     const Eigen::Vector2d& grid_origin,
-                                     double grid_origin_yaw) {
-  return grid_origin + simple_planner::rotate(point_in_grid_local, grid_origin_yaw);
-}
-
-}  // namespace
-
 namespace simple_planner {
+
+Eigen::Vector2d SimplePlannerNode::transformToGridLocal(const Eigen::Vector2d& point_in_grid_frame,
+                                                        const Eigen::Vector2d& grid_origin,
+                                                        double grid_origin_yaw) {
+  return rotate(point_in_grid_frame - grid_origin, -grid_origin_yaw);
+}
+
+Eigen::Vector2d SimplePlannerNode::transformToGridFrame(const Eigen::Vector2d& point_in_grid_local,
+                                                        const Eigen::Vector2d& grid_origin,
+                                                        double grid_origin_yaw) {
+  return grid_origin + rotate(point_in_grid_local, grid_origin_yaw);
+}
 
 bool SimplePlannerNode::hasValidGridMap(const rclcpp::Time& stamp) const {
   if (!grid_map_init_) {

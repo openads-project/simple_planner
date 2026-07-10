@@ -322,6 +322,30 @@ class SimplePlannerNode : public rclcpp::Node {
                                               const std::vector<SimplePathPoint>& base_path_points);
 
   /**
+   * @brief Transforms a point from the occupancy-grid header frame into local grid coordinates.
+   *
+   * @param[in] point_in_grid_frame Point in the occupancy-grid header frame.
+   * @param[in] grid_origin Occupancy-grid origin position in the header frame.
+   * @param[in] grid_origin_yaw Occupancy-grid origin yaw in the header frame.
+   * @return Point in local grid coordinates.
+   */
+  static Eigen::Vector2d transformToGridLocal(const Eigen::Vector2d& point_in_grid_frame,
+                                              const Eigen::Vector2d& grid_origin,
+                                              double grid_origin_yaw);
+
+  /**
+   * @brief Transforms a point from local grid coordinates into the occupancy-grid header frame.
+   *
+   * @param[in] point_in_grid_local Point in local grid coordinates.
+   * @param[in] grid_origin Occupancy-grid origin position in the header frame.
+   * @param[in] grid_origin_yaw Occupancy-grid origin yaw in the header frame.
+   * @return Point in the occupancy-grid header frame.
+   */
+  static Eigen::Vector2d transformToGridFrame(const Eigen::Vector2d& point_in_grid_local,
+                                              const Eigen::Vector2d& grid_origin,
+                                              double grid_origin_yaw);
+
+  /**
    * @brief Checks whether an occupancy-grid cell value should be treated as blocking.
    *
    * @param[in] value Occupancy-grid cell value.
