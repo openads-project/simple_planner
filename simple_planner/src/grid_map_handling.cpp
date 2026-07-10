@@ -13,7 +13,7 @@
 
 #include <tf2/utils.h>
 
-#include <simple_planner/simple_planner_node.hpp>
+#include <simple_planner/simple_planner.hpp>
 
 namespace {
 

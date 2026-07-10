@@ -57,11 +57,11 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("consider_grid_map", consider_grid_map_,
                                 "True: planner will consider grid map; false: planner will ignore grid map");
   this->declareAndLoadParameter("grid_occupied_threshold", grid_occupied_threshold_,
-                                "Minimum occupancy value that is considered as blocked within the grid map", true, false, false, 0.0,
-                                100.0, 1.0);
-  this->declareAndLoadParameter(
-      "consider_out_of_grid", consider_out_of_grid_,
-      "True: path points falling outside the grid map are treated as blocked; false: points outside the grid map are treated as free to drive");
+                                "Minimum occupancy value that is considered as blocked within the grid map", true, false, false,
+                                0.0, 100.0, 1.0);
+  this->declareAndLoadParameter("consider_out_of_grid", consider_out_of_grid_,
+                                "True: path points falling outside the grid map are treated as blocked; false: points outside "
+                                "the grid map are treated as free to drive");
   this->declareAndLoadParameter("grid_longitudinal_safety_distance", grid_longitudinal_safety_distance_,
                                 "Longitudinal clearance between ego box and occupied grid cells for collision checks (m)", true,
                                 false, false, 0.0, 20.0, 0.1);
@@ -286,7 +286,7 @@ void SimplePlannerNode::setup() {
     const int grid_map_topic_diagnostic_frequency_window_size =
         std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * grid_map_topic_diagnostic_config_.min_frequency));
     grid_map_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
-        kGridMapTopic, diagnostic_updater_,
+        "~/grid_map", diagnostic_updater_,
         diagnostic_updater::FrequencyStatusParam(&grid_map_topic_diagnostic_config_.min_frequency,
                                                  &grid_map_topic_diagnostic_config_.max_frequency, 0.0,
                                                  grid_map_topic_diagnostic_frequency_window_size),
