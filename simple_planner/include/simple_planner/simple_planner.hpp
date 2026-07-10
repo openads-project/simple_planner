@@ -277,7 +277,7 @@ class SimplePlannerNode : public rclcpp::Node {
   std::optional<FollowRoutePlan> buildRoutePlan(const std_msgs::msg::Header& target_header);
 
   /**
-   * @brief Checks whether a fresh grid map is currently available.
+   * @brief Checks whether a fresh, structurally valid grid map is currently available.
    *
    * @param[in] stamp Current planning timestamp.
    * @return true if grid-map planning is possible.
@@ -299,6 +299,35 @@ class SimplePlannerNode : public rclcpp::Node {
   void applyObjectConstraints(const std_msgs::msg::Header& target_header,
                               const std::vector<SimplePathPoint>& base_path_points,
                               FollowRoutePlan& route_plan);
+
+  /**
+   * @brief Applies occupancy-grid-based stop constraints to the base route path.
+   *
+   * @param[in] target_header Current planning header propagated from the timer callback.
+   * @param[in,out] base_path_points Route path before time-based resampling.
+   * @param[in,out] route_plan Mutable route planning result to be constrained by the grid map.
+   */
+  void applyGridMapConstraints(const std_msgs::msg::Header& target_header,
+                               std::vector<SimplePathPoint>& base_path_points,
+                               FollowRoutePlan& route_plan);
+
+  /**
+   * @brief Finds the first blocking grid-map sample along the current base path.
+   *
+   * @param[in] target_header Current planning header propagated from the timer callback.
+   * @param[in] base_path_points Route path before time-based resampling.
+   * @return Path coordinate of the first blocking sample if found.
+   */
+  std::optional<double> findFirstGridMapStopS(const std_msgs::msg::Header& target_header,
+                                              const std::vector<SimplePathPoint>& base_path_points);
+
+  /**
+   * @brief Checks whether an occupancy-grid cell value should be treated as blocking.
+   *
+   * @param[in] value Occupancy-grid cell value.
+   * @return true if the cell is blocking.
+   */
+  bool isGridMapCellOccupied(int8_t value) const;
 
   /**
    * @brief Reduces the perceived object list (in trajectory frame) to timed bounding-box trajectories.
@@ -404,6 +433,17 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in,out] path Path to be trimmed in-place.
    */
   static void trimPathBehindEgo(SimplePath& path);
+
+  /**
+   * @brief Returns a path ending exactly at the requested accumulated path coordinate.
+   *
+   * If `stop_s` lies between two path points, the final point is linearly interpolated.
+   *
+   * @param[in] path Input path with accumulated `s` values.
+   * @param[in] stop_s Accumulated path coordinate of the new endpoint.
+   * @return Truncated path including an endpoint at `stop_s`.
+   */
+  static std::vector<SimplePathPoint> truncatePathAtS(const std::vector<SimplePathPoint>& path, double stop_s);
 
   /**
    * @brief Resamples a path into trajectory time steps and applies optional stopping behavior.

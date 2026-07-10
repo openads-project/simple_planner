@@ -444,17 +444,18 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     return PlannerState::SafeStop;
   }
 
-  // grid map enabled but missing or outdated -> safe stop or standstill
+  // grid map enabled but missing, outdated, or invalid -> safe stop or standstill
   if (consider_grid_map_ && !hasValidGridMap(stamp)) {
     if (perception_msgs::object_access::getStandstill(ego_data_)) {
-      std::string msg = "Grid map is missing or outdated and ego vehicle is stationary. Publishing standstill trajectory.";
+      std::string msg =
+          "Grid map is missing, outdated, or invalid and ego vehicle is stationary. Publishing standstill trajectory.";
       RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
       setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg,
                 {{"PlannerState", plannerStateToString(PlannerState::Standstill)}});
       return PlannerState::Standstill;
     }
 
-    std::string msg = "Grid map is missing or outdated. Executing safe stop trajectory.";
+    std::string msg = "Grid map is missing, outdated, or invalid. Executing safe stop trajectory.";
     RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg,
               {{"PlannerState", plannerStateToString(PlannerState::SafeStop)}});
@@ -1029,6 +1030,54 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(size_t st
   }
 
   return lane_change_path;
+}
+
+std::vector<SimplePathPoint> SimplePlannerNode::truncatePathAtS(const std::vector<SimplePathPoint>& path, double stop_s) {
+  if (path.empty()) {
+    return path;
+  }
+
+  if (stop_s <= path.front().s) {
+    std::vector<SimplePathPoint> truncated_path;
+    SimplePathPoint stop_point = path.front();
+    stop_point.s = stop_s;
+    truncated_path.push_back(stop_point);
+    return truncated_path;
+  }
+
+  std::vector<SimplePathPoint> truncated_path;
+  truncated_path.reserve(path.size());
+  for (size_t i = 0; i < path.size(); ++i) {
+    if (path[i].s < stop_s) {
+      truncated_path.push_back(path[i]);
+      continue;
+    }
+
+    if (std::abs(path[i].s - stop_s) <= 1e-6) {
+      truncated_path.push_back(path[i]);
+      return truncated_path;
+    }
+
+    if (i == 0) {
+      SimplePathPoint stop_point = path.front();
+      stop_point.s = stop_s;
+      truncated_path.push_back(stop_point);
+      return truncated_path;
+    }
+
+    const auto& prev_point = path[i - 1];
+    const auto& next_point = path[i];
+    const double segment_ds = next_point.s - prev_point.s;
+    const double alpha = segment_ds > 1e-9 ? std::clamp((stop_s - prev_point.s) / segment_ds, 0.0, 1.0) : 0.0;
+    SimplePathPoint stop_point;
+    stop_point.position = prev_point.position + alpha * (next_point.position - prev_point.position);
+    stop_point.s = stop_s;
+    stop_point.v = prev_point.v + alpha * (next_point.v - prev_point.v);
+    truncated_path.push_back(stop_point);
+    return truncated_path;
+  }
+
+  return path;
 }
 
 void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
