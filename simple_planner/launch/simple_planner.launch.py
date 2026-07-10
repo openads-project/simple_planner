@@ -21,6 +21,7 @@ def generate_launch_description():
         DeclareLaunchArgument("ego_data_topic", default_value="~/ego_data"),
         DeclareLaunchArgument("object_list_topic", default_value="~/object_list"),
         DeclareLaunchArgument("route_topic", default_value="~/route"),
+        DeclareLaunchArgument("grid_map_topic", default_value="~/grid_map"),
         DeclareLaunchArgument("trajectory_topic", default_value="~/trajectory"),
         DeclareLaunchArgument("object_interaction_markers_topic", default_value="~/viz/object_interaction_markers"),
         DeclareLaunchArgument("left_turn_indicator_service", default_value="~/enable_left_turn_indicator"),

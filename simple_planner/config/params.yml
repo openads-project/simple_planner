@@ -17,6 +17,14 @@
     a_max_decel: -1.0               # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel
     trigger_turn_signals: True      # true: planner will request turn signal services; false: planner will not trigger turn signals
 
+    #### grid map parameters
+    consider_grid_map: False        # true: planner will consider grid map; false: planner will ignore grid map
+    grid_map_timeout: 0.25          # time after which a received grid map is considered invalid (s) (use -1 for no timeout)
+    grid_occupied_threshold: 50     # minimum occupancy value that is considered blocked in the grid map
+    consider_out_of_grid: False     # true: points outside the grid map are treated as occupied; false: free
+    grid_longitudinal_safety_distance: 1.5  # longitudinal clearance between ego box and occupied grid cells (m)
+    grid_lateral_safety_distance: 0.0       # lateral clearance between ego box and occupied grid cells (m)
+
     #### traffic light parameters
     consider_traffic_lights: True   # true: planner will consider traffic lights; false: planner will ignore traffic lights
     offset_to_stop_line: 0.0        # additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line)
@@ -60,6 +68,11 @@
           max_frequency: 22.22 # 45ms
           min_acceptable_timestamp_delta: 0.0
           max_acceptable_timestamp_delta: 0.005
+        grid_map:
+          min_frequency: 9.09 # 110ms
+          max_frequency: 11.11 # 90ms
+          min_acceptable_timestamp_delta: 0.0
+          max_acceptable_timestamp_delta: 0.01
       diagnosed_publishers:
         trajectory:
           min_frequency: 9.09 # 110ms

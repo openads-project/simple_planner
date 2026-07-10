@@ -118,6 +118,25 @@ inline OrientedBox2D buildOrientedBox(const Eigen::Vector2d& center, double yaw,
 }
 
 /**
+ * @brief Returns the corners of an oriented box expanded in ego-aligned axes.
+ *
+ * @param[in] box Box to expand.
+ * @param[in] longitudinal_safety_distance Extra margin along the box x-axis.
+ * @param[in] lateral_safety_distance Extra margin along the box y-axis.
+ * @return Expanded box corners.
+ */
+inline std::array<Eigen::Vector2d, 4> getBoxCorners(const OrientedBox2D& box,
+                                                    double longitudinal_safety_distance,
+                                                    double lateral_safety_distance) {
+  const double half_length = box.half_length + std::max(longitudinal_safety_distance, 0.0);
+  const double half_width = box.half_width + std::max(lateral_safety_distance, 0.0);
+  return {box.center + half_length * box.axis_x + half_width * box.axis_y,
+          box.center + half_length * box.axis_x - half_width * box.axis_y,
+          box.center - half_length * box.axis_x - half_width * box.axis_y,
+          box.center - half_length * box.axis_x + half_width * box.axis_y};
+}
+
+/**
  * @brief Converts an oriented box center and heading to a ROS pose.
  *
  * @param[in] box Box to convert.

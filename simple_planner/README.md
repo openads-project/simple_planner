@@ -1,6 +1,6 @@
 # `simple_planner`
 
-Generates route-following reference trajectories with safe-stop, traffic-light, turn-signal, and object-aware speed handling.
+Generates route-following reference trajectories with safe-stop, traffic-light, occupancy-grid, turn-signal, and object-aware speed handling.
 
 ## Nodes
 
@@ -12,6 +12,7 @@ flowchart LR
     S0:::hidden -->|~/ego_data| NODE
     S1:::hidden -->|~/object_list| NODE
     S2:::hidden -->|~/route| NODE
+    S3:::hidden -->|~/grid_map| NODE
     NODE -->|~/trajectory| P0:::hidden
     NODE -->|~/viz/object_interaction_markers| P1:::hidden
     classDef hidden display: none;
@@ -24,6 +25,7 @@ flowchart LR
 | `~/ego_data` | `perception_msgs/msg/EgoData` | Current ego state used for planning, timeout checks, and safe-stop fallback |
 | `~/object_list` | `perception_msgs/msg/ObjectList` | Perceived objects with predictions used for object-aware speed reduction |
 | `~/route` | `route_planning_msgs/msg/Route` | Route with lane, speed-limit, lane-change, and regulatory information |
+| `~/grid_map` | `nav_msgs/msg/OccupancyGrid` | Occupancy grid used to stop before blocked cells when grid-map handling is enabled |
 
 #### Published Topics
 
@@ -77,6 +79,10 @@ flowchart LR
 | `diagnostic_updater.topic_diagnostics.route.max_frequency` | `float` | - | Maximum frequency for incoming route messages |
 | `diagnostic_updater.topic_diagnostics.route.min_acceptable_timestamp_delta` | `float` | - | Minimum acceptable timestamp delta for incoming route messages |
 | `diagnostic_updater.topic_diagnostics.route.max_acceptable_timestamp_delta` | `float` | - | Maximum acceptable timestamp delta for incoming route messages |
+| `diagnostic_updater.topic_diagnostics.grid_map.min_frequency` | `float` | - | Minimum frequency for incoming grid-map messages |
+| `diagnostic_updater.topic_diagnostics.grid_map.max_frequency` | `float` | - | Maximum frequency for incoming grid-map messages |
+| `diagnostic_updater.topic_diagnostics.grid_map.min_acceptable_timestamp_delta` | `float` | - | Minimum acceptable timestamp delta for incoming grid-map messages |
+| `diagnostic_updater.topic_diagnostics.grid_map.max_acceptable_timestamp_delta` | `float` | - | Maximum acceptable timestamp delta for incoming grid-map messages |
 | `diagnostic_updater.diagnosed_publishers.trajectory.min_frequency` | `float` | - | Minimum frequency for published trajectory messages |
 | `diagnostic_updater.diagnosed_publishers.trajectory.max_frequency` | `float` | - | Maximum frequency for published trajectory messages |
 | `diagnostic_updater.diagnosed_publishers.trajectory.min_acceptable_timestamp_delta` | `float` | - | Minimum acceptable timestamp delta for published trajectory messages |
@@ -91,6 +97,7 @@ flowchart LR
 | `ego_data_topic` | `"~/ego_data"` | Remapped input topic for ego state |
 | `object_list_topic` | `"~/object_list"` | Remapped input topic for perceived objects |
 | `route_topic` | `"~/route"` | Remapped input topic for the route |
+| `grid_map_topic` | `"~/grid_map"` | Remapped input topic for the occupancy grid |
 | `trajectory_topic` | `"~/trajectory"` | Remapped output topic for the planned trajectory |
 | `object_interaction_markers_topic` | `"~/viz/object_interaction_markers"` | Remapped output topic for object-conflict RViz markers |
 | `left_turn_indicator_service` | `"~/enable_left_turn_indicator"` | Remapped service for requesting the left turn indicator |
