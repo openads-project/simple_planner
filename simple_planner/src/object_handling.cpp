@@ -326,9 +326,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
         health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
       }
       route_plan.path.points.clear();
-      RCLCPP_DEBUG(this->get_logger(),
-                   "Object avoidance speed cap %f m/s is below standstill threshold %f m/s. Publishing standstill.", speed_cap,
-                   object_standstill_speed_threshold_);
+      RCLCPP_WARN(this->get_logger(),
+                  "Object avoidance speed cap %f m/s is at or below standstill threshold %f m/s. Publishing standstill.",
+                  speed_cap, object_standstill_speed_threshold_);
       return;
     }
 
@@ -356,8 +356,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(standstill_conflict->object_id));
     last_conflict = standstill_conflict;
     object_conflict_free_cycles_ = 0;
-    RCLCPP_DEBUG(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill",
-                 standstill_conflict->object_id);
+    RCLCPP_WARN(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill. "
+                                    "Publishing standstill.",
+                standstill_conflict->object_id);
   } else {
     object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);
     health_.key_value_pairs.insert_or_assign("ObjectSpeedCap", std::to_string(speed_cap));
@@ -365,7 +366,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
       health_.key_value_pairs.insert_or_assign("ReasonToStop", "Object conflict");
       health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(last_conflict->object_id));
     }
-    RCLCPP_DEBUG(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict");
+    RCLCPP_WARN(this->get_logger(), "Reduced reference speed cap to 0.0 m/s to avoid object conflict. Publishing standstill.");
   }
   publishObjectInteractionMarkers(target_header, last_conflict);
   route_plan.path.points.clear();
