@@ -245,22 +245,26 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     resetObjectState(target_header);
     return;
   }
-
-  geometry_msgs::msg::TransformStamped tf;
-  try {
-    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, object_list_.header.frame_id,
-                                      object_list_.header.stamp, fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
-  } catch (tf2::TransformException& ex) {
-    std::string msg =
-        "Object transformation is not available: " + std::string(ex.what()) + ". Ignoring objects for this planning cycle.";
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
-    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
+  if (object_list_.objects.empty()) {
     resetObjectState(target_header);
     return;
   }
 
-  perception_msgs::msg::ObjectList tf_object_list;
-  tf2::doTransform(object_list_, tf_object_list, tf);
+  perception_msgs::msg::ObjectList tf_object_list = object_list_;
+  if (requiresTransform(object_list_.header, target_header)) {
+    try {
+      tf_object_list = tf2_buffer_->transform(object_list_, target_header.frame_id, tf2_ros::fromMsg(target_header.stamp),
+                                              fixed_over_time_frame_id_, tf2::durationFromSec(1.0));
+    } catch (tf2::TransformException& ex) {
+      std::string msg =
+          "Object transformation is not available: " + std::string(ex.what()) + ". Ignoring objects for this planning cycle.";
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+      RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
+      resetObjectState(target_header);
+      return;
+    }
+  }
+
   // Ignore objects whose center is behind the ego vehicle (vehicle frame, +x ahead).
   tf_object_list.objects.erase(
       std::remove_if(tf_object_list.objects.begin(), tf_object_list.objects.end(),
@@ -356,8 +360,9 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     health_.key_value_pairs.insert_or_assign("ObjectConflictId", std::to_string(standstill_conflict->object_id));
     last_conflict = standstill_conflict;
     object_conflict_free_cycles_ = 0;
-    RCLCPP_WARN(this->get_logger(), "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill. "
-                                    "Publishing standstill.",
+    RCLCPP_WARN(this->get_logger(),
+                "Reduced reference speed cap to 0.0 m/s; object %lu still conflicts at standstill. "
+                "Publishing standstill.",
                 standstill_conflict->object_id);
   } else {
     object_conflict_free_cycles_ = std::min(object_conflict_free_cycles_ + 1, object_velocity_release_hysteresis_cycles_);

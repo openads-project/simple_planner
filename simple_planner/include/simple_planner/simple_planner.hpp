@@ -424,11 +424,24 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
 
   /**
+   * @brief Checks whether a transform between two stamped frames is required.
+   *
+   * A transform is required if either the frame IDs or timestamps differ. The
+   * timestamp comparison ensures that temporal transforms are still applied
+   * when source and target use the same moving frame.
+   *
+   * @param[in] source_header Header of the source data.
+   * @param[in] target_header Requested target frame and timestamp.
+   * @return true if a spatial or temporal transform is required.
+   */
+  static bool requiresTransform(const std_msgs::msg::Header& source_header, const std_msgs::msg::Header& target_header);
+
+  /**
    * @brief Transforms a simple path into the requested target frame and timestamp.
    *
    * @param[in] path Path to transform.
    * @param[in] target_header Target frame and timestamp.
-   * @return Transformed path, or the original path if the transform fails.
+   * @return Transformed path, or an empty path in the target frame if the transform fails.
    */
   SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 

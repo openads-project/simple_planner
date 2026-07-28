@@ -532,19 +532,20 @@ SimplePath SimplePlannerNode::buildSafeStopPath(const std_msgs::msg::Header& tar
 SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_msgs::msg::Header& target_header) {
   RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
 
-  geometry_msgs::msg::TransformStamped tf;
-  try {
-    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, route_.header.frame_id, route_.header.stamp,
-                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
-  } catch (tf2::TransformException& ex) {
-    std::string msg = "Transformation is not available: " + std::string(ex.what()) + ".";
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
-    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-  }
-
-  route_planning_msgs::msg::Route tf_route;
-  tf2::doTransform(route_, tf_route, tf);
   FollowRoutePlan route_plan;
+  route_plan.path.header = target_header;
+  route_planning_msgs::msg::Route tf_route = route_;
+  if (requiresTransform(route_.header, target_header)) {
+    try {
+      tf_route = tf2_buffer_->transform(route_, target_header.frame_id, tf2_ros::fromMsg(target_header.stamp),
+                                        fixed_over_time_frame_id_, tf2::durationFromSec(1.0));
+    } catch (tf2::TransformException& ex) {
+      std::string msg = "Route transformation is not available: " + std::string(ex.what()) + ".";
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+      RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
+      return route_plan;
+    }
+  }
   route_plan.path.header = tf_route.header;
 
   std::map<uint64_t, uint64_t> lane_change_indices_map;
