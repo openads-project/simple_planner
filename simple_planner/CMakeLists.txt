@@ -18,6 +18,7 @@ find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_perception_msgs REQUIRED)
 find_package(tf2_route_planning_msgs REQUIRED)
+find_package(tf2_trajectory_planning_msgs REQUIRED)
 find_package(tracetools REQUIRED)
 find_package(trajectory_planning_msgs REQUIRED)
 find_package(trajectory_planning_msgs_utils REQUIRED)
@@ -49,6 +50,7 @@ ament_target_dependencies(${TARGET_NAME}
   std_srvs
   tf2_perception_msgs
   tf2_route_planning_msgs
+  tf2_trajectory_planning_msgs
   tracetools
   trajectory_planning_msgs
   trajectory_planning_msgs_utils

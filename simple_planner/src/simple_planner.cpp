@@ -30,6 +30,8 @@ namespace simple_planner {
  *
  */
 SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
+  this->declareAndLoadParameter("vehicle_frame_id", vehicle_frame_id_,
+                                "Frame ID of local vehicle frame in which the trajectory is planned");
   this->declareAndLoadParameter("trajectory_frame_id", trajectory_frame_id_, "Frame ID of published reference trajectory");
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
@@ -414,7 +416,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
 
   trajectory_planning_msgs::msg::Trajectory tra;
   tra.header.stamp = stamp;
-  tra.header.frame_id = trajectory_frame_id_;
+  tra.header.frame_id = vehicle_frame_id_;
 
   if (state != PlannerState::FollowRoute) {
     resetObjectState(tra.header);
@@ -440,6 +442,15 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
     }
     case PlannerState::NoPublish:
       throw std::runtime_error("createTrajectory called for non-publish state");
+  }
+
+  if (tra.header.frame_id != trajectory_frame_id_) {
+    try {
+      tra = tf2_buffer_->transform(tra, trajectory_frame_id_, tf2::durationFromSec(1.0));
+    } catch (tf2::TransformException& ex) {
+      throw std::runtime_error("Transformation into output frame '" + trajectory_frame_id_ +
+                               "' is not available: " + std::string(ex.what()));
+    }
   }
 
   rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
@@ -1066,7 +1077,7 @@ void SimplePlannerNode::publishTimerCallback() {
   if (planner_state == PlannerState::NoPublish) {
     std_msgs::msg::Header marker_header;
     marker_header.stamp = stamp;
-    marker_header.frame_id = trajectory_frame_id_;
+    marker_header.frame_id = vehicle_frame_id_;
     clearObjectInteractionMarkers(marker_header);
     return;
   }

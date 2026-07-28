@@ -261,7 +261,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   perception_msgs::msg::ObjectList tf_object_list;
   tf2::doTransform(object_list_, tf_object_list, tf);
-  // Ignore objects whose center is behind the ego vehicle (trajectory frame, +x ahead).
+  // Ignore objects whose center is behind the ego vehicle (vehicle frame, +x ahead).
   tf_object_list.objects.erase(
       std::remove_if(tf_object_list.objects.begin(), tf_object_list.objects.end(),
                      [](const auto& object) { return perception_msgs::object_access::getCenterPosition(object.state).x < 0.0; }),
