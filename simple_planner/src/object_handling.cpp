@@ -80,10 +80,12 @@ void SimplePlannerNode::publishObjectInteractionMarkers(const std_msgs::msg::Hea
   };
 
   const geometry_msgs::msg::Pose ego_pose = toPose(conflict->ego_box);
+  const OrientedBox2D ego_safety_box =
+      expandBoxWithSafetyMargins(conflict->ego_box, object_longitudinal_safety_distance_, object_lateral_safety_distance_);
   const double ego_length = 2.0 * conflict->ego_box.half_length;
   const double ego_width = 2.0 * conflict->ego_box.half_width;
-  make_box_marker("object_interaction_ego_safety_box", 0, ego_pose, ego_length + 2.0 * object_longitudinal_safety_distance_,
-                  ego_width + 2.0 * object_lateral_safety_distance_, 0.12, 1.0F, 0.55F, 0.0F, 0.28F);
+  make_box_marker("object_interaction_ego_safety_box", 0, toPose(ego_safety_box), 2.0 * ego_safety_box.half_length,
+                  2.0 * ego_safety_box.half_width, 0.12, 1.0F, 0.55F, 0.0F, 0.28F);
   make_box_marker("object_interaction_ego_box", 1, ego_pose, ego_length, ego_width, 0.18, 1.0F, 0.0F, 0.0F, 0.55F);
   make_box_marker("object_interaction_object_box", 2, toPose(conflict->object_box), 2.0 * conflict->object_box.half_length,
                   2.0 * conflict->object_box.half_width, 0.24, 0.0F, 0.45F, 1.0F, 0.55F);

@@ -35,8 +35,8 @@
     consider_objects: True          # true: planner will consider perceived objects on the route; false: planner will ignore objects
     object_timeout: 1.0             # time after which a received object list is considered invalid (s) (use -1 for no timeout)
     min_prediction_prob: 0.0        # minimum probability for considering an object prediction branch; otherwise the most likely one is used
-    object_longitudinal_safety_distance: 1.5  # longitudinal clearance around ego/object boxes for conflict detection (m)
-    object_lateral_safety_distance: 0.0  # lateral clearance around ego/object boxes for conflict detection (m)
+    object_longitudinal_safety_distance: 1.5  # longitudinal clearance of the ego box for object conflict detection (m)
+    object_lateral_safety_distance: 0.0  # lateral clearance of the ego box for object conflict detection (m)
     object_interaction_time_window: 0.5  # maximum time offset for counting a spatial overlap as interaction (s)
     object_velocity_reduction_step: 0.1  # velocity decrement per object-avoidance iteration (m/s)
     object_velocity_release_step: 0.5  # maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)

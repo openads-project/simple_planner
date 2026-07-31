@@ -118,22 +118,40 @@ inline OrientedBox2D buildOrientedBox(const Eigen::Vector2d& center, double yaw,
 }
 
 /**
- * @brief Returns the corners of an oriented box expanded in ego-aligned axes.
+ * @brief Expands a box by the given safety margins.
  *
  * @param[in] box Box to expand.
- * @param[in] longitudinal_safety_distance Extra margin along the box x-axis.
- * @param[in] lateral_safety_distance Extra margin along the box y-axis.
+ * @param[in] longitudinal_safety_distance Longitudinal safety margin.
+ * @param[in] lateral_safety_distance Lateral safety margin.
+ * @return Expanded box.
+ */
+inline OrientedBox2D expandBoxWithSafetyMargins(const OrientedBox2D& box,
+                                                double longitudinal_safety_distance,
+                                                double lateral_safety_distance) {
+  OrientedBox2D expanded_box = box;
+  const double longitudinal_margin = std::max(longitudinal_safety_distance, 0.0);
+  expanded_box.center += 0.5 * longitudinal_margin * box.axis_x;
+  expanded_box.half_length += 0.5 * longitudinal_margin;
+  expanded_box.half_width += std::max(lateral_safety_distance, 0.0);
+  return expanded_box;
+}
+
+/**
+ * @brief Returns the corners of a box expanded by the given safety margins.
+ *
+ * @param[in] box Box to expand.
+ * @param[in] longitudinal_safety_distance Longitudinal safety margin.
+ * @param[in] lateral_safety_distance Lateral safety margin.
  * @return Expanded box corners.
  */
 inline std::array<Eigen::Vector2d, 4> getBoxCorners(const OrientedBox2D& box,
                                                     double longitudinal_safety_distance,
                                                     double lateral_safety_distance) {
-  const double half_length = box.half_length + std::max(longitudinal_safety_distance, 0.0);
-  const double half_width = box.half_width + std::max(lateral_safety_distance, 0.0);
-  return {box.center + half_length * box.axis_x + half_width * box.axis_y,
-          box.center + half_length * box.axis_x - half_width * box.axis_y,
-          box.center - half_length * box.axis_x - half_width * box.axis_y,
-          box.center - half_length * box.axis_x + half_width * box.axis_y};
+  const OrientedBox2D expanded_box = expandBoxWithSafetyMargins(box, longitudinal_safety_distance, lateral_safety_distance);
+  return {expanded_box.center + expanded_box.half_length * expanded_box.axis_x + expanded_box.half_width * expanded_box.axis_y,
+          expanded_box.center + expanded_box.half_length * expanded_box.axis_x - expanded_box.half_width * expanded_box.axis_y,
+          expanded_box.center - expanded_box.half_length * expanded_box.axis_x - expanded_box.half_width * expanded_box.axis_y,
+          expanded_box.center - expanded_box.half_length * expanded_box.axis_x + expanded_box.half_width * expanded_box.axis_y};
 }
 
 /**
@@ -179,8 +197,8 @@ inline TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& r
  *
  * @param[in] ego_box Ego bounding box.
  * @param[in] object_box Object bounding box.
- * @param[in] longitudinal_safety_distance Extra ego-aligned longitudinal margin.
- * @param[in] lateral_safety_distance Extra ego-aligned lateral margin.
+ * @param[in] longitudinal_safety_distance Longitudinal ego safety margin.
+ * @param[in] lateral_safety_distance Lateral ego safety margin.
  * @return true if the boxes overlap after applying the safety margins.
  * @return false if a separating axis exists.
  */
@@ -188,16 +206,17 @@ inline bool overlapsWithEgoSafety(const OrientedBox2D& ego_box,
                                   const OrientedBox2D& object_box,
                                   double longitudinal_safety_distance,
                                   double lateral_safety_distance) {
-  const Eigen::Vector2d center_delta = object_box.center - ego_box.center;
-  const std::array<Eigen::Vector2d, 4> axes = {ego_box.axis_x, ego_box.axis_y, object_box.axis_x, object_box.axis_y};
+  const OrientedBox2D expanded_ego_box =
+      expandBoxWithSafetyMargins(ego_box, longitudinal_safety_distance, lateral_safety_distance);
+  const Eigen::Vector2d center_delta = object_box.center - expanded_ego_box.center;
+  const std::array<Eigen::Vector2d, 4> axes = {expanded_ego_box.axis_x, expanded_ego_box.axis_y, object_box.axis_x,
+                                               object_box.axis_y};
   for (const auto& axis : axes) {
-    const double ego_extent =
-        ego_box.half_length * std::abs(axis.dot(ego_box.axis_x)) + ego_box.half_width * std::abs(axis.dot(ego_box.axis_y));
+    const double ego_extent = expanded_ego_box.half_length * std::abs(axis.dot(expanded_ego_box.axis_x)) +
+                              expanded_ego_box.half_width * std::abs(axis.dot(expanded_ego_box.axis_y));
     const double object_extent = object_box.half_length * std::abs(axis.dot(object_box.axis_x)) +
                                  object_box.half_width * std::abs(axis.dot(object_box.axis_y));
-    const double safety_extent = longitudinal_safety_distance * std::abs(axis.dot(ego_box.axis_x)) +
-                                 lateral_safety_distance * std::abs(axis.dot(ego_box.axis_y));
-    if (std::abs(axis.dot(center_delta)) > ego_extent + object_extent + safety_extent + 1e-6) {
+    if (std::abs(axis.dot(center_delta)) > ego_extent + object_extent + 1e-6) {
       return false;
     }
   }

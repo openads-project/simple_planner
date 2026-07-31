@@ -84,11 +84,11 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
                                 "Minimum probability for considering an object prediction branch");
   this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
-                                "Longitudinal clearance around ego/object bounding boxes for conflict detection (m)", true, false,
-                                false, 0.0, 20.0, 0.1);
+                                "Longitudinal clearance of the ego box for object conflict detection (m)", true, false, false,
+                                0.0, 20.0, 0.1);
   this->declareAndLoadParameter("object_lateral_safety_distance", object_lateral_safety_distance_,
-                                "Lateral clearance around ego/object bounding boxes for conflict detection (m)", true, false,
-                                false, 0.0, 10.0, 0.1);
+                                "Lateral clearance of the ego box for object conflict detection (m)", true, false, false, 0.0,
+                                10.0, 0.1);
   this->declareAndLoadParameter("object_interaction_time_window", object_interaction_time_window_,
                                 "Maximum time offset for counting a spatial overlap as interaction (s)");
   this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,

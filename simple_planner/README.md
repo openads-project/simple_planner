@@ -63,8 +63,8 @@ flowchart LR
 | `consider_future_states` | `bool` | `false` | True: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
 | `consider_objects` | `bool` | `true` | True: planner will consider perceived objects on the route; false: planner will ignore objects |
 | `min_prediction_prob` | `float` | `0.0` | Minimum probability for considering an object prediction branch |
-| `object_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal clearance around ego/object bounding boxes for conflict detection (m) |
-| `object_lateral_safety_distance` | `float` | `0.0` | Lateral clearance around ego/object bounding boxes for conflict detection (m) |
+| `object_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal clearance of the ego box for object conflict detection (m) |
+| `object_lateral_safety_distance` | `float` | `0.0` | Lateral clearance of the ego box for object conflict detection (m) |
 | `object_interaction_time_window` | `float` | `0.5` | Maximum time offset for counting a spatial overlap as interaction (s) |
 | `object_velocity_reduction_step` | `float` | `0.1` | Velocity decrement per object-avoidance iteration (m/s) |
 | `object_velocity_release_step` | `float` | `0.5` | Maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
