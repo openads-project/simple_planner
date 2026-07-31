@@ -616,13 +616,7 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
 
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
   recalculateS(merged_points);
-  try {
-    applyGridMapConstraints(target_header, merged_points, route_plan);
-  } catch (const tf2::TransformException& ex) {
-    std::string msg = "Grid map transformation is not available: " + std::string(ex.what()) + ".";
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
-    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-  }
+  applyGridMapConstraints(target_header, merged_points, route_plan);
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
   applyObjectConstraints(target_header, merged_points, route_plan);
   if (trigger_turn_signals_) {
@@ -1024,46 +1018,39 @@ std::vector<SimplePathPoint> SimplePlannerNode::truncatePathAtS(const std::vecto
   }
 
   if (stop_s <= path.front().s) {
-    std::vector<SimplePathPoint> truncated_path;
     SimplePathPoint stop_point = path.front();
     stop_point.s = stop_s;
-    truncated_path.push_back(stop_point);
+    return {stop_point};
+  }
+
+  if (stop_s >= path.back().s) {
+    return path;
+  }
+
+  const auto stop_it =
+      std::lower_bound(path.begin(), path.end(), stop_s, [](const auto& point, double s) { return point.s < s; });
+  if (stop_it == path.begin()) {
+    return {*stop_it};
+  }
+  if (stop_it == path.end()) {
+    return path;
+  }
+
+  std::vector<SimplePathPoint> truncated_path(path.begin(), stop_it);
+  if (std::abs(stop_it->s - stop_s) <= 1e-6) {
+    truncated_path.push_back(*stop_it);
     return truncated_path;
   }
 
-  std::vector<SimplePathPoint> truncated_path;
-  truncated_path.reserve(path.size());
-  for (size_t i = 0; i < path.size(); ++i) {
-    if (path[i].s < stop_s) {
-      truncated_path.push_back(path[i]);
-      continue;
-    }
-
-    if (std::abs(path[i].s - stop_s) <= 1e-6) {
-      truncated_path.push_back(path[i]);
-      return truncated_path;
-    }
-
-    if (i == 0) {
-      SimplePathPoint stop_point = path.front();
-      stop_point.s = stop_s;
-      truncated_path.push_back(stop_point);
-      return truncated_path;
-    }
-
-    const auto& prev_point = path[i - 1];
-    const auto& next_point = path[i];
-    const double segment_ds = next_point.s - prev_point.s;
-    const double alpha = segment_ds > 1e-9 ? std::clamp((stop_s - prev_point.s) / segment_ds, 0.0, 1.0) : 0.0;
-    SimplePathPoint stop_point;
-    stop_point.position = prev_point.position + alpha * (next_point.position - prev_point.position);
-    stop_point.s = stop_s;
-    stop_point.v = prev_point.v + alpha * (next_point.v - prev_point.v);
-    truncated_path.push_back(stop_point);
-    return truncated_path;
-  }
-
-  return path;
+  const auto& previous = *(stop_it - 1);
+  const double segment_ds = stop_it->s - previous.s;
+  const double alpha = segment_ds > 1e-9 ? std::clamp((stop_s - previous.s) / segment_ds, 0.0, 1.0) : 0.0;
+  SimplePathPoint stop_point;
+  stop_point.position = previous.position + alpha * (stop_it->position - previous.position);
+  stop_point.s = stop_s;
+  stop_point.v = previous.v + alpha * (stop_it->v - previous.v);
+  truncated_path.push_back(stop_point);
+  return truncated_path;
 }
 
 void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {

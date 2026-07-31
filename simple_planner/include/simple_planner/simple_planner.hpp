@@ -181,7 +181,7 @@ class SimplePlannerNode : public rclcpp::Node {
 
   /**
    * @brief Stores the latest occupancy grid map message.
-   * 
+   *
    * @param msg Latest occupancy grid map message.
    */
   void gridMapCallback(const nav_msgs::msg::OccupancyGrid::UniquePtr msg);
@@ -304,46 +304,14 @@ class SimplePlannerNode : public rclcpp::Node {
                                FollowRoutePlan& route_plan);
 
   /**
-   * @brief Finds the first blocking grid-map sample along the current base path.
+   * @brief Finds the last safe grid-map sample before the first blocked pose.
    *
    * @param[in] target_header Current planning header propagated from the timer callback.
    * @param[in] base_path_points Route path before time-based resampling.
-   * @return Path coordinate of the first blocking sample if found.
+   * @return Safe path coordinate at which to stop if a blocked pose is found.
    */
   std::optional<double> findFirstGridMapStopS(const std_msgs::msg::Header& target_header,
                                               const std::vector<SimplePathPoint>& base_path_points);
-
-  /**
-   * @brief Transforms a point from the occupancy-grid header frame into local grid coordinates.
-   *
-   * @param[in] point_in_grid_frame Point in the occupancy-grid header frame.
-   * @param[in] grid_origin Occupancy-grid origin position in the header frame.
-   * @param[in] grid_origin_yaw Occupancy-grid origin yaw in the header frame.
-   * @return Point in local grid coordinates.
-   */
-  static Eigen::Vector2d transformToGridLocal(const Eigen::Vector2d& point_in_grid_frame,
-                                              const Eigen::Vector2d& grid_origin,
-                                              double grid_origin_yaw);
-
-  /**
-   * @brief Transforms a point from local grid coordinates into the occupancy-grid header frame.
-   *
-   * @param[in] point_in_grid_local Point in local grid coordinates.
-   * @param[in] grid_origin Occupancy-grid origin position in the header frame.
-   * @param[in] grid_origin_yaw Occupancy-grid origin yaw in the header frame.
-   * @return Point in the occupancy-grid header frame.
-   */
-  static Eigen::Vector2d transformToGridFrame(const Eigen::Vector2d& point_in_grid_local,
-                                              const Eigen::Vector2d& grid_origin,
-                                              double grid_origin_yaw);
-
-  /**
-   * @brief Checks whether an occupancy-grid cell value should be treated as blocking.
-   *
-   * @param[in] value Occupancy-grid cell value.
-   * @return true if the cell is blocking.
-   */
-  bool isGridMapCellOccupied(int8_t value) const;
 
   /**
    * @brief Reduces the perceived object list (in trajectory frame) to timed bounding-box trajectories.
