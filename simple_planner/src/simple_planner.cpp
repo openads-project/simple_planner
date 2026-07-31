@@ -40,6 +40,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "Time after which a received ego vehicle data is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("object_timeout", object_timeout_,
                                 "Time after which a received object list is considered invalid (s) (use -1 for no timeout)");
+  this->declareAndLoadParameter("grid_map_timeout", grid_map_timeout_,
+                                "Time after which a received grid map is considered invalid (s) (use -1 for no timeout)");
   this->declareAndLoadParameter("trajectory_horizon", trajectory_horizon_, "Time horizon of the reference trajectory (s)");
   this->declareAndLoadParameter("n_states", n_states_, "Number of states in the output trajectory");
   this->declareAndLoadParameter("interpolation_type", interpolation_type_, "0: linear, 1: cubic spline");
@@ -52,6 +54,21 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "Maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
   this->declareAndLoadParameter("trigger_turn_signals", trigger_turn_signals_,
                                 "True: planner will trigger turn signal services; false: planner will not request turn signals");
+  this->declareAndLoadParameter("consider_grid_map", consider_grid_map_,
+                                "True: planner will consider grid map; false: planner will ignore grid map");
+  this->declareAndLoadParameter("grid_occupied_threshold", grid_occupied_threshold_,
+                                "Minimum occupancy value that is considered as blocked within the grid map", true, false, false,
+                                0.0, 100.0, 1.0);
+  this->declareAndLoadParameter("consider_out_of_grid", consider_out_of_grid_,
+                                "True: path points falling outside the grid map are treated as blocked; false: points outside "
+                                "the grid map are treated as free to drive");
+  this->declareAndLoadParameter("grid_longitudinal_safety_distance", grid_longitudinal_safety_distance_,
+                                "Longitudinal ego-box margin for occupied-cell collision checks; negative values shrink the box "
+                                "(m)",
+                                true, false, false, -20.0, 20.0, 0.1);
+  this->declareAndLoadParameter("grid_lateral_safety_distance", grid_lateral_safety_distance_,
+                                "Lateral ego-box margin for occupied-cell collision checks; negative values shrink the box (m)",
+                                true, false, false, -10.0, 10.0, 0.1);
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_,
                                 "True: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
@@ -68,11 +85,11 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
                                 "Minimum probability for considering an object prediction branch");
   this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
-                                "Longitudinal clearance around ego/object bounding boxes for conflict detection (m)", true, false,
-                                false, 0.0, 20.0, 0.1);
+                                "Longitudinal ego-box margin for object conflict detection; negative values shrink the box (m)",
+                                true, false, false, -20.0, 20.0, 0.1);
   this->declareAndLoadParameter("object_lateral_safety_distance", object_lateral_safety_distance_,
-                                "Lateral clearance around ego/object bounding boxes for conflict detection (m)", true, false,
-                                false, 0.0, 10.0, 0.1);
+                                "Lateral ego-box margin for object conflict detection; negative values shrink the box (m)", true,
+                                false, false, -10.0, 10.0, 0.1);
   this->declareAndLoadParameter("object_interaction_time_window", object_interaction_time_window_,
                                 "Maximum time offset for counting a spatial overlap as interaction (s)");
   this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,
@@ -140,6 +157,18 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.route.max_acceptable_timestamp_delta",
                                 route_topic_diagnostic_config_.max_acceptable_timestamp_delta,
                                 "Maximum acceptable timestamp delta for incoming route messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.grid_map.min_frequency",
+                                grid_map_topic_diagnostic_config_.min_frequency,
+                                "Minimum frequency for incoming grid-map messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.grid_map.max_frequency",
+                                grid_map_topic_diagnostic_config_.max_frequency,
+                                "Maximum frequency for incoming grid-map messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.grid_map.min_acceptable_timestamp_delta",
+                                grid_map_topic_diagnostic_config_.min_acceptable_timestamp_delta,
+                                "Minimum acceptable timestamp delta for incoming grid-map messages", false);
+  this->declareAndLoadParameter("diagnostic_updater.topic_diagnostics.grid_map.max_acceptable_timestamp_delta",
+                                grid_map_topic_diagnostic_config_.max_acceptable_timestamp_delta,
+                                "Maximum acceptable timestamp delta for incoming grid-map messages", false);
   this->declareAndLoadParameter("diagnostic_updater.diagnosed_publishers.trajectory.min_frequency",
                                 diagnosed_publisher_config_.min_frequency, "Minimum frequency for published trajectory messages",
                                 false);
@@ -194,6 +223,10 @@ void SimplePlannerNode::setup() {
       "~/route", 10, std::bind(&SimplePlannerNode::routeCallback, this, std::placeholders::_1));
   RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_route_->get_topic_name());
 
+  sub_grid_map_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+      "~/grid_map", 10, std::bind(&SimplePlannerNode::gridMapCallback, this, std::placeholders::_1));
+  RCLCPP_INFO(this->get_logger(), "Subscribed to '%s'", sub_grid_map_->get_topic_name());
+
   // create service clients for turn indicators and hazard lights
   left_turn_indicator_service_client_ = this->create_client<std_srvs::srv::SetBool>("~/enable_left_turn_indicator");
   RCLCPP_INFO(this->get_logger(), "Prepared service client for '%s'", left_turn_indicator_service_client_->get_service_name());
@@ -206,10 +239,11 @@ void SimplePlannerNode::setup() {
   parameters_callback_ =
       this->add_on_set_parameters_callback(std::bind(&SimplePlannerNode::parametersCallback, this, std::placeholders::_1));
 
-  // Annotate message links for tracing: Trajectory is published periodically based on subscriptions to egoData and route
+  // Annotate message links for tracing: Trajectory is published periodically based on planning input subscriptions.
   std::vector<const void*> link_subs = {static_cast<const void*>(sub_egoData_->get_subscription_handle().get()),
                                         static_cast<const void*>(sub_object_list_->get_subscription_handle().get()),
-                                        static_cast<const void*>(sub_route_->get_subscription_handle().get())};
+                                        static_cast<const void*>(sub_route_->get_subscription_handle().get()),
+                                        static_cast<const void*>(sub_grid_map_->get_subscription_handle().get())};
   std::vector<const void*> link_pubs = {static_cast<const void*>(pub_->get_publisher_handle().get())};
   TRACETOOLS_TRACEPOINT(message_link_periodic_async, link_subs.data(), link_subs.size(), link_pubs.data(), link_pubs.size());
 
@@ -247,6 +281,18 @@ void SimplePlannerNode::setup() {
                                                  object_list_topic_diagnostic_frequency_window_size),
         diagnostic_updater::TimeStampStatusParam(object_list_topic_diagnostic_config_.min_acceptable_timestamp_delta,
                                                  object_list_topic_diagnostic_config_.max_acceptable_timestamp_delta));
+  }
+
+  if (consider_grid_map_) {
+    const int grid_map_topic_diagnostic_frequency_window_size =
+        std::ceil(5 / (diagnostic_updater_.getPeriod().seconds() * grid_map_topic_diagnostic_config_.min_frequency));
+    grid_map_topic_diagnostic_ = std::make_unique<diagnostic_updater::TopicDiagnostic>(
+        "~/grid_map", diagnostic_updater_,
+        diagnostic_updater::FrequencyStatusParam(&grid_map_topic_diagnostic_config_.min_frequency,
+                                                 &grid_map_topic_diagnostic_config_.max_frequency, 0.0,
+                                                 grid_map_topic_diagnostic_frequency_window_size),
+        diagnostic_updater::TimeStampStatusParam(grid_map_topic_diagnostic_config_.min_acceptable_timestamp_delta,
+                                                 grid_map_topic_diagnostic_config_.max_acceptable_timestamp_delta));
   }
 
   const int diagnosed_publisher_frequency_window_size =
@@ -304,6 +350,18 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
     route_init_ = true;
     safe_stop_distance_.reset();
+  }
+}
+
+void SimplePlannerNode::gridMapCallback(const nav_msgs::msg::OccupancyGrid::UniquePtr msg) {
+  if (grid_map_topic_diagnostic_ != nullptr) {
+    grid_map_topic_diagnostic_->tick(msg->header.stamp);
+  }
+  grid_map_ = *msg;
+
+  if (!grid_map_init_) {
+    grid_map_init_ = true;
+    RCLCPP_INFO(this->get_logger(), "Received first grid map message, initialized global variable");
   }
 }
 
@@ -382,6 +440,24 @@ SimplePlannerNode::PlannerState SimplePlannerNode::determinePlannerState(const r
     }
     std::string msg = "No fresh route available, but safe stop already started. Executing safe stop trajectory.";
     RCLCPP_DEBUG(this->get_logger(), "%s", msg.c_str());
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg,
+              {{"PlannerState", plannerStateToString(PlannerState::SafeStop)}});
+    return PlannerState::SafeStop;
+  }
+
+  // grid map enabled but missing, outdated, or invalid -> safe stop or standstill
+  if (consider_grid_map_ && !hasValidGridMap(stamp)) {
+    if (perception_msgs::object_access::getStandstill(ego_data_)) {
+      std::string msg =
+          "Grid map is missing, outdated, or invalid and ego vehicle is stationary. Publishing standstill trajectory.";
+      RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg,
+                {{"PlannerState", plannerStateToString(PlannerState::Standstill)}});
+      return PlannerState::Standstill;
+    }
+
+    std::string msg = "Grid map is missing, outdated, or invalid. Executing safe stop trajectory.";
+    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg,
               {{"PlannerState", plannerStateToString(PlannerState::SafeStop)}});
     return PlannerState::SafeStop;
@@ -541,6 +617,7 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
 
   std::vector<SimplePathPoint> merged_points = mergeLaneChangeSegments(tf_route, route_plan.path.points, lane_change_indices_map);
   recalculateS(merged_points);
+  applyGridMapConstraints(target_header, merged_points, route_plan);
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
   applyObjectConstraints(target_header, merged_points, route_plan);
   if (trigger_turn_signals_) {
@@ -934,6 +1011,47 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(size_t st
   }
 
   return lane_change_path;
+}
+
+std::vector<SimplePathPoint> SimplePlannerNode::truncatePathAtS(const std::vector<SimplePathPoint>& path, double stop_s) {
+  if (path.empty()) {
+    return path;
+  }
+
+  if (stop_s <= path.front().s) {
+    SimplePathPoint stop_point = path.front();
+    stop_point.s = stop_s;
+    return {stop_point};
+  }
+
+  if (stop_s >= path.back().s) {
+    return path;
+  }
+
+  const auto stop_it =
+      std::lower_bound(path.begin(), path.end(), stop_s, [](const auto& point, double s) { return point.s < s; });
+  if (stop_it == path.begin()) {
+    return {*stop_it};
+  }
+  if (stop_it == path.end()) {
+    return path;
+  }
+
+  std::vector<SimplePathPoint> truncated_path(path.begin(), stop_it);
+  if (std::abs(stop_it->s - stop_s) <= 1e-6) {
+    truncated_path.push_back(*stop_it);
+    return truncated_path;
+  }
+
+  const auto& previous = *(stop_it - 1);
+  const double segment_ds = stop_it->s - previous.s;
+  const double alpha = segment_ds > 1e-9 ? std::clamp((stop_s - previous.s) / segment_ds, 0.0, 1.0) : 0.0;
+  SimplePathPoint stop_point;
+  stop_point.position = previous.position + alpha * (stop_it->position - previous.position);
+  stop_point.s = stop_s;
+  stop_point.v = previous.v + alpha * (stop_it->v - previous.v);
+  truncated_path.push_back(stop_point);
+  return truncated_path;
 }
 
 void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
