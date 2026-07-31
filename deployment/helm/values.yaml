@@ -1,6 +1,6 @@
 openadservice:
   name: simple-planner
-  image: ghcr.io/openads-project/simple_planner:v1.3.0
+  image: ghcr.io/openads-project/simple_planner:v1.4.0
   env:
     # --- name ------
     NAMESPACE: /
