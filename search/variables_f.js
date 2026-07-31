@@ -1,12 +1,10 @@
 var searchData=
 [
-  ['s_0',['s',['../structsimple__planner_1_1SimplePathPoint.html#a3861f5db666dfec0a6225687ae653eac',1,'simple_planner::SimplePathPoint']]],
-  ['safe_5fstop_5fdistance_5f_1',['safe_stop_distance_',['../classsimple__planner_1_1SimplePlannerNode.html#a169f66c5135ceb22dbe5f0b9fef2ab58',1,'simple_planner::SimplePlannerNode']]],
-  ['samples_2',['samples',['../structsimple__planner_1_1ObjectTrajectory.html#a187172aa63284d101ea2e85683a134b7',1,'simple_planner::ObjectTrajectory']]],
-  ['status_3',['status',['../structsimple__planner_1_1SimplePlannerNode_1_1DiagnosticStatus.html#aa5fb296ceebb84e24559d20f7a83e2c4',1,'simple_planner::SimplePlannerNode::DiagnosticStatus']]],
-  ['stop_5fat_5fend_4',['stop_at_end',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#a188c64d118e1ae3e99fbde3e3eab8366',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]],
-  ['sub_5fegodata_5f_5',['sub_egoData_',['../classsimple__planner_1_1SimplePlannerNode.html#a9417a89de644a028a2955557d6864c21',1,'simple_planner::SimplePlannerNode']]],
-  ['sub_5fobject_5flist_5f_6',['sub_object_list_',['../classsimple__planner_1_1SimplePlannerNode.html#a4c3698c48705a284156adbd7b2aa02ed',1,'simple_planner::SimplePlannerNode']]],
-  ['sub_5froute_5f_7',['sub_route_',['../classsimple__planner_1_1SimplePlannerNode.html#ab4fcf5bfd1db456f30534ae2db1792c1',1,'simple_planner::SimplePlannerNode']]],
-  ['suggested_5fturn_5fsignal_8',['suggested_turn_signal',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#a92dab1b432a08bc65d1aea0907c64dbf',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]]
+  ['reason_5fto_5fstop_0',['reason_to_stop',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#aa8810166f837f72c2f6e89bdea633f8a',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]],
+  ['right_5fturn_5findicator_5fservice_5fclient_5f_1',['right_turn_indicator_service_client_',['../classsimple__planner_1_1SimplePlannerNode.html#a80e1c0a519c5a830ee44ad1f61e5589a',1,'simple_planner::SimplePlannerNode']]],
+  ['route_5f_2',['route_',['../classsimple__planner_1_1SimplePlannerNode.html#ae418f6243c8239dc7dfec605195a0744',1,'simple_planner::SimplePlannerNode']]],
+  ['route_5finit_5f_3',['route_init_',['../classsimple__planner_1_1SimplePlannerNode.html#a220405204df9e697295ca6c763f950a4',1,'simple_planner::SimplePlannerNode']]],
+  ['route_5ftimeout_5f_4',['route_timeout_',['../classsimple__planner_1_1SimplePlannerNode.html#a00465e081802111fc4858dd9af1b1077',1,'simple_planner::SimplePlannerNode']]],
+  ['route_5ftopic_5fdiagnostic_5f_5',['route_topic_diagnostic_',['../classsimple__planner_1_1SimplePlannerNode.html#a99b182fc3f2a445c93c7ebc267dbf339',1,'simple_planner::SimplePlannerNode']]],
+  ['route_5ftopic_5fdiagnostic_5fconfig_5f_6',['route_topic_diagnostic_config_',['../classsimple__planner_1_1SimplePlannerNode.html#aca19b3467a13ef354f4bb1a8fafcfe1c',1,'simple_planner::SimplePlannerNode']]]
 ];

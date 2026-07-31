@@ -1,8 +1,8 @@
 var searchData=
 [
-  ['id_0',['id',['../structsimple__planner_1_1ObjectTrajectory.html#ae604c5fd0864d1fa58acb9c68220e33b',1,'simple_planner::ObjectTrajectory']]],
-  ['ignore_5fstop_5fline_5fthreshold_5f_1',['ignore_stop_line_threshold_',['../classsimple__planner_1_1SimplePlannerNode.html#a22379ee62a259020a312360b6f4d4f7b',1,'simple_planner::SimplePlannerNode']]],
-  ['interpolation_5ftype_5f_2',['interpolation_type_',['../classsimple__planner_1_1SimplePlannerNode.html#a992ee333fe9d80b4305cf396007bbafd',1,'simple_planner::SimplePlannerNode']]],
-  ['is_5fstatic_3',['is_static',['../structsimple__planner_1_1ObjectTrajectory.html#ae14dcadf8461a27a51b67905b04832cc',1,'simple_planner::ObjectTrajectory']]],
-  ['is_5fvector_5fv_4',['is_vector_v',['../namespacesimple__planner.html#a7c2ccd98e141ee99e4d01c6c0949ed5d',1,'simple_planner']]]
+  ['half_5flength_0',['half_length',['../structsimple__planner_1_1OrientedBox2D.html#a5e99a279e2d9c876cf7d9f9d59b748d2',1,'simple_planner::OrientedBox2D']]],
+  ['half_5fwidth_1',['half_width',['../structsimple__planner_1_1OrientedBox2D.html#a04a98253b0863534380dc826f9c4bc35',1,'simple_planner::OrientedBox2D']]],
+  ['hazard_5flights_5fservice_5fclient_5f_2',['hazard_lights_service_client_',['../classsimple__planner_1_1SimplePlannerNode.html#a2ef0d0be9efbc4622c5062cd4a223fad',1,'simple_planner::SimplePlannerNode']]],
+  ['header_3',['header',['../structsimple__planner_1_1SimplePath.html#a9a05f1cde0ca82e87e02e77af6e620a9',1,'simple_planner::SimplePath']]],
+  ['health_5f_4',['health_',['../classsimple__planner_1_1SimplePlannerNode.html#ac8bf8bacbcbc6005e06ce5bd9bce77ed',1,'simple_planner::SimplePlannerNode']]]
 ];

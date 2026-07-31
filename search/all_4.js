@@ -7,5 +7,6 @@ var searchData=
   ['ego_5fdata_5ftopic_5fdiagnostic_5f_4',['ego_data_topic_diagnostic_',['../classsimple__planner_1_1SimplePlannerNode.html#a0d10d1d5931004542428093dfb27c6e9',1,'simple_planner::SimplePlannerNode']]],
   ['ego_5fdata_5ftopic_5fdiagnostic_5fconfig_5f_5',['ego_data_topic_diagnostic_config_',['../classsimple__planner_1_1SimplePlannerNode.html#a646953b43b063c564c1d2c8d1646341f',1,'simple_planner::SimplePlannerNode']]],
   ['egodatacallback_6',['egoDataCallback',['../classsimple__planner_1_1SimplePlannerNode.html#acd74901f79df6263cdb031d47c59703e',1,'simple_planner::SimplePlannerNode']]],
-  ['environment_7',['Set up Development Environment',['../index.html#autotoc_md3',1,'']]]
+  ['environment_7',['Set up Development Environment',['../index.html#autotoc_md3',1,'']]],
+  ['expandboxwithsafetymargins_8',['expandBoxWithSafetyMargins',['../namespacesimple__planner.html#a78295ae05be6f2f27914170b76f1de83',1,'simple_planner']]]
 ];

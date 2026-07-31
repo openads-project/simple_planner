@@ -1,10 +1,21 @@
 var searchData=
 [
-  ['parameters_5fcallback_5f_0',['parameters_callback_',['../classsimple__planner_1_1SimplePlannerNode.html#ab22c4ade1dfa0122fadd674f14b0dd08',1,'simple_planner::SimplePlannerNode']]],
-  ['path_1',['path',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#ad845c6ea6875660e09e93e96eda7304c',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]],
-  ['points_2',['points',['../structsimple__planner_1_1SimplePath.html#a736c5a55e50e026e760615f1693aa331',1,'simple_planner::SimplePath']]],
-  ['position_3',['position',['../structsimple__planner_1_1SimplePathPoint.html#aad2d60001d00acd68bed593ac27b5843',1,'simple_planner::SimplePathPoint']]],
-  ['pub_5f_4',['pub_',['../classsimple__planner_1_1SimplePlannerNode.html#a274821758a8ba13355d3dd9fb4b30af1',1,'simple_planner::SimplePlannerNode']]],
-  ['publish_5fobject_5finteraction_5fmarkers_5f_5',['publish_object_interaction_markers_',['../classsimple__planner_1_1SimplePlannerNode.html#ab55c67ede18d157afa515de09b76d026',1,'simple_planner::SimplePlannerNode']]],
-  ['publish_5ftimer_5f_6',['publish_timer_',['../classsimple__planner_1_1SimplePlannerNode.html#aa6fabaed5ee690f82d57f8736f39af38',1,'simple_planner::SimplePlannerNode']]]
+  ['object_5fbox_0',['object_box',['../structsimple__planner_1_1ConflictSample.html#a75024f19650291b5339e2b49e5984f74',1,'simple_planner::ConflictSample']]],
+  ['object_5fconflict_5ffree_5fcycles_5f_1',['object_conflict_free_cycles_',['../classsimple__planner_1_1SimplePlannerNode.html#a2a27e083b75278d20e46c18b47ac9d4b',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5fid_2',['object_id',['../structsimple__planner_1_1ConflictSample.html#a45761430b001f7b21c92366217086bac',1,'simple_planner::ConflictSample']]],
+  ['object_5finteraction_5fmarker_5fpub_5f_3',['object_interaction_marker_pub_',['../classsimple__planner_1_1SimplePlannerNode.html#a8a613fb27cc138c1bd27532f0c22eb4d',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5finteraction_5ftime_5fwindow_5f_4',['object_interaction_time_window_',['../classsimple__planner_1_1SimplePlannerNode.html#a4d369eecb1f73e2a5e43486e58de0eb0',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5flateral_5fsafety_5fdistance_5f_5',['object_lateral_safety_distance_',['../classsimple__planner_1_1SimplePlannerNode.html#a0b3c6a826bf4ee38b874fe8d56b15347',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5flist_5f_6',['object_list_',['../classsimple__planner_1_1SimplePlannerNode.html#a5e880670cc21aa287f1350dfd4b8f63f',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5flist_5finit_5f_7',['object_list_init_',['../classsimple__planner_1_1SimplePlannerNode.html#a72b489528ab02df6f86ceec6be1167ab',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5flist_5ftopic_5fdiagnostic_5f_8',['object_list_topic_diagnostic_',['../classsimple__planner_1_1SimplePlannerNode.html#a81c5b7f9a926fe42b34373f4c7f41646',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5flist_5ftopic_5fdiagnostic_5fconfig_5f_9',['object_list_topic_diagnostic_config_',['../classsimple__planner_1_1SimplePlannerNode.html#a7ab7a2f8fa94ebcf28d92a33f46dee07',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5flongitudinal_5fsafety_5fdistance_5f_10',['object_longitudinal_safety_distance_',['../classsimple__planner_1_1SimplePlannerNode.html#adf7d0eff20f254d3eb228a7f1ba26ddd',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5fstandstill_5fspeed_5fthreshold_5f_11',['object_standstill_speed_threshold_',['../classsimple__planner_1_1SimplePlannerNode.html#a1e8236ed85d50b12266093a4116fc1f8',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5ftimeout_5f_12',['object_timeout_',['../classsimple__planner_1_1SimplePlannerNode.html#a54df61f7e78a9837a3162299628e42cb',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5fvelocity_5freduction_5fstep_5f_13',['object_velocity_reduction_step_',['../classsimple__planner_1_1SimplePlannerNode.html#a5bee838283b41e3c9ca09bfe9853384b',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5fvelocity_5frelease_5fhysteresis_5fcycles_5f_14',['object_velocity_release_hysteresis_cycles_',['../classsimple__planner_1_1SimplePlannerNode.html#a096bc0b3ac1b8da0211d3013f3773e6a',1,'simple_planner::SimplePlannerNode']]],
+  ['object_5fvelocity_5frelease_5fstep_5f_15',['object_velocity_release_step_',['../classsimple__planner_1_1SimplePlannerNode.html#a156123e02d74a28ae8978b153f76e9ba',1,'simple_planner::SimplePlannerNode']]],
+  ['offset_5fto_5fstop_5fline_16',['offset_to_stop_line',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#a9b6e4e7b0b215e06bea1585f91d15a1d',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]],
+  ['offset_5fto_5fstop_5fline_5f_17',['offset_to_stop_line_',['../classsimple__planner_1_1SimplePlannerNode.html#a4c06bfa82b83d347328d1f7eb0ddd901',1,'simple_planner::SimplePlannerNode']]]
 ];

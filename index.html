@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">simple_planner<span id="projectnumber">&#160;v1.3.0</span>
+   <div id="projectname">simple_planner<span id="projectnumber">&#160;v1.4.0</span>
    </div>
   </td>
  </tr>
@@ -102,20 +102,21 @@ $(function(){initNavTree('index.html',''); initResizable(true); });
 <div class="contents">
 <div class="textblock"><p><a class="anchor" id="md_README"></a></p>
 <p align="center"></p>
-<p><a href="https://github.com/openads-project"><img src="https://img.shields.io/badge/OpenADS-f5ff01" alt="" class="inline"/></a> <a href="https://www.ros.org"><img src="https://img.shields.io/badge/ROS 2-jazzy-22314e" alt="" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/releases/latest"><img src="https://img.shields.io/github/v/release/openads-project/simple_planner" alt="" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/blob/main/LICENSE"><img src="https://img.shields.io/github/license/openads-project/simple_planner" alt="" class="inline"/></a> <br  />
- <a href="https://github.com/openads-project/simple_planner/actions/workflows/docker-ros.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/docker-ros.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/actions/workflows/compose-oci.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/compose-oci.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> <a href="https://openads-project.github.io/simple_planner"><img src="https://github.com/openads-project/simple_planner/actions/workflows/docs.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> </p>
+<p><a href="https://openads-project.github.io"><img src="https://img.shields.io/badge/OpenADS-45ccc6" alt="" class="inline"/></a> <a href="https://www.ros.org"><img src="https://img.shields.io/badge/ROS 2-jazzy-22314e" alt="" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/releases/latest"><img src="https://img.shields.io/github/v/release/openads-project/simple_planner" alt="" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/blob/main/LICENSE"><img src="https://img.shields.io/github/license/openads-project/simple_planner" alt="" class="inline"/></a> <br  />
+ <a href="https://github.com/openads-project/simple_planner/actions/workflows/docker-ros.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/docker-ros.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/actions/workflows/compose-oci.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/compose-oci.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/actions/workflows/helm-oci.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/helm-oci.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> <a href="https://openads-project.github.io/simple_planner"><img src="https://github.com/openads-project/simple_planner/actions/workflows/docs.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> <a href="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml"><img src="https://github.com/openads-project/simple_planner/actions/workflows/consistency.yml/badge.svg" alt="" style="pointer-events: none;" class="inline"/></a> </p>
 <p><b>ROS 2 Reference Trajectory Planning for Automated Driving</b></p>
 <p>This repository provides a lightweight ROS 2 planner that combines route information, the current ego state, and optional environment information to periodically generate a reference trajectory. It is intended as a deterministic upstream reference planner for downstream trajectory optimization and control modules. Key features:</p><ul>
 <li><b>Route following</b>: creates reference trajectories from route lane geometry and speed limits.</li>
 <li><b>Safe-stop behavior</b>: publishes standstill or safe-stop trajectories when required inputs are missing, outdated, or a stop is needed.</li>
 <li><b>Traffic-light handling</b>: stops at relevant traffic-light regulatory elements with configurable stop-line offsets and state prediction support.</li>
+<li><b>Grid-map handling</b>: stops before occupied occupancy-grid cells when grid-map constraints are enabled.</li>
 <li><b>Lane changes and indicators</b>: inserts simple lane-change transitions and trigger turn-signal or hazard-light services based on route semantics.</li>
 <li><b>Object-aware speed handling</b>: checks perceived objects and predictions against the ego trajectory and applies a conservative speed cap when conflicts are detected.</li>
 </ul>
 <p>The ROS 2 node uses the open-source ROS 2 message definitions <a href="https://github.com/ika-rwth-aachen/perception_interfaces">perception_interfaces</a> and <a href="https://github.com/ika-rwth-aachen/planning_interfaces">planning_interfaces</a> for its in- and outputs, making it straightforward to integrate into larger ROS 2-based automated-driving systems.</p>
 <p align="center"></p>
 <p><b>🚀 <a href="#-quick-start">Quick Start</a></b> • <b>💻 <a href="#-development">Development</a></b> • <b>📝 <a href="#-documentation">Documentation</a></b> </p>
-<dl class="section important"><dt>Important</dt><dd>This repository is part of <a href="https://github.com/openads-project"><em><b>OpenADS</b></em></a>, the <em>Open Automated Driving Systems</em> project. <em>OpenADS</em> and its modules have been initiated and are currently being maintained by the <a href="https://www.ika.rwth-aachen.de/de/"><b>Institute for Automotive Engineering (ika) at RWTH Aachen University</b></a>.</dd></dl>
+<dl class="section important"><dt>Important</dt><dd>This repository is part of <a href="https://openads-project.github.io/"><em><b>OpenADS</b></em></a>, the <em>Open Automated Driving Systems</em> project. <em>OpenADS</em> and its modules have been initiated and are currently being maintained by the <a href="https://www.ika.rwth-aachen.de/de/"><b>Institute for Automotive Engineering (ika) at RWTH Aachen University</b></a>.</dd></dl>
 <h1><a class="anchor" id="autotoc_md1"></a>
 🚀 Quick Start</h1>
 <p><img src="assets/simple-planner-teaser.gif" alt="teaser" class="inline"/> </p>
@@ -176,7 +177,7 @@ Run Tests</h2>
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Package   </th><th class="markdownTableHeadNone">Description    </th></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone">simple_planner   </td><td class="markdownTableBodyNone">Generates route-following reference trajectories with safe-stop, traffic-light, turn-signal, and object-aware speed handling.   </td></tr>
+<td class="markdownTableBodyNone">simple_planner   </td><td class="markdownTableBodyNone">Generates route-following reference trajectories with safe-stop, traffic-light, occupancy-grid, turn-signal, and object-aware speed handling.   </td></tr>
 </table>
 <h1><a class="anchor" id="autotoc_md7"></a>
 ⚖️ Licensing</h1>

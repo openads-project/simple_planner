@@ -1,9 +1,13 @@
 var searchData=
 [
-  ['t_0',['t',['../structsimple__planner_1_1TimedBox2D.html#a81af0c811b2e04579dd25fbd2593dedd',1,'simple_planner::TimedBox2D']]],
-  ['tf2_5fbuffer_5f_1',['tf2_buffer_',['../classsimple__planner_1_1SimplePlannerNode.html#a4a4c8c11b221f940e315fe0055d27eab',1,'simple_planner::SimplePlannerNode']]],
-  ['tf2_5flistener_5f_2',['tf2_listener_',['../classsimple__planner_1_1SimplePlannerNode.html#a3d669f231bc65266effe882153904fa9',1,'simple_planner::SimplePlannerNode']]],
-  ['trajectory_5fframe_5fid_5f_3',['trajectory_frame_id_',['../classsimple__planner_1_1SimplePlannerNode.html#af5a15940497feb80135ce8b0caad9db7',1,'simple_planner::SimplePlannerNode']]],
-  ['trajectory_5fhorizon_5f_4',['trajectory_horizon_',['../classsimple__planner_1_1SimplePlannerNode.html#a6ed819582b51a99c7a073e4135033e1c',1,'simple_planner::SimplePlannerNode']]],
-  ['trigger_5fturn_5fsignals_5f_5',['trigger_turn_signals_',['../classsimple__planner_1_1SimplePlannerNode.html#abcb064e42234e5398ac1f5e96b05719a',1,'simple_planner::SimplePlannerNode']]]
+  ['s_0',['s',['../structsimple__planner_1_1SimplePathPoint.html#a3861f5db666dfec0a6225687ae653eac',1,'simple_planner::SimplePathPoint']]],
+  ['safe_5fstop_5fdistance_5f_1',['safe_stop_distance_',['../classsimple__planner_1_1SimplePlannerNode.html#a169f66c5135ceb22dbe5f0b9fef2ab58',1,'simple_planner::SimplePlannerNode']]],
+  ['samples_2',['samples',['../structsimple__planner_1_1ObjectTrajectory.html#a187172aa63284d101ea2e85683a134b7',1,'simple_planner::ObjectTrajectory']]],
+  ['status_3',['status',['../structsimple__planner_1_1SimplePlannerNode_1_1DiagnosticStatus.html#aa5fb296ceebb84e24559d20f7a83e2c4',1,'simple_planner::SimplePlannerNode::DiagnosticStatus']]],
+  ['stop_5fat_5fend_4',['stop_at_end',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#a188c64d118e1ae3e99fbde3e3eab8366',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]],
+  ['sub_5fegodata_5f_5',['sub_egoData_',['../classsimple__planner_1_1SimplePlannerNode.html#a9417a89de644a028a2955557d6864c21',1,'simple_planner::SimplePlannerNode']]],
+  ['sub_5fgrid_5fmap_5f_6',['sub_grid_map_',['../classsimple__planner_1_1SimplePlannerNode.html#ad523e07536eaa936797efd430a41dac7',1,'simple_planner::SimplePlannerNode']]],
+  ['sub_5fobject_5flist_5f_7',['sub_object_list_',['../classsimple__planner_1_1SimplePlannerNode.html#a4c3698c48705a284156adbd7b2aa02ed',1,'simple_planner::SimplePlannerNode']]],
+  ['sub_5froute_5f_8',['sub_route_',['../classsimple__planner_1_1SimplePlannerNode.html#ab4fcf5bfd1db456f30534ae2db1792c1',1,'simple_planner::SimplePlannerNode']]],
+  ['suggested_5fturn_5fsignal_9',['suggested_turn_signal',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#a92dab1b432a08bc65d1aea0907c64dbf',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]]
 ];

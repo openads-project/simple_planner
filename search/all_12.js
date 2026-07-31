@@ -14,6 +14,7 @@ var searchData=
   ['transformpath_11',['transformPath',['../classsimple__planner_1_1SimplePlannerNode.html#ae00a22f99a0a85563c2d226ac6a3eb22',1,'simple_planner::SimplePlannerNode']]],
   ['trigger_5fturn_5fsignals_5f_12',['trigger_turn_signals_',['../classsimple__planner_1_1SimplePlannerNode.html#abcb064e42234e5398ac1f5e96b05719a',1,'simple_planner::SimplePlannerNode']]],
   ['trimpathbehindego_13',['trimPathBehindEgo',['../classsimple__planner_1_1SimplePlannerNode.html#a11171cf6f4dbf041a39cb781e1bc700f',1,'simple_planner::SimplePlannerNode']]],
-  ['tryregisterlanechange_14',['tryRegisterLaneChange',['../classsimple__planner_1_1SimplePlannerNode.html#a3ee3c4db3445239f607f99ae353bf6ca',1,'simple_planner::SimplePlannerNode']]],
-  ['turnsignaltostring_15',['turnSignalToString',['../classsimple__planner_1_1SimplePlannerNode.html#a959c95453bac3e9675c56b5da1c1f9d7',1,'simple_planner::SimplePlannerNode']]]
+  ['truncatepathats_14',['truncatePathAtS',['../classsimple__planner_1_1SimplePlannerNode.html#a813d102d21de49ceb0bfa168861c685a',1,'simple_planner::SimplePlannerNode']]],
+  ['tryregisterlanechange_15',['tryRegisterLaneChange',['../classsimple__planner_1_1SimplePlannerNode.html#a3ee3c4db3445239f607f99ae353bf6ca',1,'simple_planner::SimplePlannerNode']]],
+  ['turnsignaltostring_16',['turnSignalToString',['../classsimple__planner_1_1SimplePlannerNode.html#a959c95453bac3e9675c56b5da1c1f9d7',1,'simple_planner::SimplePlannerNode']]]
 ];

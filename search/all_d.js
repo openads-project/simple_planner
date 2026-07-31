@@ -23,5 +23,5 @@ var searchData=
   ['offset_5fto_5fstop_5fline_20',['offset_to_stop_line',['../structsimple__planner_1_1SimplePlannerNode_1_1FollowRoutePlan.html#a9b6e4e7b0b215e06bea1585f91d15a1d',1,'simple_planner::SimplePlannerNode::FollowRoutePlan']]],
   ['offset_5fto_5fstop_5fline_5f_21',['offset_to_stop_line_',['../classsimple__planner_1_1SimplePlannerNode.html#a4c06bfa82b83d347328d1f7eb0ddd901',1,'simple_planner::SimplePlannerNode']]],
   ['orientedbox2d_22',['OrientedBox2D',['../structsimple__planner_1_1OrientedBox2D.html',1,'simple_planner']]],
-  ['overlapswithegosafety_23',['overlapsWithEgoSafety',['../namespacesimple__planner.html#ae603df7bf8856a0e6abe110e981e3c0c',1,'simple_planner']]]
+  ['overlaps_23',['overlaps',['../namespacesimple__planner.html#a3e7bb27dcae8594f8ee189ebd6915504',1,'simple_planner']]]
 ];

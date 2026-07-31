@@ -3,9 +3,9 @@ var indexSectionsWithContent =
   0: "abcdefghiklmnopqrstuvwy⚖💻📝🙏🚀",
   1: "cdfiost",
   2: "st",
-  3: "orsu",
+  3: "gorsu",
   4: "abcdefghimoprstuw",
-  5: "abcdefhiklmnoprstvwy",
+  5: "abcdefghiklmnoprstvwy",
   6: "ip",
   7: "flns",
   8: "s"
