@@ -142,8 +142,10 @@ std::optional<double> SimplePlannerNode::findFirstGridMapStopS(const std_msgs::m
       const double yaw = wrap_angle_rad(std::atan2(tangent.y(), tangent.x()));
       const Eigen::Vector2d ego_center = reference_point + rotate(ego_center_offset, yaw);
       const OrientedBox2D ego_box = buildOrientedBox(ego_center, yaw, ego_data_.length, ego_data_.width);
+      const OrientedBox2D ego_safety_box =
+          expandBoxWithSafetyMargins(ego_box, grid_longitudinal_safety_distance_, grid_lateral_safety_distance_);
 
-      const auto expanded_corners = getBoxCorners(ego_box, grid_longitudinal_safety_distance_, grid_lateral_safety_distance_);
+      const auto expanded_corners = getBoxCorners(ego_safety_box);
       double min_local_x = std::numeric_limits<double>::max();
       double max_local_x = std::numeric_limits<double>::lowest();
       double min_local_y = std::numeric_limits<double>::max();
@@ -183,7 +185,7 @@ std::optional<double> SimplePlannerNode::findFirstGridMapStopS(const std_msgs::m
                                                     (static_cast<double>(cell_y) + 0.5) * resolution);
             const Eigen::Vector2d cell_center = grid_origin + rotate(cell_center_local, grid_origin_yaw);
             const OrientedBox2D cell_box = buildOrientedBox(cell_center, grid_origin_yaw, resolution, resolution);
-            if (overlapsWithEgoSafety(ego_box, cell_box, grid_longitudinal_safety_distance_, grid_lateral_safety_distance_)) {
+            if (overlaps(ego_safety_box, cell_box)) {
               return last_safe_s.value_or(ego_path_s);
             }
           }

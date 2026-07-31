@@ -137,21 +137,16 @@ inline OrientedBox2D expandBoxWithSafetyMargins(const OrientedBox2D& box,
 }
 
 /**
- * @brief Returns the corners of a box expanded by the given safety margins.
+ * @brief Returns the corners of an oriented box.
  *
- * @param[in] box Box to expand.
- * @param[in] longitudinal_safety_distance Longitudinal safety margin.
- * @param[in] lateral_safety_distance Lateral safety margin.
- * @return Expanded box corners.
+ * @param[in] box Box whose corners should be returned.
+ * @return Box corners.
  */
-inline std::array<Eigen::Vector2d, 4> getBoxCorners(const OrientedBox2D& box,
-                                                    double longitudinal_safety_distance,
-                                                    double lateral_safety_distance) {
-  const OrientedBox2D expanded_box = expandBoxWithSafetyMargins(box, longitudinal_safety_distance, lateral_safety_distance);
-  return {expanded_box.center + expanded_box.half_length * expanded_box.axis_x + expanded_box.half_width * expanded_box.axis_y,
-          expanded_box.center + expanded_box.half_length * expanded_box.axis_x - expanded_box.half_width * expanded_box.axis_y,
-          expanded_box.center - expanded_box.half_length * expanded_box.axis_x - expanded_box.half_width * expanded_box.axis_y,
-          expanded_box.center - expanded_box.half_length * expanded_box.axis_x + expanded_box.half_width * expanded_box.axis_y};
+inline std::array<Eigen::Vector2d, 4> getBoxCorners(const OrientedBox2D& box) {
+  return {box.center + box.half_length * box.axis_x + box.half_width * box.axis_y,
+          box.center + box.half_length * box.axis_x - box.half_width * box.axis_y,
+          box.center - box.half_length * box.axis_x - box.half_width * box.axis_y,
+          box.center - box.half_length * box.axis_x + box.half_width * box.axis_y};
 }
 
 /**
@@ -193,30 +188,22 @@ inline TimedBox2D interpolateTimedBox(const TimedBox2D& lhs, const TimedBox2D& r
 }
 
 /**
- * @brief Checks whether an object box overlaps the ego box including safety margins.
+ * @brief Checks whether two oriented boxes overlap.
  *
- * @param[in] ego_box Ego bounding box.
- * @param[in] object_box Object bounding box.
- * @param[in] longitudinal_safety_distance Longitudinal ego safety margin.
- * @param[in] lateral_safety_distance Lateral ego safety margin.
- * @return true if the boxes overlap after applying the safety margins.
+ * @param[in] first_box First bounding box.
+ * @param[in] second_box Second bounding box.
+ * @return true if the boxes overlap.
  * @return false if a separating axis exists.
  */
-inline bool overlapsWithEgoSafety(const OrientedBox2D& ego_box,
-                                  const OrientedBox2D& object_box,
-                                  double longitudinal_safety_distance,
-                                  double lateral_safety_distance) {
-  const OrientedBox2D expanded_ego_box =
-      expandBoxWithSafetyMargins(ego_box, longitudinal_safety_distance, lateral_safety_distance);
-  const Eigen::Vector2d center_delta = object_box.center - expanded_ego_box.center;
-  const std::array<Eigen::Vector2d, 4> axes = {expanded_ego_box.axis_x, expanded_ego_box.axis_y, object_box.axis_x,
-                                               object_box.axis_y};
+inline bool overlaps(const OrientedBox2D& first_box, const OrientedBox2D& second_box) {
+  const Eigen::Vector2d center_delta = second_box.center - first_box.center;
+  const std::array<Eigen::Vector2d, 4> axes = {first_box.axis_x, first_box.axis_y, second_box.axis_x, second_box.axis_y};
   for (const auto& axis : axes) {
-    const double ego_extent = expanded_ego_box.half_length * std::abs(axis.dot(expanded_ego_box.axis_x)) +
-                              expanded_ego_box.half_width * std::abs(axis.dot(expanded_ego_box.axis_y));
-    const double object_extent = object_box.half_length * std::abs(axis.dot(object_box.axis_x)) +
-                                 object_box.half_width * std::abs(axis.dot(object_box.axis_y));
-    if (std::abs(axis.dot(center_delta)) > ego_extent + object_extent + 1e-6) {
+    const double first_extent = first_box.half_length * std::abs(axis.dot(first_box.axis_x)) +
+                                first_box.half_width * std::abs(axis.dot(first_box.axis_y));
+    const double second_extent = second_box.half_length * std::abs(axis.dot(second_box.axis_x)) +
+                                 second_box.half_width * std::abs(axis.dot(second_box.axis_y));
+    if (std::abs(axis.dot(center_delta)) > first_extent + second_extent + 1e-6) {
       return false;
     }
   }

@@ -183,14 +183,15 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
       const double ego_t =
           segment_start_t + (segment_end_t - segment_start_t) * static_cast<double>(step) / static_cast<double>(steps);
       const OrientedBox2D ego_box = ego_box_at(ego_t);
+      const OrientedBox2D ego_safety_box =
+          expandBoxWithSafetyMargins(ego_box, object_longitudinal_safety_distance_, object_lateral_safety_distance_);
 
       for (const auto& object_trajectory : object_trajectories) {
         if (object_trajectory.samples.empty()) continue;
 
         if (object_trajectory.is_static) {
           const auto& object_sample = object_trajectory.samples.front();
-          if (overlapsWithEgoSafety(ego_box, object_sample.box, object_longitudinal_safety_distance_,
-                                    object_lateral_safety_distance_)) {
+          if (overlaps(ego_safety_box, object_sample.box)) {
             return ConflictSample{object_trajectory.id, ego_box, object_sample.box};
           }
           continue;
@@ -213,8 +214,7 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
             continue;
           }
 
-          if (overlapsWithEgoSafety(ego_box, timed_object_sample.box, object_longitudinal_safety_distance_,
-                                    object_lateral_safety_distance_)) {
+          if (overlaps(ego_safety_box, timed_object_sample.box)) {
             return ConflictSample{object_trajectory.id, ego_box, timed_object_sample.box};
           }
         }
