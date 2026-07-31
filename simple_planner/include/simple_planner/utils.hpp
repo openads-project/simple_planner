@@ -124,16 +124,29 @@ rcl_interfaces::msg::SetParametersResult SimplePlannerNode::parametersCallback(c
   return result;
 }
 
+bool SimplePlannerNode::requiresTransform(const std_msgs::msg::Header& source_header,
+                                          const std_msgs::msg::Header& target_header) {
+  return source_header.frame_id != target_header.frame_id || source_header.stamp.sec != target_header.stamp.sec ||
+         source_header.stamp.nanosec != target_header.stamp.nanosec;
+}
+
 /**
  * @brief Transforms a simple path into the requested target frame and timestamp.
  *
  * @param[in] path Path to transform.
  * @param[in] target_header Target frame and timestamp.
- * @return Transformed path, or the original path if the transform fails.
+ * @return Transformed path, or an empty path in the target frame if the transform fails.
  */
 SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header) {
   SimplePath transformed_path;
   transformed_path.header = target_header;
+
+  if (path.points.empty()) {
+    return transformed_path;
+  }
+  if (!requiresTransform(path.header, target_header)) {
+    return path;
+  }
 
   geometry_msgs::msg::TransformStamped tf;
   try {
@@ -151,8 +164,7 @@ SimplePath SimplePlannerNode::transformPath(const SimplePath& path, const std_ms
       transformed_path.points.push_back(transformed_point);
     }
   } catch (tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(), "Could not transform path: %s. Reusing old path.", ex.what());
-    return path;
+    RCLCPP_WARN(this->get_logger(), "Could not transform path: %s. Returning an empty path.", ex.what());
   }
 
   return transformed_path;

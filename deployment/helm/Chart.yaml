@@ -1,0 +1,9 @@
+apiVersion: v2
+name: simple-planner
+version: 1.3.0
+appVersion: 1.3.0
+description: ROS 2 Reference Trajectory Planning for Automated Driving
+dependencies:
+  - repository: oci://ghcr.io/openads-project/openads-helm
+    name: openadservice
+    version: 1.0.0

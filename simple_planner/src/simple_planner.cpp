@@ -30,6 +30,8 @@ namespace simple_planner {
  *
  */
 SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
+  this->declareAndLoadParameter("vehicle_frame_id", vehicle_frame_id_,
+                                "Frame ID of local vehicle frame in which the trajectory is planned");
   this->declareAndLoadParameter("trajectory_frame_id", trajectory_frame_id_, "Frame ID of published reference trajectory");
   this->declareAndLoadParameter("fixed_over_time_frame_id", fixed_over_time_frame_id_,
                                 "Frame ID of frame that is fixed over time for finding temporal transforms");
@@ -490,7 +492,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
 
   trajectory_planning_msgs::msg::Trajectory tra;
   tra.header.stamp = stamp;
-  tra.header.frame_id = trajectory_frame_id_;
+  tra.header.frame_id = vehicle_frame_id_;
 
   if (state != PlannerState::FollowRoute) {
     resetObjectState(tra.header);
@@ -516,6 +518,15 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
     }
     case PlannerState::NoPublish:
       throw std::runtime_error("createTrajectory called for non-publish state");
+  }
+
+  if (tra.header.frame_id != trajectory_frame_id_) {
+    try {
+      tra = tf2_buffer_->transform(tra, trajectory_frame_id_, tf2::durationFromSec(1.0));
+    } catch (tf2::TransformException& ex) {
+      throw std::runtime_error("Transformation into output frame '" + trajectory_frame_id_ +
+                               "' is not available: " + std::string(ex.what()));
+    }
   }
 
   rclcpp::Time end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
@@ -597,19 +608,20 @@ SimplePath SimplePlannerNode::buildSafeStopPath(const std_msgs::msg::Header& tar
 SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_msgs::msg::Header& target_header) {
   RCLCPP_DEBUG(this->get_logger(), "Default case: route is up to date, creating path from route.");
 
-  geometry_msgs::msg::TransformStamped tf;
-  try {
-    tf = tf2_buffer_->lookupTransform(target_header.frame_id, target_header.stamp, route_.header.frame_id, route_.header.stamp,
-                                      fixed_over_time_frame_id_, rclcpp::Duration::from_seconds(1.0));
-  } catch (tf2::TransformException& ex) {
-    std::string msg = "Transformation is not available: " + std::string(ex.what()) + ".";
-    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
-    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-  }
-
-  route_planning_msgs::msg::Route tf_route;
-  tf2::doTransform(route_, tf_route, tf);
   FollowRoutePlan route_plan;
+  route_plan.path.header = target_header;
+  route_planning_msgs::msg::Route tf_route = route_;
+  if (requiresTransform(route_.header, target_header)) {
+    try {
+      tf_route = tf2_buffer_->transform(route_, target_header.frame_id, tf2_ros::fromMsg(target_header.stamp),
+                                        fixed_over_time_frame_id_, tf2::durationFromSec(1.0));
+    } catch (tf2::TransformException& ex) {
+      std::string msg = "Route transformation is not available: " + std::string(ex.what()) + ".";
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+      RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
+      return route_plan;
+    }
+  }
   route_plan.path.header = tf_route.header;
 
   std::map<uint64_t, uint64_t> lane_change_indices_map;
@@ -1184,7 +1196,7 @@ void SimplePlannerNode::publishTimerCallback() {
   if (planner_state == PlannerState::NoPublish) {
     std_msgs::msg::Header marker_header;
     marker_header.stamp = stamp;
-    marker_header.frame_id = trajectory_frame_id_;
+    marker_header.frame_id = vehicle_frame_id_;
     clearObjectInteractionMarkers(marker_header);
     return;
   }

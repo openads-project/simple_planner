@@ -2,6 +2,7 @@
   ros__parameters:
 
     #### general parameters
+    vehicle_frame_id: base_link     # Frame ID of local vehicle frame (trajectory is planned in this frame)
     trajectory_frame_id: base_link  # Frame ID of output trajectory
     fixed_over_time_frame_id: map   # Frame ID of frame that is fixed over time for finding temporal transforms
     frequency: 10.0

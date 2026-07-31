@@ -30,6 +30,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_route_planning_msgs/tf2_route_planning_msgs.hpp>
+#include <tf2_trajectory_planning_msgs/tf2_trajectory_planning_msgs.hpp>
 
 #include <trajectory_planning_msgs/msg/trajectory.hpp>
 #include <trajectory_planning_msgs_utils/trajectory_access.hpp>
@@ -255,15 +256,15 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Builds the initial safe-stop path for the current cycle.
    *
-   * @param[in] target_header Output header for the generated safe-stop path.
-   * @return SimplePath Safe-stop path in trajectory frame.
+   * @param[in] target_header Planning header for the generated safe-stop path.
+   * @return SimplePath Safe-stop path in vehicle frame.
    */
   SimplePath buildSafeStopPath(const std_msgs::msg::Header& target_header);
 
   /**
    * @brief Builds the complete route-following plan including stop and turn information.
    *
-   * @param[in] target_header Output header for the generated route plan.
+   * @param[in] target_header Vehicle-frame planning header for the generated route plan.
    * @return FollowRoutePlan Planned route path including stop and turn information.
    */
   FollowRoutePlan buildRoutePlan(const std_msgs::msg::Header& target_header);
@@ -279,7 +280,7 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Applies trajectory-based object conflict constraints to a follow-route plan.
    *
-   * The object list is transformed into trajectory frame and checked against the
+   * The object list is transformed into vehicle frame and checked against the
    * already planned ego trajectory. If conflicts are detected, the path is
    * resampled repeatedly with a lower speed cap until it is conflict-free or
    * the speed cap reaches zero.
@@ -314,12 +315,12 @@ class SimplePlannerNode : public rclcpp::Node {
                                               const std::vector<SimplePathPoint>& base_path_points);
 
   /**
-   * @brief Reduces the perceived object list (in trajectory frame) to timed bounding-box trajectories.
+   * @brief Reduces the perceived object list (in vehicle frame) to timed bounding-box trajectories.
    *
    * Static objects (without usable prediction) become a single-sample trajectory; otherwise the
    * predictions above the probability threshold (or the most likely one) are sampled.
    *
-   * @param[in] tf_object_list Object list transformed into trajectory frame.
+   * @param[in] tf_object_list Object list transformed into vehicle frame.
    * @param[in] stamp Current planning timestamp used to compute relative sample times.
    * @return Timed bounding-box trajectories for all relevant objects.
    */
@@ -346,7 +347,7 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Appends route-derived path points and stop metadata for the follow-route case.
    *
-   * @param[in] tf_route Route transformed into trajectory frame.
+   * @param[in] tf_route Route transformed into vehicle frame.
    * @param[in,out] route_plan Mutable route planning result to extend.
    * @param[out] lane_change_indices_map Output lane-change windows to be merged later.
    */
@@ -357,7 +358,7 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Detects and stores the start/end window of a lane change.
    *
-   * @param[in] tf_route Route transformed into trajectory frame.
+   * @param[in] tf_route Route transformed into vehicle frame.
    * @param[in] route_element_idx Index of the current route element.
    * @param[out] lane_change_indices_map Output map of lane-change route indices.
    * @param[in,out] suggested_turn_signal Turn signal selected for the current route plan.
@@ -372,7 +373,7 @@ class SimplePlannerNode : public rclcpp::Node {
   /**
    * @brief Updates stop-at-end and stop-line offset state for traffic-light regulatory elements.
    *
-   * @param[in] tf_route Route transformed into trajectory frame.
+   * @param[in] tf_route Route transformed into vehicle frame.
    * @param[in] route_element_idx Index of the current route element.
    * @param[in] suggested_lane Suggested lane element of the current route element.
    * @param[in] simple_path_point Current path point candidate.
@@ -395,7 +396,7 @@ class SimplePlannerNode : public rclcpp::Node {
    * `tf_route` is still needed to reconstruct the lane geometry for the
    * interpolated lane-change segments.
    *
-   * @param[in] tf_route Route transformed into trajectory frame and used to derive lane-change geometry.
+   * @param[in] tf_route Route transformed into vehicle frame and used to derive lane-change geometry.
    * @param[in] route_points Base route points before lane-change insertion.
    * @param[in] lane_change_indices_map Lane-change windows gathered during route processing.
    * @return std::vector<SimplePathPoint> Path points with lane changes inserted.
@@ -412,7 +413,7 @@ class SimplePlannerNode : public rclcpp::Node {
   void applyIndicatorRequest(uint8_t suggested_turn_signal);
 
   /**
-   * @brief Removes path points that lie behind the ego vehicle in trajectory frame.
+   * @brief Removes path points that lie behind the ego vehicle in vehicle frame.
    *
    * @param[in,out] path Path to be trimmed in-place.
    */
@@ -448,7 +449,7 @@ class SimplePlannerNode : public rclcpp::Node {
    *
    * @param[in] start_idx Route element index where the lane change starts.
    * @param[in] turn_idx Route element index that indicates the lane-change turn.
-   * @param[in] route Route in trajectory frame.
+   * @param[in] route Route in vehicle frame.
    * @return Lane-change path points, or an empty vector if the indices are invalid.
    */
   std::vector<SimplePathPoint> generateLaneChangePath(size_t start_idx,
@@ -484,11 +485,24 @@ class SimplePlannerNode : public rclcpp::Node {
   SimplePath calculateSafeStopAlongRoute(const SimplePath& path, const double safe_stop_distance);
 
   /**
+   * @brief Checks whether a transform between two stamped frames is required.
+   *
+   * A transform is required if either the frame IDs or timestamps differ. The
+   * timestamp comparison ensures that temporal transforms are still applied
+   * when source and target use the same moving frame.
+   *
+   * @param[in] source_header Header of the source data.
+   * @param[in] target_header Requested target frame and timestamp.
+   * @return true if a spatial or temporal transform is required.
+   */
+  static bool requiresTransform(const std_msgs::msg::Header& source_header, const std_msgs::msg::Header& target_header);
+
+  /**
    * @brief Transforms a simple path into the requested target frame and timestamp.
    *
    * @param[in] path Path to transform.
    * @param[in] target_header Target frame and timestamp.
-   * @return Transformed path, or the original path if the transform fails.
+   * @return Transformed path, or an empty path in the target frame if the transform fails.
    */
   SimplePath transformPath(const SimplePath& path, const std_msgs::msg::Header& target_header);
 
@@ -547,6 +561,7 @@ class SimplePlannerNode : public rclcpp::Node {
   OnSetParametersCallbackHandle::SharedPtr parameters_callback_;
 
   // Parameters
+  std::string vehicle_frame_id_ = "base_link";
   std::string trajectory_frame_id_ = "base_link";
   std::string fixed_over_time_frame_id_ = "map";
   double freq_ = 10.0;

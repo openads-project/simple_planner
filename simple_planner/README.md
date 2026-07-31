@@ -38,6 +38,7 @@ flowchart LR
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
+| `vehicle_frame_id` | `string` | `"base_link"` | Frame ID of local vehicle frame in which the trajectory is planned |
 | `trajectory_frame_id` | `string` | `"base_link"` | Frame ID of published reference trajectory |
 | `fixed_over_time_frame_id` | `string` | `"map"` | Frame ID of frame that is fixed over time for finding temporal transforms |
 | `frequency` | `float` | `10.0` | Frequency of reference planning cycle (Hz) |

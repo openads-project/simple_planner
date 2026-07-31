@@ -214,7 +214,7 @@ inline bool overlaps(const OrientedBox2D& first_box, const OrientedBox2D& second
 /**
  * @brief Builds a timed bounding-box sample for a single object state.
  *
- * @param[in] state Object state in the trajectory frame.
+ * @param[in] state Object state in the vehicle frame.
  * @param[in] fallback_header Header used if the state has no own stamp.
  * @param[in] stamp Planning stamp used as relative time reference.
  * @param[in] length Object length.
