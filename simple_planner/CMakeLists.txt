@@ -8,6 +8,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(perception_msgs REQUIRED)
 find_package(perception_msgs_utils REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -28,6 +30,7 @@ set(TARGET_NAME simple_planner_node)
 
 add_executable(${TARGET_NAME}
   src/simple_planner.cpp
+  src/grid_map_handling.cpp
   src/object_handling.cpp
 )
 
@@ -41,6 +44,8 @@ target_compile_features(${TARGET_NAME} PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(${TARGET_NAME}
   diagnostic_msgs
   diagnostic_updater
+  geometry_msgs
+  nav_msgs
   perception_msgs
   perception_msgs_utils
   rclcpp
@@ -48,6 +53,7 @@ ament_target_dependencies(${TARGET_NAME}
   route_planning_msgs_utils
   std_msgs
   std_srvs
+  tf2
   tf2_perception_msgs
   tf2_route_planning_msgs
   tf2_trajectory_planning_msgs

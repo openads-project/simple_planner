@@ -13,6 +13,8 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
+#include <nav_msgs/msg/occupancy_grid.hpp>
+
 #include <perception_msgs/msg/ego_data.hpp>
 #include <perception_msgs/msg/object_list.hpp>
 #include <perception_msgs_utils/object_access.hpp>
@@ -157,14 +159,33 @@ class SimplePlannerNode : public rclcpp::Node {
    */
   void setup();
 
+  /**
+   * @brief Stores the latest ego data message.
+   * 
+   * @param msg Latest ego data message.
+   */
   void egoDataCallback(const perception_msgs::msg::EgoData::UniquePtr msg);
+
   /**
    * @brief Stores the latest perceived object list including object predictions.
    *
    * @param msg Latest object list message.
    */
   void objectListCallback(const perception_msgs::msg::ObjectList::UniquePtr msg);
+
+  /**
+   * @brief Stores the latest route message and extracts the route path.
+   *
+   * @param msg Latest route message.
+   */
   void routeCallback(const route_planning_msgs::msg::Route::UniquePtr msg);
+
+  /**
+   * @brief Stores the latest occupancy grid map message.
+   *
+   * @param msg Latest occupancy grid map message.
+   */
+  void gridMapCallback(const nav_msgs::msg::OccupancyGrid::UniquePtr msg);
 
   void publishTimerCallback();
 
@@ -249,6 +270,14 @@ class SimplePlannerNode : public rclcpp::Node {
   FollowRoutePlan buildRoutePlan(const std_msgs::msg::Header& target_header);
 
   /**
+   * @brief Checks whether a fresh, structurally valid grid map is currently available.
+   *
+   * @param[in] stamp Current planning timestamp.
+   * @return true if grid-map planning is possible.
+   */
+  bool hasValidGridMap(const rclcpp::Time& stamp) const;
+
+  /**
    * @brief Applies trajectory-based object conflict constraints to a follow-route plan.
    *
    * The object list is transformed into vehicle frame and checked against the
@@ -263,6 +292,27 @@ class SimplePlannerNode : public rclcpp::Node {
   void applyObjectConstraints(const std_msgs::msg::Header& target_header,
                               const std::vector<SimplePathPoint>& base_path_points,
                               FollowRoutePlan& route_plan);
+
+  /**
+   * @brief Applies occupancy-grid-based stop constraints to the base route path.
+   *
+   * @param[in] target_header Current planning header propagated from the timer callback.
+   * @param[in,out] base_path_points Route path before time-based resampling.
+   * @param[in,out] route_plan Mutable route planning result to be constrained by the grid map.
+   */
+  void applyGridMapConstraints(const std_msgs::msg::Header& target_header,
+                               std::vector<SimplePathPoint>& base_path_points,
+                               FollowRoutePlan& route_plan);
+
+  /**
+   * @brief Finds the last safe grid-map sample before the first blocked pose.
+   *
+   * @param[in] target_header Current planning header propagated from the timer callback.
+   * @param[in] base_path_points Route path before time-based resampling.
+   * @return Safe path coordinate at which to stop if a blocked pose is found.
+   */
+  std::optional<double> findFirstGridMapStopS(const std_msgs::msg::Header& target_header,
+                                              const std::vector<SimplePathPoint>& base_path_points);
 
   /**
    * @brief Reduces the perceived object list (in vehicle frame) to timed bounding-box trajectories.
@@ -368,6 +418,17 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in,out] path Path to be trimmed in-place.
    */
   static void trimPathBehindEgo(SimplePath& path);
+
+  /**
+   * @brief Returns a path ending exactly at the requested accumulated path coordinate.
+   *
+   * If `stop_s` lies between two path points, the final point is linearly interpolated.
+   *
+   * @param[in] path Input path with accumulated `s` values.
+   * @param[in] stop_s Accumulated path coordinate of the new endpoint.
+   * @return Truncated path including an endpoint at `stop_s`.
+   */
+  static std::vector<SimplePathPoint> truncatePathAtS(const std::vector<SimplePathPoint>& path, double stop_s);
 
   /**
    * @brief Resamples a path into trajectory time steps and applies optional stopping behavior.
@@ -479,6 +540,7 @@ class SimplePlannerNode : public rclcpp::Node {
   rclcpp::Subscription<perception_msgs::msg::EgoData>::SharedPtr sub_egoData_;
   rclcpp::Subscription<perception_msgs::msg::ObjectList>::SharedPtr sub_object_list_;
   rclcpp::Subscription<route_planning_msgs::msg::Route>::SharedPtr sub_route_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_grid_map_;
 
   rclcpp::Publisher<trajectory_planning_msgs::msg::Trajectory>::SharedPtr pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_interaction_marker_pub_;
@@ -506,6 +568,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double route_timeout_ = 1.0;
   double ego_data_timeout_ = 1.0;
   double object_timeout_ = 1.0;
+  double grid_map_timeout_ = 1.0;
   double trajectory_horizon_ = 10.0;
   int n_states_ = 51;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
@@ -513,6 +576,11 @@ class SimplePlannerNode : public rclcpp::Node {
   double a_decel_ = -0.5;
   double a_max_decel_ = -1.0;
   bool trigger_turn_signals_ = true;
+  bool consider_grid_map_ = false;
+  int grid_occupied_threshold_ = 50;
+  bool consider_out_of_grid_ = false;
+  double grid_longitudinal_safety_distance_ = 1.5;
+  double grid_lateral_safety_distance_ = 0.0;
   bool consider_traffic_lights_ = true;
   double offset_to_stop_line_ = 0.0;
   double ignore_stop_line_threshold_ = 0.5;
@@ -534,10 +602,12 @@ class SimplePlannerNode : public rclcpp::Node {
   perception_msgs::msg::EgoData ego_data_;
   perception_msgs::msg::ObjectList object_list_;
   route_planning_msgs::msg::Route route_;
+  nav_msgs::msg::OccupancyGrid grid_map_;
 
   bool ego_data_init_ = false;
   bool object_list_init_ = false;
   bool route_init_ = false;
+  bool grid_map_init_ = false;
   std::optional<double> safe_stop_distance_;
   std::optional<double> last_object_speed_cap_;
   SimplePath latest_path_;
@@ -566,6 +636,9 @@ class SimplePlannerNode : public rclcpp::Node {
 
   std::unique_ptr<diagnostic_updater::TopicDiagnostic> route_topic_diagnostic_;
   TopicDiagnosticConfig route_topic_diagnostic_config_{18.18, 22.22, 0.0, 0.005};
+
+  std::unique_ptr<diagnostic_updater::TopicDiagnostic> grid_map_topic_diagnostic_;
+  TopicDiagnosticConfig grid_map_topic_diagnostic_config_{9.09, 11.11, 0.0, 0.01};
 
   std::unique_ptr<diagnostic_updater::DiagnosedPublisher<trajectory_planning_msgs::msg::Trajectory>> diagnosed_publisher_;
   TopicDiagnosticConfig diagnosed_publisher_config_{9.09, 11.11, 0.0, 0.01};
