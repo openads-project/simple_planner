@@ -55,16 +55,16 @@ flowchart LR
 | `consider_grid_map` | `bool` | `false` | True: planner will consider grid map; false: planner will ignore grid map |
 | `grid_occupied_threshold` | `int` | `50` | Minimum occupancy value that is considered as blocked within the grid map |
 | `consider_out_of_grid` | `bool` | `false` | True: path points falling outside the grid map are treated as blocked; false: points outside the grid map are treated as free to drive |
-| `grid_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal clearance between ego box and occupied grid cells for collision checks (m) |
-| `grid_lateral_safety_distance` | `float` | `0.0` | Lateral clearance between ego box and occupied grid cells for collision checks (m) |
+| `grid_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal ego-box margin for occupied-cell collision checks; negative values shrink the box (m) |
+| `grid_lateral_safety_distance` | `float` | `0.0` | Lateral ego-box margin for occupied-cell collision checks; negative values shrink the box (m) |
 | `consider_traffic_lights` | `bool` | `true` | True: planner will consider traffic lights; false: planner will ignore traffic lights |
 | `offset_to_stop_line` | `float` | `0.0` | Additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
 | `ignore_stop_line_threshold` | `float` | `0.5` | A stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
 | `consider_future_states` | `bool` | `false` | True: trajectory will consider forecast of traffic light states; false: trajectory will only consider current traffic light state |
 | `consider_objects` | `bool` | `true` | True: planner will consider perceived objects on the route; false: planner will ignore objects |
 | `min_prediction_prob` | `float` | `0.0` | Minimum probability for considering an object prediction branch |
-| `object_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal clearance of the ego box for object conflict detection (m) |
-| `object_lateral_safety_distance` | `float` | `0.0` | Lateral clearance of the ego box for object conflict detection (m) |
+| `object_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal ego-box margin for object conflict detection; negative values shrink the box (m) |
+| `object_lateral_safety_distance` | `float` | `0.0` | Lateral ego-box margin for object conflict detection; negative values shrink the box (m) |
 | `object_interaction_time_window` | `float` | `0.5` | Maximum time offset for counting a spatial overlap as interaction (s) |
 | `object_velocity_reduction_step` | `float` | `0.1` | Velocity decrement per object-avoidance iteration (m/s) |
 | `object_velocity_release_step` | `float` | `0.5` | Maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |

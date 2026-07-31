@@ -129,10 +129,11 @@ inline OrientedBox2D expandBoxWithSafetyMargins(const OrientedBox2D& box,
                                                 double longitudinal_safety_distance,
                                                 double lateral_safety_distance) {
   OrientedBox2D expanded_box = box;
-  const double longitudinal_margin = std::max(longitudinal_safety_distance, 0.0);
+  const double longitudinal_margin = std::max(longitudinal_safety_distance, -2.0 * box.half_length);
+  const double lateral_margin = std::max(lateral_safety_distance, -box.half_width);
   expanded_box.center += 0.5 * longitudinal_margin * box.axis_x;
   expanded_box.half_length += 0.5 * longitudinal_margin;
-  expanded_box.half_width += std::max(lateral_safety_distance, 0.0);
+  expanded_box.half_width += lateral_margin;
   return expanded_box;
 }
 

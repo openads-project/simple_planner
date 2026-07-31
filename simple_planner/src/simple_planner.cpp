@@ -63,11 +63,12 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "True: path points falling outside the grid map are treated as blocked; false: points outside "
                                 "the grid map are treated as free to drive");
   this->declareAndLoadParameter("grid_longitudinal_safety_distance", grid_longitudinal_safety_distance_,
-                                "Longitudinal clearance between ego box and occupied grid cells for collision checks (m)", true,
-                                false, false, 0.0, 20.0, 0.1);
+                                "Longitudinal ego-box margin for occupied-cell collision checks; negative values shrink the box "
+                                "(m)",
+                                true, false, false, -20.0, 20.0, 0.1);
   this->declareAndLoadParameter("grid_lateral_safety_distance", grid_lateral_safety_distance_,
-                                "Lateral clearance between ego box and occupied grid cells for collision checks (m)", true, false,
-                                false, 0.0, 10.0, 0.1);
+                                "Lateral ego-box margin for occupied-cell collision checks; negative values shrink the box (m)",
+                                true, false, false, -10.0, 10.0, 0.1);
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_,
                                 "True: planner will consider traffic lights; false: planner will ignore traffic lights");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
@@ -84,11 +85,11 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
                                 "Minimum probability for considering an object prediction branch");
   this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
-                                "Longitudinal clearance of the ego box for object conflict detection (m)", true, false, false,
-                                0.0, 20.0, 0.1);
+                                "Longitudinal ego-box margin for object conflict detection; negative values shrink the box (m)",
+                                true, false, false, -20.0, 20.0, 0.1);
   this->declareAndLoadParameter("object_lateral_safety_distance", object_lateral_safety_distance_,
-                                "Lateral clearance of the ego box for object conflict detection (m)", true, false, false, 0.0,
-                                10.0, 0.1);
+                                "Lateral ego-box margin for object conflict detection; negative values shrink the box (m)", true,
+                                false, false, -10.0, 10.0, 0.1);
   this->declareAndLoadParameter("object_interaction_time_window", object_interaction_time_window_,
                                 "Maximum time offset for counting a spatial overlap as interaction (s)");
   this->declareAndLoadParameter("object_velocity_reduction_step", object_velocity_reduction_step_,
