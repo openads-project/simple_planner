@@ -1153,7 +1153,10 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       } else {
         v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_decel_ * (s - brake_point), 0.0));  // case 2: deceleration (v(s))
         ds = 0.5 * a_decel_ * std::pow(dt_, 2) + v * dt_;                                 // case 2: deceleration
-        if (ds < 0.0) ds = path.back().s - s;  // only add rest of route instead of driving backwards
+        if (ds < 0.0) {
+          v = 0.0;
+          ds = 0.0;
+        }
       }
     }
 
