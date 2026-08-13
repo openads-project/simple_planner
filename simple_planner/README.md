@@ -63,7 +63,7 @@ flowchart LR
 | `consider_yield_signs` | `bool` | `true` | True: planner will consider yield signs; false: planner will ignore yield signs |
 | `offset_to_stop_line` | `float` | `0.0` | Additional distance to stop in front of a regulatory-element stop line (m) (default: 0.0 -> stops with front of vehicle at stop line) |
 | `ignore_stop_line_threshold` | `float` | `0.5` | A stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
-| `consider_future_states` | `bool` | `false` | True: trajectory will consider forecast states of traffic lights, stop signs, and yield signs; false: trajectory will only consider current states |
+| `consider_future_states` | `bool` | `false` | True: trajectory will consider forecast states of supported regulatory elements; false: trajectory will only consider their current state |
 | `consider_objects` | `bool` | `true` | True: planner will consider perceived objects on the route; false: planner will ignore objects |
 | `min_prediction_prob` | `float` | `0.0` | Minimum probability for considering an object prediction branch |
 | `object_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal ego-box margin for object conflict detection; negative values shrink the box (m) |
