@@ -73,15 +73,19 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 true, false, false, -10.0, 10.0, 0.1);
   this->declareAndLoadParameter("consider_traffic_lights", consider_traffic_lights_,
                                 "True: planner will consider traffic lights; false: planner will ignore traffic lights");
+  this->declareAndLoadParameter("consider_stop_signs", consider_stop_signs_,
+                                "True: planner will consider stop signs; false: planner will ignore stop signs");
+  this->declareAndLoadParameter("consider_yield_signs", consider_yield_signs_,
+                                "True: planner will consider yield signs; false: planner will ignore yield signs");
   this->declareAndLoadParameter("offset_to_stop_line", offset_to_stop_line_,
-                                "Additional distance to stop in front of a stop line (m) (default: 0.0 -> stops with "
-                                "front of vehicle at stop line)");
+                                "Additional distance to stop in front of a regulatory-element stop line (m) (default: "
+                                "0.0 -> stops with front of vehicle at stop line)");
   this->declareAndLoadParameter(
       "ignore_stop_line_threshold", ignore_stop_line_threshold_,
       "A stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m)");
   this->declareAndLoadParameter("consider_future_states", consider_future_states_,
-                                "True: trajectory will consider forecast of traffic light states; false: trajectory will only "
-                                "consider current traffic light state");
+                                "True: trajectory will consider forecast states of supported regulatory elements; false: "
+                                "trajectory will only consider their current state");
   this->declareAndLoadParameter("consider_objects", consider_objects_,
                                 "True: planner will consider perceived objects on the route; false: planner will ignore objects");
   this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
@@ -482,7 +486,7 @@ bool SimplePlannerNode::isMessageOutdated(const std_msgs::msg::Header& header, d
  * @brief Main function of this node. Creates a reference trajectory based on the current route, vehicle state, and planning parameters.
  *
  * This function generates a trajectory message by processing the current route, transforming it to the appropriate frame,
- * handling special cases (such as route timeouts or empty routes), and considering traffic lights and lane changes.
+ * handling special cases (such as route timeouts or empty routes), and considering regulatory elements and lane changes.
  * The resulting trajectory is resampled over time and trimmed to fit the configured number of states.
  *
  * @return trajectory_planning_msgs::msg::Trajectory The generated trajectory message.
@@ -690,10 +694,9 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
       break;
     }
 
-    if (consider_traffic_lights_) {
-      updateForTrafficLights(tf_route, j, suggested_lane, simple_path_point, t_total, route_plan.stop_at_end,
-                             route_plan.offset_to_stop_line);
-      if (route_plan.stop_at_end) route_plan.reason_to_stop = "Traffic light indicates stop";
+    if (const auto stop_reason = updateForRegulatoryElements(tf_route, j, suggested_lane, simple_path_point, t_total,
+                                                             route_plan.stop_at_end, route_plan.offset_to_stop_line)) {
+      route_plan.reason_to_stop = *stop_reason;
     }
 
     route_plan.path.points.push_back(simple_path_point);
@@ -797,24 +800,46 @@ bool SimplePlannerNode::tryRegisterLaneChange(const route_planning_msgs::msg::Ro
   return true;
 }
 
-void SimplePlannerNode::updateForTrafficLights(const route_planning_msgs::msg::Route& tf_route,
-                                               size_t route_element_idx,
-                                               const route_planning_msgs::msg::LaneElement& suggested_lane,
-                                               const SimplePathPoint& simple_path_point,
-                                               double t_total,
-                                               bool& stop_at_end,
-                                               double& offset_to_stop_line) {
+std::optional<std::string> SimplePlannerNode::updateForRegulatoryElements(
+    const route_planning_msgs::msg::Route& tf_route,
+    size_t route_element_idx,
+    const route_planning_msgs::msg::LaneElement& suggested_lane,
+    const SimplePathPoint& simple_path_point,
+    double t_total,
+    bool& stop_at_end,
+    double& offset_to_stop_line) {
   const auto& route_element = tf_route.route_elements[route_element_idx];
   const auto& reg_elems =
       route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
-  for (size_t k = 0; k < reg_elems.size(); ++k) {
-    if (reg_elems[k].type != route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT) {
-      continue;
+  for (const auto& reg_elem : reg_elems) {
+    std::string regelem_type;
+    std::string stop_reason;
+    switch (reg_elem.type) {
+      case route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT:
+        if (!consider_traffic_lights_) continue;
+        regelem_type = "Traffic light";
+        stop_reason = "Traffic light indicates stop";
+        break;
+      case route_planning_msgs::msg::RegulatoryElement::TYPE_STOP:
+        if (!consider_stop_signs_) continue;
+        regelem_type = "Stop sign";
+        stop_reason = "Stop sign restricts movement";
+        break;
+      case route_planning_msgs::msg::RegulatoryElement::TYPE_YIELD:
+        if (!consider_yield_signs_) continue;
+        regelem_type = "Yield sign";
+        stop_reason = "Yield sign restricts movement";
+        break;
+      default:
+        continue;
     }
-    if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED &&
-        !consider_future_states_) {
-      continue;
-    }
+
+    bool requires_stop = reg_elem.meta_value != route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED;
+    const bool has_known_movement_state =
+        reg_elem.meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED ||
+        reg_elem.meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_RESTRICTED;
+    const bool use_future_state = reg_elem.has_validity_stamp && consider_future_states_ && has_known_movement_state;
+    if (!requires_stop && !use_future_state) continue;
 
     offset_to_stop_line =
         offset_to_stop_line_ + ego_data_.length / 2.0 + ego_data_.state.reference_point.translation_to_geometric_center.x;
@@ -824,52 +849,45 @@ void SimplePlannerNode::updateForTrafficLights(const route_planning_msgs::msg::R
     }
     if (dt_offset_to_stop_line <= 0.0) {
       std::string msg = "Negative time difference 'dt_offset_to_stop_line' (" + std::to_string(dt_offset_to_stop_line) +
-                        " s) for traffic light at route element " + std::to_string(route_element_idx) +
+                        " s) for " + regelem_type + " at route element " + std::to_string(route_element_idx) +
                         ". Could lead to unexpected behavior.";
       setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
       RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     }
 
-    if (reg_elems[k].has_validity_stamp && consider_future_states_) {
-      double validity_duration =
-          rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
+    if (use_future_state) {
+      double validity_duration = rclcpp::Time(reg_elem.validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
       if (validity_duration < (t_total - dt_offset_to_stop_line)) {
-        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
-          stop_at_end = true;
-        } else {
-          continue;
-        }
-      } else {
-        if (reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED) {
-          continue;
-        } else {
-          stop_at_end = true;
-        }
+        requires_stop = reg_elem.meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED;
       }
-    } else {
-      stop_at_end = true;
     }
+    if (!requires_stop) continue;
 
     double distance_to_stop_point = tf_route.route_elements[route_element_idx].s -
                                     tf_route.route_elements[tf_route.current_route_element_idx].s - offset_to_stop_line;
     double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
     double min_distance_to_stop = -0.5 * std::pow(v_ego, 2) / a_max_decel_;
     if (distance_to_stop_point < 0.0 && std::abs(distance_to_stop_point) > ignore_stop_line_threshold_) {
-      std::string msg =
-          "Traffic light stop point is behind ego vehicle (distance to stop point: " + std::to_string(distance_to_stop_point) +
-          " m). Ignoring traffic light.";
+      std::string msg = regelem_type +
+                        " stop point is behind ego vehicle (distance to stop point: " + std::to_string(distance_to_stop_point) +
+                        " m). Ignoring regulatory element.";
       setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
       RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-      stop_at_end = false;
-    } else if ((distance_to_stop_point < min_distance_to_stop) && stop_at_end) {
-      std::string msg =
-          "Traffic light requires stop, but distance to stop point is smaller than minimum distance to stop. Ignoring traffic "
-          "light.";
-      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
-      RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-      stop_at_end = false;
+      continue;
     }
+    if (distance_to_stop_point < min_distance_to_stop) {
+      std::string msg = regelem_type +
+                        " requires stop, but distance to stop point is smaller than minimum distance to stop. Ignoring "
+                        "regulatory element.";
+      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+      RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
+      continue;
+    }
+
+    stop_at_end = true;
+    return stop_reason;
   }
+  return std::nullopt;
 }
 
 std::vector<SimplePathPoint> SimplePlannerNode::mergeLaneChangeSegments(

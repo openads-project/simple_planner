@@ -4,7 +4,7 @@
 
   <name>simple_planner</name>
   <version>1.4.0</version>
-  <description>Generates route-following reference trajectories with safe-stop, traffic-light, occupancy-grid, turn-signal, and object-aware speed handling.</description>
+  <description>Generates route-following reference trajectories with safe-stop, regulatory-element, occupancy-grid, turn-signal, and object-aware speed handling.</description>
 
   <maintainer email="jean-pierre.busch@ika.rwth-aachen.de">Jean-Pierre Busch</maintainer>
   <author email="jean-pierre.busch@ika.rwth-aachen.de">Jean-Pierre Busch</author>

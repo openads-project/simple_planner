@@ -18,7 +18,7 @@
 This repository provides a lightweight ROS 2 planner that combines route information, the current ego state, and optional environment information to periodically generate a reference trajectory. It is intended as a deterministic upstream reference planner for downstream trajectory optimization and control modules. Key features:
 - **Route following**: creates reference trajectories from route lane geometry and speed limits.
 - **Safe-stop behavior**: publishes standstill or safe-stop trajectories when required inputs are missing, outdated, or a stop is needed.
-- **Traffic-light handling**: stops at relevant traffic-light regulatory elements with configurable stop-line offsets and state prediction support.
+- **Regulatory-element handling**: stops at relevant traffic lights, stop signs, and yield signs with configurable stop-line offsets and state prediction support.
 - **Grid-map handling**: stops before occupied occupancy-grid cells when grid-map constraints are enabled.
 - **Lane changes and indicators**: inserts simple lane-change transitions and trigger turn-signal or hazard-light services based on route semantics.
 - **Object-aware speed handling**: checks perceived objects and predictions against the ego trajectory and applies a conservative speed cap when conflicts are detected.
@@ -99,7 +99,7 @@ Package and node interfaces are documented in the respective package READMEs lis
 
 | Package | Description |
 | --- | --- |
-| [simple_planner](simple_planner/README.md) | Generates route-following reference trajectories with safe-stop, traffic-light, occupancy-grid, turn-signal, and object-aware speed handling. |
+| [simple_planner](simple_planner/README.md) | Generates route-following reference trajectories with safe-stop, regulatory-element, occupancy-grid, turn-signal, and object-aware speed handling. |
 
 ## ⚖️ Licensing
 
