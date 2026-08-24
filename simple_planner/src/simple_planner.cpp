@@ -643,12 +643,24 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
 void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route& tf_route,
                                           FollowRoutePlan& route_plan,
                                           std::map<uint64_t, uint64_t>& lane_change_indices_map) {
+  if (tf_route.current_route_element_idx >= tf_route.route_elements.size()) {
+    RCLCPP_WARN(this->get_logger(), "Current route element index is outside the received local route");
+    return;
+  }
+
+  const bool destination_is_present = tf_route.destination_route_element_idx < tf_route.route_elements.size();
+  const size_t end_idx_exclusive = destination_is_present ? tf_route.destination_route_element_idx
+                                                          : tf_route.route_elements.size();
+  if (end_idx_exclusive <= tf_route.current_route_element_idx) {
+    RCLCPP_WARN(this->get_logger(), "Received local route contains no remaining route elements");
+    return;
+  }
+
   double t_total = 0.0;
-  RCLCPP_DEBUG(this->get_logger(), "Number of remaining route elements: %zu",
-               tf_route.destination_route_element_idx - tf_route.current_route_element_idx);
-  health_.key_value_pairs.insert(
-      {"RemainingRouteElements", std::to_string(tf_route.destination_route_element_idx - tf_route.current_route_element_idx)});
-  for (size_t j = tf_route.current_route_element_idx; j < tf_route.destination_route_element_idx; ++j) {
+  const size_t remaining_route_elements = end_idx_exclusive - tf_route.current_route_element_idx;
+  RCLCPP_DEBUG(this->get_logger(), "Number of remaining route elements: %zu", remaining_route_elements);
+  health_.key_value_pairs.insert({"RemainingRouteElements", std::to_string(remaining_route_elements)});
+  for (size_t j = tf_route.current_route_element_idx; j < end_idx_exclusive; ++j) {
     const auto& route_element = tf_route.route_elements[j];
     if (!route_element.is_enriched) {
       RCLCPP_DEBUG(this->get_logger(), "Route element %zu is not enriched. Skipping.", j);
@@ -660,21 +672,15 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
     simple_path_point.position =
         Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     simple_path_point.s = route_element.s;
-    simple_path_point.v = v_ref_;
-    if (v_ref_ < 0.0) {
-      simple_path_point.v = suggested_lane.speed_limit / 3.6;
-    }
+    simple_path_point.v = v_ref_ < 0.0 ? suggested_lane.speed_limit / 3.6 : v_ref_;
 
     if (!route_plan.path.points.empty()) {
-      double v_average = (route_plan.path.points.back().v + simple_path_point.v) / 2.0;
-      double dt = 0.0;
-      if (v_average != 0.0) {
-        dt = (simple_path_point.s - route_plan.path.points.back().s) / v_average;
-      }
+      const double v_average = (route_plan.path.points.back().v + simple_path_point.v) / 2.0;
+      const double dt = v_average != 0.0 ? (simple_path_point.s - route_plan.path.points.back().s) / v_average : 0.0;
       if (dt <= 0.0) {
-        std::string msg = "Negative time difference " + std::to_string(dt) +
-                          " between points at s=" + std::to_string(route_plan.path.points.back().s) +
-                          " and s=" + std::to_string(simple_path_point.s) + ". Could lead to unexpected behavior.";
+        const std::string msg = "Negative time difference " + std::to_string(dt) +
+                                " between points at s=" + std::to_string(route_plan.path.points.back().s) +
+                                " and s=" + std::to_string(simple_path_point.s) + ". Could lead to unexpected behavior.";
         setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
         RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
       }
@@ -697,8 +703,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
     }
 
     route_plan.path.points.push_back(simple_path_point);
-
-    if (j == tf_route.destination_route_element_idx - 1) {
+    if (destination_is_present && j + 1 == end_idx_exclusive) {
       SimplePathPoint destination_point;
       destination_point.position = Eigen::Vector2d(tf_route.destination.x, tf_route.destination.y);
       destination_point.s = simple_path_point.s + (destination_point.position - simple_path_point.position).norm();
@@ -710,6 +715,11 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
     if (route_plan.stop_at_end || t_total >= 2.0 * trajectory_horizon_) {
       break;
     }
+  }
+
+  if (!destination_is_present && !route_plan.stop_at_end && t_total < 2.0 * trajectory_horizon_) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "Local enriched route ends before the planner horizon; trajectory will end at its last element");
   }
 }
 
