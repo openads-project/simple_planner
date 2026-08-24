@@ -347,6 +347,11 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
     route_topic_diagnostic_->tick(msg->header.stamp);
   }
   route_ = *msg;
+  if (!route_.has_route_elements) {
+    RCLCPP_WARN(this->get_logger(), "Received reference-line-only Route on enriched route topic");
+    route_init_ = false;
+    return;
+  }
 
   if (!route_init_) {
     RCLCPP_INFO(this->get_logger(), "Received new route message, initialized global variable");
