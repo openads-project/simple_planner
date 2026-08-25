@@ -811,34 +811,30 @@ std::optional<std::string> SimplePlannerNode::updateForRegulatoryElements(
   const auto& route_element = tf_route.route_elements[route_element_idx];
   const auto& reg_elems =
       route_planning_msgs::route_access::getRegulatoryElementsOfLaneElement(suggested_lane, route_element.regulatory_elements);
-  for (const auto& reg_elem : reg_elems) {
+  for (size_t k = 0; k < reg_elems.size(); ++k) {
     std::string regelem_type;
-    std::string stop_reason;
-    switch (reg_elem.type) {
+    switch (reg_elems[k].type) {
       case route_planning_msgs::msg::RegulatoryElement::TYPE_TRAFFIC_LIGHT:
         if (!consider_traffic_lights_) continue;
         regelem_type = "Traffic light";
-        stop_reason = "Traffic light indicates stop";
         break;
       case route_planning_msgs::msg::RegulatoryElement::TYPE_STOP:
         if (!consider_stop_signs_) continue;
         regelem_type = "Stop sign";
-        stop_reason = "Stop sign restricts movement";
         break;
       case route_planning_msgs::msg::RegulatoryElement::TYPE_YIELD:
         if (!consider_yield_signs_) continue;
         regelem_type = "Yield sign";
-        stop_reason = "Yield sign restricts movement";
         break;
       default:
         continue;
     }
 
-    bool requires_stop = reg_elem.meta_value != route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED;
+    bool requires_stop = reg_elems[k].meta_value != route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED;
     const bool has_known_movement_state =
-        reg_elem.meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED ||
-        reg_elem.meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_RESTRICTED;
-    const bool use_future_state = reg_elem.has_validity_stamp && consider_future_states_ && has_known_movement_state;
+        reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED ||
+        reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_RESTRICTED;
+    const bool use_future_state = reg_elems[k].has_validity_stamp && consider_future_states_ && has_known_movement_state;
     if (!requires_stop && !use_future_state) continue;
 
     offset_to_stop_line =
@@ -856,9 +852,10 @@ std::optional<std::string> SimplePlannerNode::updateForRegulatoryElements(
     }
 
     if (use_future_state) {
-      double validity_duration = rclcpp::Time(reg_elem.validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
+      double validity_duration =
+          rclcpp::Time(reg_elems[k].validity_stamp).seconds() - rclcpp::Time(route_.header.stamp).seconds();
       if (validity_duration < (t_total - dt_offset_to_stop_line)) {
-        requires_stop = reg_elem.meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED;
+        requires_stop = reg_elems[k].meta_value == route_planning_msgs::msg::RegulatoryElement::META_VALUE_MOVEMENT_ALLOWED;
       }
     }
     if (!requires_stop) continue;
@@ -885,7 +882,7 @@ std::optional<std::string> SimplePlannerNode::updateForRegulatoryElements(
     }
 
     stop_at_end = true;
-    return stop_reason;
+    return regelem_type + " indicates stop";
   }
   return std::nullopt;
 }
