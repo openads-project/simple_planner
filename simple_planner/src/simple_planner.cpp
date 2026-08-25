@@ -348,7 +348,7 @@ void SimplePlannerNode::routeCallback(const route_planning_msgs::msg::Route::Uni
   }
   route_ = *msg;
   if (!route_.has_route_elements) {
-    RCLCPP_WARN(this->get_logger(), "Received reference-line-only Route on enriched route topic");
+    RCLCPP_WARN(this->get_logger(), "Received route without enriched route elements, ignoring");
     route_init_ = false;
     return;
   }
@@ -654,18 +654,18 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
   }
 
   const bool destination_is_present = tf_route.destination_route_element_idx < tf_route.route_elements.size();
-  const size_t end_idx_exclusive = destination_is_present ? tf_route.destination_route_element_idx
-                                                          : tf_route.route_elements.size();
-  if (end_idx_exclusive <= tf_route.current_route_element_idx) {
+  const size_t destination_or_route_end_idx =
+      destination_is_present ? tf_route.destination_route_element_idx : tf_route.route_elements.size();
+  if (destination_or_route_end_idx <= tf_route.current_route_element_idx) {
     RCLCPP_WARN(this->get_logger(), "Received local route contains no remaining route elements");
     return;
   }
 
   double t_total = 0.0;
-  const size_t remaining_route_elements = end_idx_exclusive - tf_route.current_route_element_idx;
+  const size_t remaining_route_elements = destination_or_route_end_idx - tf_route.current_route_element_idx;
   RCLCPP_DEBUG(this->get_logger(), "Number of remaining route elements: %zu", remaining_route_elements);
   health_.key_value_pairs.insert({"RemainingRouteElements", std::to_string(remaining_route_elements)});
-  for (size_t j = tf_route.current_route_element_idx; j < end_idx_exclusive; ++j) {
+  for (size_t j = tf_route.current_route_element_idx; j < destination_or_route_end_idx; ++j) {
     const auto& route_element = tf_route.route_elements[j];
     if (!route_element.is_enriched) {
       RCLCPP_DEBUG(this->get_logger(), "Route element %zu is not enriched. Skipping.", j);
@@ -708,7 +708,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
     }
 
     route_plan.path.points.push_back(simple_path_point);
-    if (destination_is_present && j + 1 == end_idx_exclusive) {
+    if (destination_is_present && j + 1 == destination_or_route_end_idx) {
       SimplePathPoint destination_point;
       destination_point.position = Eigen::Vector2d(tf_route.destination.x, tf_route.destination.y);
       destination_point.s = simple_path_point.s + (destination_point.position - simple_path_point.position).norm();
