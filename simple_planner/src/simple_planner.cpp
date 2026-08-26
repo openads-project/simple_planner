@@ -658,7 +658,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
   double t_total = 0.0;
   const size_t remaining_route_elements = destination_or_route_end_idx - tf_route.current_route_element_idx;
   RCLCPP_DEBUG(this->get_logger(), "Number of remaining route elements: %zu", remaining_route_elements);
-  health_.key_value_pairs.insert({"RemainingRouteElements", std::to_string(remaining_route_elements)});
+  health_.key_value_pairs.insert_or_assign("RemainingRouteElements", std::to_string(remaining_route_elements));
   for (size_t j = tf_route.current_route_element_idx; j < destination_or_route_end_idx; ++j) {
     const auto& route_element = tf_route.route_elements[j];
     if (!route_element.is_enriched) {
