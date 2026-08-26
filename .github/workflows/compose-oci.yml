@@ -13,5 +13,5 @@ on:
 
 jobs:
   compose-oci:
-    uses: openads-project/openads-dev-environment/.github/workflows/compose-oci.yml@main
+    uses: openads-project/openads-dev-environment/.github/workflows/compose-oci.yml@improve-deployment-ci
     secrets: inherit
