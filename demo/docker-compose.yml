@@ -11,7 +11,7 @@ services:
         route_topic:=/planning/lanelet2_route_planning/route
 
   lanelet2-route-planning:
-    image: ghcr.io/openads-project/lanelet2_route_planning:v1.2.0
+    image: ghcr.io/openads-project/lanelet2_route_planning:v2.0.0
     environment:
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
     command: |
@@ -20,7 +20,7 @@ services:
         ego_data_topic:=/localization/ego_data
 
   lanelet2-map-server:
-    image: ghcr.io/openads-project/lanelet2_map_server:v1.2.2
+    image: ghcr.io/openads-project/lanelet2_map_server:v1.2.3
     environment:
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
     command: |
