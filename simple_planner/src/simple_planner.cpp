@@ -643,7 +643,9 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
                                           FollowRoutePlan& route_plan,
                                           std::map<uint64_t, uint64_t>& lane_change_indices_map) {
   if (tf_route.current_route_element_idx >= tf_route.route_elements.size()) {
-    RCLCPP_WARN(this->get_logger(), "Current route element index is outside the received local route");
+    const std::string msg = "Current route element index is outside the received local route";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     return;
   }
 
@@ -651,7 +653,9 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
   const size_t destination_or_route_end_idx =
       destination_is_present ? tf_route.destination_route_element_idx : tf_route.route_elements.size();
   if (destination_or_route_end_idx <= tf_route.current_route_element_idx) {
-    RCLCPP_WARN(this->get_logger(), "Received local route contains no remaining route elements");
+    const std::string msg = "Received local route contains no remaining route elements";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
     return;
   }
 
@@ -717,8 +721,9 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
   }
 
   if (!destination_is_present && !route_plan.stop_at_end && t_total < 2.0 * trajectory_horizon_) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                         "Local enriched route ends before the planner horizon; trajectory will end at its last element");
+    const std::string msg = "Local enriched route ends before the planner horizon; trajectory will end at its last element";
+    setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
+    RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
   }
 }
 
