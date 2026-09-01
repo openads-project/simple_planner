@@ -38,7 +38,7 @@ services:
         "{header: {stamp: 'now', frame_id: 'map'}, state: {model_id: 1, continuous_state: [80.0, 90.0, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5708, 0.0, 0.0, 0.0], discrete_state: [0, 0, 0, 0]}, length: 4.0, width: 1.8, height: 1.5}"
 
   base-link-transform-publisher:
-    image: ghcr.io/openads-project/monitoring:v1.0.0
+    image: ghcr.io/openads-project/monitoring:v26.9.1
     environment:
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
     command: |
@@ -46,7 +46,7 @@ services:
         80.0 88.54 0.0 1.5708 0.0 0.0 map base_link
 
   rviz:
-    image: ghcr.io/openads-project/monitoring:v1.0.0
+    image: ghcr.io/openads-project/monitoring:v26.9.1
     environment:
       RMW_IMPLEMENTATION: rmw_fastrtps_cpp
       DISPLAY: ${DISPLAY}
