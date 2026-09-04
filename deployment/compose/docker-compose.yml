@@ -21,7 +21,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       USE_SIM_TIME: ${USE_SIM_TIME:-false}
       PARAMS: ${PARAMS:-/docker-ros/ws/install/simple_planner/share/simple_planner/config/params.yml}
-      TRACE: ${TRACE:-false}
+      ROS_TRACING: ${ROS_TRACING:-false}
     command:
       - /bin/bash
       - -ic
@@ -32,7 +32,7 @@ services:
           log_level:=$${LOG_LEVEL} \
           use_sim_time:=$${USE_SIM_TIME} \
           params:=$${PARAMS} \
-          trace:=$${TRACE} \
+          ros_tracing:=$${ROS_TRACING} \
           ego_data_topic:=$${EGO_DATA_TOPIC} \
           object_list_topic:=$${OBJECT_LIST_TOPIC} \
           route_topic:=$${ROUTE_TOPIC} \
