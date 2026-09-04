@@ -371,7 +371,7 @@ class SimplePlannerNode : public rclcpp::Node {
                              uint8_t& suggested_turn_signal);
 
   /**
-   * @brief Updates stop-at-end and stop-line offset state for traffic-light regulatory elements.
+   * @brief Updates stop-at-end and stop-line offset state for supported regulatory elements.
    *
    * @param[in] tf_route Route transformed into vehicle frame.
    * @param[in] route_element_idx Index of the current route element.
@@ -380,14 +380,15 @@ class SimplePlannerNode : public rclcpp::Node {
    * @param[in] t_total Accumulated travel time along the partial path.
    * @param[in,out] stop_at_end Whether the path should stop at its current end.
    * @param[in,out] offset_to_stop_line Effective offset used for braking towards the stop line.
+   * @return Stop reason when a regulatory element requires a valid stop, otherwise `std::nullopt`.
    */
-  void updateForTrafficLights(const route_planning_msgs::msg::Route& tf_route,
-                              size_t route_element_idx,
-                              const route_planning_msgs::msg::LaneElement& suggested_lane,
-                              const SimplePathPoint& simple_path_point,
-                              double t_total,
-                              bool& stop_at_end,
-                              double& offset_to_stop_line);
+  std::optional<std::string> updateForRegulatoryElements(const route_planning_msgs::msg::Route& tf_route,
+                                                         size_t route_element_idx,
+                                                         const route_planning_msgs::msg::LaneElement& suggested_lane,
+                                                         const SimplePathPoint& simple_path_point,
+                                                         double t_total,
+                                                         bool& stop_at_end,
+                                                         double& offset_to_stop_line);
 
   /**
    * @brief Merges interpolated lane-change segments into the base route path.
@@ -582,6 +583,8 @@ class SimplePlannerNode : public rclcpp::Node {
   double grid_longitudinal_safety_distance_ = 1.5;
   double grid_lateral_safety_distance_ = 0.0;
   bool consider_traffic_lights_ = true;
+  bool consider_stop_signs_ = true;
+  bool consider_yield_signs_ = true;
   double offset_to_stop_line_ = 0.0;
   double ignore_stop_line_threshold_ = 0.5;
   bool consider_future_states_ = false;
