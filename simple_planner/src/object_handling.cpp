@@ -267,11 +267,14 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     }
   }
 
-  // Ignore objects whose center is behind the ego vehicle (vehicle frame, +x ahead).
-  tf_object_list.objects.erase(
-      std::remove_if(tf_object_list.objects.begin(), tf_object_list.objects.end(),
-                     [](const auto& object) { return perception_msgs::object_access::getCenterPosition(object.state).x < 0.0; }),
-      tf_object_list.objects.end());
+  // Optionally ignore objects whose center is behind the ego vehicle (vehicle frame, +x ahead).
+  if (ignore_objects_behind_ego_) {
+    tf_object_list.objects.erase(std::remove_if(tf_object_list.objects.begin(), tf_object_list.objects.end(),
+                                                [](const auto& object) {
+                                                  return perception_msgs::object_access::getCenterPosition(object.state).x < 0.0;
+                                                }),
+                                 tf_object_list.objects.end());
+  }
 
   const std::vector<ObjectTrajectory> object_trajectories = buildObjectTrajectories(tf_object_list, stamp);
   if (object_trajectories.empty()) {

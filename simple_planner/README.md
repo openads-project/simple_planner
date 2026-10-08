@@ -76,6 +76,7 @@ flowchart LR
 | `ignore_stop_line_threshold` | `float` | `0.5` | A stop line will be ignored if the front of the vehicle has already passed the stop line by more than this threshold (m) |
 | `consider_future_states` | `bool` | `false` | True: trajectory will consider forecast states of supported regulatory elements; false: trajectory will only consider their current state |
 | `consider_objects` | `bool` | `true` | True: planner will consider perceived objects on the route; false: planner will ignore objects |
+| `ignore_objects_behind_ego` | `bool` | `true` | Exclude objects with reference-point x < 0 in vehicle_frame_id |
 | `min_prediction_prob` | `float` | `0.0` | Minimum probability for considering an object prediction branch |
 | `object_longitudinal_safety_distance` | `float` | `1.5` | Longitudinal ego-box margin for object conflict detection; negative values shrink the box (m) |
 | `object_lateral_safety_distance` | `float` | `0.0` | Lateral ego-box margin for object conflict detection; negative values shrink the box (m) |
