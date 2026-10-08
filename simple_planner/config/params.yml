@@ -36,6 +36,7 @@
 
     #### object parameters
     consider_objects: True          # true: planner will consider perceived objects on the route; false: planner will ignore objects
+    ignore_objects_behind_ego: True  # exclude objects with reference-point x < 0 in vehicle_frame_id
     object_timeout: 1.0             # time after which a received object list is considered invalid (s) (use -1 for no timeout)
     min_prediction_prob: 0.0        # minimum probability for considering an object prediction branch; otherwise the most likely one is used
     object_longitudinal_safety_distance: 1.5  # longitudinal ego-box margin; negative values shrink the box (m)

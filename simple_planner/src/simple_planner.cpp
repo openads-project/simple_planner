@@ -88,6 +88,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "trajectory will only consider their current state");
   this->declareAndLoadParameter("consider_objects", consider_objects_,
                                 "True: planner will consider perceived objects on the route; false: planner will ignore objects");
+  this->declareAndLoadParameter("ignore_objects_behind_ego", ignore_objects_behind_ego_,
+                                "Exclude objects with reference-point x < 0 in vehicle_frame_id");
   this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
                                 "Minimum probability for considering an object prediction branch");
   this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
