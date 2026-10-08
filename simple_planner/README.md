@@ -13,6 +13,9 @@ flowchart LR
     S1:::hidden -->|~/object_list| NODE
     S2:::hidden -->|~/route| NODE
     S3:::hidden -->|~/grid_map| NODE
+    NODE o--o|~/enable_left_turn_indicator| SC0:::hidden
+    NODE o--o|~/enable_right_turn_indicator| SC1:::hidden
+    NODE o--o|~/enable_hazard_lights| SC2:::hidden
     NODE -->|~/trajectory| P0:::hidden
     NODE -->|~/viz/object_interaction_markers| P1:::hidden
     classDef hidden display: none;
@@ -33,6 +36,14 @@ flowchart LR
 | --- | --- | --- |
 | `~/trajectory` | `trajectory_planning_msgs/msg/Trajectory` | Planned reference trajectory for the ego vehicle |
 | `~/viz/object_interaction_markers` | `visualization_msgs/msg/MarkerArray` | RViz markers for object-conflict positions during the speed-reduction loop |
+
+#### Service Clients
+
+| Service | Type | Description |
+| --- | --- | --- |
+| `~/enable_left_turn_indicator` | `std_srvs/srv/SetBool` | Request to enable the left turn indicator |
+| `~/enable_right_turn_indicator` | `std_srvs/srv/SetBool` | Request to enable the right turn indicator |
+| `~/enable_hazard_lights` | `std_srvs/srv/SetBool` | Request to enable the hazard lights |
 
 #### Parameters
 
