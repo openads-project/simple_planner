@@ -90,8 +90,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "True: planner will consider perceived objects on the route; false: planner will ignore objects");
   this->declareAndLoadParameter("ignore_objects_behind_ego", ignore_objects_behind_ego_,
                                 "Exclude objects with reference-point x < 0 in vehicle_frame_id");
-  this->declareAndLoadParameter("min_prediction_prob", min_prediction_prob_,
-                                "Minimum probability for considering an object prediction branch");
+  this->declareAndLoadParameter("min_prediction_probability", min_prediction_probability_,
+                                "Consider predictions with probability > this threshold; otherwise use the most likely one");
   this->declareAndLoadParameter("object_longitudinal_safety_distance", object_longitudinal_safety_distance_,
                                 "Longitudinal ego-box margin for object conflict detection; negative values shrink the box (m)",
                                 true, false, false, -20.0, 20.0, 0.1);
