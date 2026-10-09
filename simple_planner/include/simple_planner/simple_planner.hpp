@@ -590,7 +590,7 @@ class SimplePlannerNode : public rclcpp::Node {
   bool consider_future_states_ = false;
   bool consider_objects_ = true;
   bool ignore_objects_behind_ego_ = true;
-  double min_prediction_prob_ = 0.0;
+  double min_prediction_probability_ = 0.0;
   double object_longitudinal_safety_distance_ = 1.5;
   double object_lateral_safety_distance_ = 0.0;
   double object_interaction_time_window_ = 0.5;

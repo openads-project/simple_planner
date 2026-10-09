@@ -117,10 +117,10 @@ std::vector<ObjectTrajectory> SimplePlannerNode::buildObjectTrajectories(const p
       object_trajectories.push_back(trajectory);
     };
 
-    // Select all sufficiently likely predictions, or fall back to the single most likely one.
+    // Select predictions strictly above the probability threshold, or fall back to the single most likely one.
     std::vector<const perception_msgs::msg::ObjectStatePrediction*> selected_predictions;
     for (const auto& prediction : object.state_predictions) {
-      if (prediction.probability >= min_prediction_prob_) selected_predictions.push_back(&prediction);
+      if (prediction.probability > min_prediction_probability_) selected_predictions.push_back(&prediction);
     }
     if (selected_predictions.empty() && !object.state_predictions.empty()) {
       selected_predictions.push_back(
