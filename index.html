@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">simple_planner<span id="projectnumber">&#160;v1.4.0</span>
+   <div id="projectname">simple_planner<span id="projectnumber">&#160;v1.5.0</span>
    </div>
   </td>
  </tr>
@@ -108,7 +108,7 @@ $(function(){initNavTree('index.html',''); initResizable(true); });
 <p>This repository provides a lightweight ROS 2 planner that combines route information, the current ego state, and optional environment information to periodically generate a reference trajectory. It is intended as a deterministic upstream reference planner for downstream trajectory optimization and control modules. Key features:</p><ul>
 <li><b>Route following</b>: creates reference trajectories from route lane geometry and speed limits.</li>
 <li><b>Safe-stop behavior</b>: publishes standstill or safe-stop trajectories when required inputs are missing, outdated, or a stop is needed.</li>
-<li><b>Traffic-light handling</b>: stops at relevant traffic-light regulatory elements with configurable stop-line offsets and state prediction support.</li>
+<li><b>Regulatory-element handling</b>: stops at relevant traffic lights, stop signs, and yield signs with configurable stop-line offsets and state prediction support.</li>
 <li><b>Grid-map handling</b>: stops before occupied occupancy-grid cells when grid-map constraints are enabled.</li>
 <li><b>Lane changes and indicators</b>: inserts simple lane-change transitions and trigger turn-signal or hazard-light services based on route semantics.</li>
 <li><b>Object-aware speed handling</b>: checks perceived objects and predictions against the ego trajectory and applies a conservative speed cap when conflicts are detected.</li>
@@ -177,7 +177,7 @@ Run Tests</h2>
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Package   </th><th class="markdownTableHeadNone">Description    </th></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone">simple_planner   </td><td class="markdownTableBodyNone">Generates route-following reference trajectories with safe-stop, traffic-light, occupancy-grid, turn-signal, and object-aware speed handling.   </td></tr>
+<td class="markdownTableBodyNone">simple_planner   </td><td class="markdownTableBodyNone">Generates route-following reference trajectories with safe-stop, regulatory-element, occupancy-grid, turn-signal, and object-aware speed handling.   </td></tr>
 </table>
 <h1><a class="anchor" id="autotoc_md7"></a>
 ⚖️ Licensing</h1>
