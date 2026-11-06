@@ -21,7 +21,7 @@ This repository provides a lightweight ROS 2 planner that combines route informa
 - **Regulatory-element handling**: stops at relevant traffic lights, stop signs, and yield signs with configurable stop-line offsets and state prediction support.
 - **Grid-map handling**: stops before occupied occupancy-grid cells when grid-map constraints are enabled.
 - **Lane changes and indicators**: inserts simple lane-change transitions and trigger turn-signal or hazard-light services based on route semantics.
-- **Object-aware speed handling**: checks perceived objects and predictions against the ego trajectory and applies a conservative speed cap when conflicts are detected.
+- **Object-aware speed handling**: checks perceived objects and predictions against the ego trajectory; stops in front of conflicts with slow objects like at a stop line and applies a conservative speed cap for conflicts with all other objects.
 
 The ROS 2 node uses the open-source ROS 2 message definitions [perception_interfaces](https://github.com/ika-rwth-aachen/perception_interfaces) and [planning_interfaces](https://github.com/ika-rwth-aachen/planning_interfaces) for its in- and outputs, making it straightforward to integrate into larger ROS 2-based automated-driving systems.
 

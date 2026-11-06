@@ -63,6 +63,7 @@ flowchart LR
 | `v_ref` | `float` | `13.89` | Reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route. |
 | `a_decel` | `float` | `-0.5` | Desired deceleration for braking at stop points, e.g. stop lines, objects, or end of route (m/s^2) - must be < 0.0 |
 | `a_max_decel` | `float` | `-1.0` | Maximum deceleration for safe-stop trajectories and for stop points that cannot be reached with a_decel (m/s^2) - must be < 0.0 and <= a_decel |
+| `stop_move_up_distance` | `float` | `2.0` | While standing, keep standing until the next stop point is more than this distance ahead (m) |
 | `trigger_turn_signals` | `bool` | `true` | True: planner will trigger turn signal services; false: planner will not request turn signals |
 | `consider_grid_map` | `bool` | `false` | True: planner will consider grid map; false: planner will ignore grid map |
 | `grid_occupied_threshold` | `int` | `50` | Minimum occupancy value that is considered as blocked within the grid map |
@@ -84,9 +85,8 @@ flowchart LR
 | `object_velocity_reduction_step` | `float` | `0.1` | Velocity decrement per object-avoidance iteration (m/s) |
 | `object_velocity_release_step` | `float` | `0.5` | Maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
 | `object_standstill_speed_threshold` | `float` | `0.2` | Publish standstill if object avoidance would require a lower speed cap (m/s) |
-| `object_velocity_release_hysteresis_cycles` | `int` | `3` | Number of conflict-free cycles required before increasing the remembered object speed cap or releasing a locked object stop point |
+| `object_velocity_release_hysteresis_cycles` | `int` | `3` | Number of conflict-free cycles required before increasing the remembered object speed cap |
 | `object_stop_speed_threshold` | `float` | `2.0` | Objects slower than this (or without prediction) get a stop point in front of the conflict instead of a speed cap (m/s) |
-| `object_stop_move_up_distance` | `float` | `2.0` | Distance by which an object stop point candidate must move away before the locked stop point is moved up (m) |
 | `publish_object_interaction_markers` | `bool` | `true` | Publish RViz markers for the conflict explaining the final speed reduction |
 | `lane_change_distance_factor` | `float` | `6.0` | Factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `float` | `2.0` | Factor multiplied with the vehicle length to determine the minimum lane change distance (m) |

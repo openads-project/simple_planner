@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <iterator>
 #include <optional>
 #include <string>
 #include <utility>
@@ -25,8 +24,6 @@ namespace simple_planner {
 void SimplePlannerNode::resetObjectState(const std_msgs::msg::Header& target_header) {
   last_object_speed_cap_.reset();
   object_conflict_free_cycles_ = 0;
-  object_stop_point_.reset();
-  object_stop_free_cycles_ = 0;
   clearObjectInteractionMarkers(target_header);
 }
 
@@ -268,56 +265,15 @@ double SimplePlannerNode::objectStopS(const std::vector<SimplePathPoint>& ego_pa
   return stop_s;
 }
 
-std::optional<double> SimplePlannerNode::updateObjectStopLock(const std_msgs::msg::Header& target_header,
-                                                              const std::vector<SimplePathPoint>& base_path_points,
-                                                              const std::optional<double>& candidate_stop_s) {
-  // Carry the locked stop point over from the previous planning frame via the fixed frame.
-  std::optional<double> locked_stop_s;
-  if (object_stop_point_.has_value()) {
-    try {
-      object_stop_point_ =
-          tf2_buffer_->transform(*object_stop_point_, target_header.frame_id, tf2_ros::fromMsg(target_header.stamp),
-                                 fixed_over_time_frame_id_, tf2::durationFromSec(1.0));
-      locked_stop_s =
-          projectOntoPathS(base_path_points, Eigen::Vector2d(object_stop_point_->point.x, object_stop_point_->point.y));
-    } catch (tf2::TransformException& ex) {
-      const std::string msg = "Locked object stop point transformation is not available: " + std::string(ex.what());
-      setHealth(diagnostic_msgs::msg::DiagnosticStatus::WARN, msg, health_.key_value_pairs);
-      RCLCPP_WARN(this->get_logger(), "%s", msg.c_str());
-      object_stop_point_.reset();
-    }
-  }
-
-  if (candidate_stop_s.has_value()) {
-    object_stop_free_cycles_ = 0;
-    const bool is_closer = !locked_stop_s.has_value() || *candidate_stop_s <= *locked_stop_s;
-    const bool moved_away = locked_stop_s.has_value() && *candidate_stop_s > *locked_stop_s + object_stop_move_up_distance_;
-    if (is_closer || moved_away) {
-      const Eigen::Vector2d position = truncatePathAtS(base_path_points, *candidate_stop_s).back().position;
-      object_stop_point_ = geometry_msgs::msg::PointStamped();
-      object_stop_point_->header = target_header;
-      object_stop_point_->point.x = position.x();
-      object_stop_point_->point.y = position.y();
-      locked_stop_s = candidate_stop_s;
-    }
-  } else if (locked_stop_s.has_value() && ++object_stop_free_cycles_ >= object_velocity_release_hysteresis_cycles_) {
-    object_stop_point_.reset();
-    locked_stop_s.reset();
-  }
-  return locked_stop_s;
-}
-
 void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& target_header,
                                                std::vector<SimplePathPoint>& base_path_points,
                                                FollowRoutePlan& route_plan) {
   if (!consider_objects_ || !object_list_init_ || route_plan.path.points.empty() || base_path_points.empty()) {
-    // Only forget the remembered speed cap / stop point if objects are disabled / never received; otherwise keep
-    // them across cycles in which the route path happens to be empty.
+    // Only forget the remembered speed cap if objects are disabled / never received; otherwise keep it
+    // across cycles in which the route path happens to be empty.
     if (!consider_objects_ || !object_list_init_) {
       last_object_speed_cap_.reset();
       object_conflict_free_cycles_ = 0;
-      object_stop_point_.reset();
-      object_stop_free_cycles_ = 0;
     }
     clearObjectInteractionMarkers(target_header);
     return;
@@ -371,35 +327,6 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
   for (const auto& point : route_plan.path.points) initial_speed_cap = std::max(initial_speed_cap, point.v);
   if (v_ref_ >= 0.0) initial_speed_cap = std::max(initial_speed_cap, v_ref_);
 
-  // Truncates the base path at an object stop point like at a stop line, unless an existing stop (stop line, grid map,
-  // previous object stop point) is already closer. Returns whether the stop point was applied.
-  std::optional<ConflictSample> stop_conflict;
-  auto apply_object_stop = [&](double stop_s, const std::optional<ConflictSample>& conflict) {
-    const double current_stop_s = base_path_points.back().s - (route_plan.stop_at_end ? route_plan.offset_to_stop_line : 0.0);
-    if (stop_s >= current_stop_s - 1e-6) return false;
-    base_path_points = truncatePathAtS(base_path_points, stop_s);
-    route_plan.stop_at_end = true;
-    route_plan.offset_to_stop_line = 0.0;
-    route_plan.reason_to_stop = "Object stop point";
-    stop_conflict = conflict;
-    return true;
-  };
-
-  // Stop point candidate: first conflict of a slow object with the route-speed path, locked against detection noise.
-  std::vector<ObjectTrajectory> stop_relevant_trajectories;
-  std::copy_if(object_trajectories.begin(), object_trajectories.end(), std::back_inserter(stop_relevant_trajectories),
-               [](const auto& trajectory) { return trajectory.stop_relevant; });
-  const std::optional<ConflictSample> candidate_conflict = firstConflict(route_plan.path.points, stop_relevant_trajectories);
-  std::optional<double> candidate_stop_s;
-  if (candidate_conflict.has_value()) {
-    candidate_stop_s =
-        objectStopS(route_plan.path.points, stop_relevant_trajectories[candidate_conflict->trajectory_idx], *candidate_conflict);
-  }
-  const std::optional<double> locked_stop_s = updateObjectStopLock(target_header, base_path_points, candidate_stop_s);
-  if (locked_stop_s.has_value() && apply_object_stop(*locked_stop_s, candidate_conflict)) {
-    route_plan.path.points = resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
-  }
-
   // Start the search at the remembered cap and allow a single release step upwards once enough
   // conflict-free cycles have passed (hysteresis to avoid oscillating between speeds).
   const rclcpp::Time iteration_begin = rclcpp::Clock(RCL_SYSTEM_TIME).now();
@@ -412,21 +339,30 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     attempted_release = search_start_speed_cap > remembered_speed_cap + 1e-6;
   }
 
-  // Step the speed cap down until the resampled path is conflict-free (or reaches zero).
+  // Step the speed cap down until the resampled path is conflict-free (or reaches zero). Conflicts with slow objects
+  // instead truncate the path at a stop point in front of the conflict, like at a stop line.
   double speed_cap = search_start_speed_cap;
   size_t iteration_count = 0;
   std::optional<ConflictSample> last_conflict;
+  std::optional<ConflictSample> stop_conflict;
   while (speed_cap > 0.0) {
     ++iteration_count;
     std::vector<SimplePathPoint> candidate_path =
         resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line, &speed_cap);
     const std::optional<ConflictSample> conflict = firstConflict(candidate_path, object_trajectories);
     if (conflict.has_value()) {
-      // Slow object: stop in front of the conflict instead (terminates, as an applied stop point only moves closer).
       const ObjectTrajectory& conflict_trajectory = object_trajectories[conflict->trajectory_idx];
-      if (conflict_trajectory.stop_relevant &&
-          apply_object_stop(objectStopS(candidate_path, conflict_trajectory, *conflict), conflict)) {
-        continue;
+      if (conflict_trajectory.stop_relevant) {
+        // Only if no existing stop (stop line, grid map, object) is closer; terminates, as the stop point only moves closer.
+        const double stop_s = objectStopS(candidate_path, conflict_trajectory, *conflict);
+        if (stop_s < base_path_points.back().s - (route_plan.stop_at_end ? route_plan.offset_to_stop_line : 0.0) - 1e-6) {
+          base_path_points = truncatePathAtS(base_path_points, stop_s);
+          route_plan.stop_at_end = true;
+          route_plan.offset_to_stop_line = 0.0;
+          route_plan.reason_to_stop = "Object stop point";
+          stop_conflict = conflict;
+          continue;
+        }
       }
       last_conflict = conflict;
       speed_cap = std::max(speed_cap - object_velocity_reduction_step_, 0.0);

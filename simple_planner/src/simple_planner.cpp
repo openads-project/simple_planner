@@ -57,6 +57,9 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter("a_max_decel", a_max_decel_,
                                 "Maximum deceleration for safe-stop trajectories and for stop points that cannot be reached "
                                 "with a_decel (m/s^2) - must be < 0.0 and <= a_decel");
+  this->declareAndLoadParameter("stop_move_up_distance", stop_move_up_distance_,
+                                "While standing, keep standing until the next stop point is more than this distance ahead (m)",
+                                true, false, false, 0.0, 100.0, 0.1);
   this->declareAndLoadParameter("trigger_turn_signals", trigger_turn_signals_,
                                 "True: planner will trigger turn signal services; false: planner will not request turn signals");
   this->declareAndLoadParameter("consider_grid_map", consider_grid_map_,
@@ -112,17 +115,12 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "Publish standstill if object avoidance would require a lower speed cap (m/s)", true, false,
                                 false, 0.0, 10.0, 1e-3);
   this->declareAndLoadParameter("object_velocity_release_hysteresis_cycles", object_velocity_release_hysteresis_cycles_,
-                                "Number of conflict-free cycles required before increasing the remembered object speed cap "
-                                "or releasing a locked object stop point",
-                                true, false, false, 0.0, 100.0, 1.0);
+                                "Number of conflict-free cycles required before increasing the remembered object speed cap", true,
+                                false, false, 0.0, 100.0, 1.0);
   this->declareAndLoadParameter("object_stop_speed_threshold", object_stop_speed_threshold_,
                                 "Objects slower than this (or without prediction) get a stop point in front of the conflict "
                                 "instead of a speed cap (m/s)",
                                 true, false, false, 0.0, 40.0, 0.1);
-  this->declareAndLoadParameter("object_stop_move_up_distance", object_stop_move_up_distance_,
-                                "Distance by which an object stop point candidate must move away before the locked stop point "
-                                "is moved up (m)",
-                                true, false, false, 0.0, 100.0, 0.1);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
                                 "Publish RViz markers for the conflict explaining the final speed reduction");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
@@ -530,7 +528,7 @@ trajectory_planning_msgs::msg::Trajectory SimplePlannerNode::createTrajectory(Pl
     case PlannerState::FollowRoute: {
       safe_stop_distance_.reset();
       FollowRoutePlan route_plan = buildRoutePlan(tra.header);
-      tra = buildTrajectoryFromSimplePath(route_plan.path);
+      tra = route_plan.hold_standstill ? buildStandstillTrajectory(tra.header) : buildTrajectoryFromSimplePath(route_plan.path);
       break;
     }
     case PlannerState::NoPublish:
@@ -649,6 +647,16 @@ SimplePlannerNode::FollowRoutePlan SimplePlannerNode::buildRoutePlan(const std_m
   applyGridMapConstraints(target_header, merged_points, route_plan);
   route_plan.path.points = resamplePath(merged_points, route_plan.stop_at_end, route_plan.offset_to_stop_line);
   applyObjectConstraints(target_header, merged_points, route_plan);
+  // While standing in front of a stop point (of any kind), keep standing until it is more than the move-up distance ahead.
+  // The planning frame is ego-centered, so the ego reference point is its origin.
+  if (route_plan.stop_at_end && !merged_points.empty() && perception_msgs::object_access::getStandstill(ego_data_)) {
+    const double distance_to_stop_point =
+        merged_points.back().s - route_plan.offset_to_stop_line - projectOntoPathS(merged_points, Eigen::Vector2d::Zero());
+    route_plan.hold_standstill = distance_to_stop_point <= stop_move_up_distance_;
+    if (route_plan.hold_standstill) {
+      health_.key_value_pairs.insert_or_assign("PlannerState", plannerStateToString(PlannerState::Standstill));
+    }
+  }
   if (trigger_turn_signals_) {
     applyIndicatorRequest(route_plan.suggested_turn_signal);
     health_.key_value_pairs.insert_or_assign("SuggestedTurnSignal", turnSignalToString(route_plan.suggested_turn_signal));
