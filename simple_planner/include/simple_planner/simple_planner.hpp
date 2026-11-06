@@ -10,6 +10,7 @@
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <diagnostic_updater/publisher.hpp>
 
+#include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
@@ -281,17 +282,48 @@ class SimplePlannerNode : public rclcpp::Node {
    * @brief Applies trajectory-based object conflict constraints to a follow-route plan.
    *
    * The object list is transformed into vehicle frame and checked against the
-   * already planned ego trajectory. If conflicts are detected, the path is
-   * resampled repeatedly with a lower speed cap until it is conflict-free or
-   * the speed cap reaches zero.
+   * already planned ego trajectory. Conflicts with slow objects (see `ObjectTrajectory::stop_relevant`)
+   * truncate the path at a stop point in front of the conflict, which is locked against detection noise.
+   * For all other conflicts, the path is resampled repeatedly with a lower speed cap until it is
+   * conflict-free or the speed cap reaches zero.
    *
    * @param target_header Current planning header propagated from the timer callback.
-   * @param base_path_points Route path before time-based resampling.
+   * @param base_path_points Route path before time-based resampling; truncated at an object stop point.
    * @param route_plan Mutable route plan to be constrained by dynamic objects.
    */
   void applyObjectConstraints(const std_msgs::msg::Header& target_header,
-                              const std::vector<SimplePathPoint>& base_path_points,
+                              std::vector<SimplePathPoint>& base_path_points,
                               FollowRoutePlan& route_plan);
+
+  /**
+   * @brief Determines the stop point in front of a conflict with a slow object.
+   *
+   * Walks back from the conflict along the object's prediction (down to its current state) as long as the object
+   * blocks the ego path before the stop point: stops behind a lead vehicle, but in front of a crossing object.
+   *
+   * @param[in] ego_path Time-equidistant ego path in which the conflict was found.
+   * @param[in] object_trajectory Conflicting object trajectory.
+   * @param[in] conflict Conflict of the ego path with the object trajectory.
+   * @return Ego path coordinate of the stop point.
+   */
+  double objectStopS(const std::vector<SimplePathPoint>& ego_path,
+                     const ObjectTrajectory& object_trajectory,
+                     const ConflictSample& conflict) const;
+
+  /**
+   * @brief Updates the locked object stop point with this cycle's candidate.
+   *
+   * A closer candidate is locked immediately, a farther one only beyond the move-up distance; without candidate,
+   * the lock is released after the release hysteresis cycles.
+   *
+   * @param[in] target_header Current planning header.
+   * @param[in] base_path_points Route path before time-based resampling.
+   * @param[in] candidate_stop_s Stop point candidate of this cycle as path coordinate.
+   * @return Path coordinate of the locked stop point, if any.
+   */
+  std::optional<double> updateObjectStopLock(const std_msgs::msg::Header& target_header,
+                                             const std::vector<SimplePathPoint>& base_path_points,
+                                             const std::optional<double>& candidate_stop_s);
 
   /**
    * @brief Applies occupancy-grid-based stop constraints to the base route path.
@@ -338,7 +370,7 @@ class SimplePlannerNode : public rclcpp::Node {
                                               const std::vector<ObjectTrajectory>& object_trajectories) const;
 
   /**
-   * @brief Resets the remembered object speed cap / hysteresis state and clears interaction markers.
+   * @brief Resets the remembered object speed cap, the locked object stop point and clears interaction markers.
    *
    * @param[in] target_header Header used for the cleared marker messages.
    */
@@ -430,6 +462,15 @@ class SimplePlannerNode : public rclcpp::Node {
    * @return Truncated path including an endpoint at `stop_s`.
    */
   static std::vector<SimplePathPoint> truncatePathAtS(const std::vector<SimplePathPoint>& path, double stop_s);
+
+  /**
+   * @brief Projects a position onto a path and returns the accumulated path coordinate of the closest path point.
+   *
+   * @param[in] path Input path with accumulated `s` values.
+   * @param[in] position Position in the path frame.
+   * @return Path coordinate of the projection (`s` of the first point if the path has no valid segment).
+   */
+  static double projectOntoPathS(const std::vector<SimplePathPoint>& path, const Eigen::Vector2d& position);
 
   /**
    * @brief Resamples a path into trajectory time steps and applies optional stopping behavior.
@@ -598,6 +639,8 @@ class SimplePlannerNode : public rclcpp::Node {
   double object_velocity_release_step_ = 0.5;
   double object_standstill_speed_threshold_ = 0.2;
   int object_velocity_release_hysteresis_cycles_ = 3;
+  double object_stop_speed_threshold_ = 2.0;
+  double object_stop_move_up_distance_ = 2.0;
   bool publish_object_interaction_markers_ = true;
 
   double lane_change_distance_factor_ = 6.0;
@@ -616,6 +659,8 @@ class SimplePlannerNode : public rclcpp::Node {
   std::optional<double> last_object_speed_cap_;
   SimplePath latest_path_;
   int object_conflict_free_cycles_ = 0;
+  std::optional<geometry_msgs::msg::PointStamped> object_stop_point_;  // locked object stop point (last planning frame)
+  int object_stop_free_cycles_ = 0;                                    // consecutive cycles without object stop point candidate
   double dt_;
 
   /**

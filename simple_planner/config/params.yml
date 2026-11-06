@@ -14,8 +14,8 @@
     n_states: 51                    # number of states in published trajectory
     interpolation_type: 1           # 0: linear, 1: cubic spline
     v_ref: 5.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
-    a_decel: -0.5                   # desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0
-    a_max_decel: -1.0               # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel
+    a_decel: -0.5                   # desired deceleration for braking at stop points, e.g. stop lines, objects, or end of route (m/s^2) - must be < 0.0
+    a_max_decel: -1.0               # maximum deceleration for safe-stop trajectories and for stop points that cannot be reached with a_decel (m/s^2) - must be < 0.0 and <= a_decel
     trigger_turn_signals: True      # true: planner will request turn signal services; false: planner will not trigger turn signals
 
     #### grid map parameters
@@ -45,7 +45,9 @@
     object_velocity_reduction_step: 0.1  # velocity decrement per object-avoidance iteration (m/s)
     object_velocity_release_step: 0.5  # maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s)
     object_standstill_speed_threshold: 0.2  # publish standstill if object avoidance would require a lower speed cap (m/s)
-    object_velocity_release_hysteresis_cycles: 3  # number of conflict-free cycles required before increasing the remembered object speed cap
+    object_velocity_release_hysteresis_cycles: 3  # number of conflict-free cycles required before increasing the remembered object speed cap or releasing a locked object stop point
+    object_stop_speed_threshold: 2.0  # objects slower than this (or without prediction) get a stop point in front of the conflict instead of a speed cap (m/s)
+    object_stop_move_up_distance: 2.0  # distance by which an object stop point candidate must move away before the locked stop point is moved up (m)
     publish_object_interaction_markers: True  # publish RViz markers for the conflict explaining the final speed reduction
 
     #### lane change parameters

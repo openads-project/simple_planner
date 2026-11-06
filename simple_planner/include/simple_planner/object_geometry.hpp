@@ -46,6 +46,8 @@ struct TimedBox2D {
 struct ObjectTrajectory {
   uint64_t id = 0;
   bool is_static = false;
+  bool stop_relevant = false;  // slow object: conflicts lead to a stop point instead of a speed cap
+  TimedBox2D current;          // box of the current object state
   std::vector<TimedBox2D> samples;
 };
 
@@ -54,6 +56,9 @@ struct ConflictSample {
   uint64_t object_id = 0;
   OrientedBox2D ego_box;
   OrientedBox2D object_box;
+  size_t trajectory_idx = 0;  // index of the conflicting object trajectory
+  double t = 0.0;             // relative ego time of the conflict
+  double last_safe_s = 0.0;   // ego path coordinate of the last conflict-free sample before the conflict
 };
 
 /**

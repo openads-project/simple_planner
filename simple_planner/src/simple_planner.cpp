@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <thread>
@@ -51,9 +52,11 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
       "v_ref", v_ref_,
       "Reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
   this->declareAndLoadParameter("a_decel", a_decel_,
-                                "Desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
+                                "Desired deceleration for braking at stop points, e.g. stop lines, objects, or end of route "
+                                "(m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_,
-                                "Maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel");
+                                "Maximum deceleration for safe-stop trajectories and for stop points that cannot be reached "
+                                "with a_decel (m/s^2) - must be < 0.0 and <= a_decel");
   this->declareAndLoadParameter("trigger_turn_signals", trigger_turn_signals_,
                                 "True: planner will trigger turn signal services; false: planner will not request turn signals");
   this->declareAndLoadParameter("consider_grid_map", consider_grid_map_,
@@ -109,8 +112,17 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "Publish standstill if object avoidance would require a lower speed cap (m/s)", true, false,
                                 false, 0.0, 10.0, 1e-3);
   this->declareAndLoadParameter("object_velocity_release_hysteresis_cycles", object_velocity_release_hysteresis_cycles_,
-                                "Number of conflict-free cycles required before increasing the remembered object speed cap", true,
-                                false, false, 0.0, 100.0, 1.0);
+                                "Number of conflict-free cycles required before increasing the remembered object speed cap "
+                                "or releasing a locked object stop point",
+                                true, false, false, 0.0, 100.0, 1.0);
+  this->declareAndLoadParameter("object_stop_speed_threshold", object_stop_speed_threshold_,
+                                "Objects slower than this (or without prediction) get a stop point in front of the conflict "
+                                "instead of a speed cap (m/s)",
+                                true, false, false, 0.0, 40.0, 0.1);
+  this->declareAndLoadParameter("object_stop_move_up_distance", object_stop_move_up_distance_,
+                                "Distance by which an object stop point candidate must move away before the locked stop point "
+                                "is moved up (m)",
+                                true, false, false, 0.0, 100.0, 0.1);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
                                 "Publish RViz markers for the conflict explaining the final speed reduction");
   this->declareAndLoadParameter("lane_change_distance_factor", lane_change_distance_factor_,
@@ -1097,6 +1109,28 @@ std::vector<SimplePathPoint> SimplePlannerNode::truncatePathAtS(const std::vecto
   return truncated_path;
 }
 
+double SimplePlannerNode::projectOntoPathS(const std::vector<SimplePathPoint>& path, const Eigen::Vector2d& position) {
+  double projected_s = path.empty() ? 0.0 : path.front().s;
+  double best_dist_sq = std::numeric_limits<double>::max();
+  for (size_t i = 0; i + 1 < path.size(); ++i) {
+    const Eigen::Vector2d segment = path[i + 1].position - path[i].position;
+    const double segment_length_sq = segment.squaredNorm();
+    if (segment_length_sq < 1e-9) {
+      continue;
+    }
+
+    const double alpha = std::clamp((position - path[i].position).dot(segment) / segment_length_sq, 0.0, 1.0);
+    const double dist_sq = (path[i].position + alpha * segment - position).squaredNorm();
+    if (dist_sq >= best_dist_sq) {
+      continue;
+    }
+
+    best_dist_sq = dist_sq;
+    projected_s = path[i].s + alpha * (path[i + 1].s - path[i].s);
+  }
+  return projected_s;
+}
+
 void SimplePlannerNode::recalculateS(std::vector<SimplePathPoint>& path) {
   if (path.empty()) return;
 
@@ -1134,6 +1168,16 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
     y_spline.set_points(s_vector, y_vector);
   }
 
+  // Brake with a_decel if the ego vehicle can stop with it; otherwise with the deceleration required for the remaining
+  // distance, limited to a_max_decel (if even that is insufficient, the reference starts on the a_max_decel braking curve).
+  double a_stop = a_decel_;
+  if (stop_at_end) {
+    const double v_ego = perception_msgs::object_access::getVelocityMagnitude(ego_data_);
+    const double distance_to_stop_point = path.back().s - path.front().s - offset_to_stop_line;
+    const double a_required = distance_to_stop_point > 0.0 ? -0.5 * std::pow(v_ego, 2) / distance_to_stop_point : a_max_decel_;
+    a_stop = std::max(std::min(a_required, a_decel_), a_max_decel_);
+  }
+
   while (s < path.back().s) {
     // find index of segment in route (not required if using linearInterpolation from utils)
     int idx = -1;
@@ -1152,7 +1196,7 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       v = std::min(v, std::max(*speed_cap, 0.0));
     }
 
-    double distance_to_stop = -0.5 * std::pow(v, 2) / a_decel_ + offset_to_stop_line;
+    double distance_to_stop = -0.5 * std::pow(v, 2) / a_stop + offset_to_stop_line;
     distance_to_stop = std::max(distance_to_stop, 0.0);
     double brake_point = path.back().s - distance_to_stop;
     double ds = v * dt_;  // case 1: constant velocity
@@ -1161,11 +1205,11 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
         double ds_1 = brake_point - s;  // distance with constant velocity to braking point
         double dt_1 = ds_1 / v;         // time with constant velocity to braking point
         double dt_2 = dt_ - dt_1;       // remaining time with deceleration
-        double ds_2 = std::max(0.5 * a_decel_ * std::pow(dt_2, 2) + v * dt_2, 0.0);
+        double ds_2 = std::max(0.5 * a_stop * std::pow(dt_2, 2) + v * dt_2, 0.0);
         ds = ds_1 + ds_2;
       } else {
-        v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_decel_ * (s - brake_point), 0.0));  // case 2: deceleration (v(s))
-        ds = 0.5 * a_decel_ * std::pow(dt_, 2) + v * dt_;                                 // case 2: deceleration
+        v = std::sqrt(std::max(std::pow(v, 2) + 2 * a_stop * (s - brake_point), 0.0));  // case 2: deceleration (v(s))
+        ds = 0.5 * a_stop * std::pow(dt_, 2) + v * dt_;                                 // case 2: deceleration
         if (ds < 0.0) {
           v = 0.0;
           ds = 0.0;
