@@ -118,8 +118,8 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
                                 "Number of conflict-free cycles required before increasing the remembered object speed cap", true,
                                 false, false, 0.0, 100.0, 1.0);
   this->declareAndLoadParameter("object_stop_speed_threshold", object_stop_speed_threshold_,
-                                "Objects slower than this (or without prediction) get a stop point in front of the conflict "
-                                "instead of a speed cap (m/s)",
+                                "Objects slower than this (now or on average over their prediction, or without prediction) get a "
+                                "stop point in front of the conflict instead of a speed cap (m/s)",
                                 true, false, false, 0.0, 40.0, 0.1);
   this->declareAndLoadParameter("publish_object_interaction_markers", publish_object_interaction_markers_,
                                 "Publish RViz markers for the conflict explaining the final speed reduction");

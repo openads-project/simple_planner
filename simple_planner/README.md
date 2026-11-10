@@ -86,7 +86,7 @@ flowchart LR
 | `object_velocity_release_step` | `float` | `0.5` | Maximum velocity increase per cycle after hysteresis cleared object conflicts (m/s) |
 | `object_standstill_speed_threshold` | `float` | `0.2` | Publish standstill if object avoidance would require a lower speed cap (m/s) |
 | `object_velocity_release_hysteresis_cycles` | `int` | `3` | Number of conflict-free cycles required before increasing the remembered object speed cap |
-| `object_stop_speed_threshold` | `float` | `2.0` | Objects slower than this (or without prediction) get a stop point in front of the conflict instead of a speed cap (m/s) |
+| `object_stop_speed_threshold` | `float` | `2.0` | Objects slower than this (now or on average over their prediction, or without prediction) get a stop point in front of the conflict instead of a speed cap (m/s) |
 | `publish_object_interaction_markers` | `bool` | `true` | Publish RViz markers for the conflict explaining the final speed reduction |
 | `lane_change_distance_factor` | `float` | `6.0` | Factor multiplied with the current velocity to determine the lane change distance (m) |
 | `lane_change_min_distance_factor` | `float` | `2.0` | Factor multiplied with the vehicle length to determine the minimum lane change distance (m) |

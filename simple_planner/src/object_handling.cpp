@@ -153,12 +153,16 @@ std::vector<ObjectTrajectory> SimplePlannerNode::buildObjectTrajectories(const p
       ObjectTrajectory trajectory;
       trajectory.id = object.id;
       trajectory.is_static = false;
-      trajectory.stop_relevant = is_slow;
       trajectory.current = current;
       trajectory.samples.reserve(prediction->states.size());
       for (const auto& state : prediction->states) {
         trajectory.samples.push_back(buildObjectSample(state, tf_object_list.header, stamp, object_length, object_width));
       }
+      // Objects predicted to be slow on average (e.g. static predictions) get a stop point as well: a speed cap would only
+      // shift the conflict beyond the trajectory horizon.
+      const double predicted_distance = (trajectory.samples.back().box.center - current.box.center).norm();
+      const double predicted_duration = trajectory.samples.back().t - current.t;
+      trajectory.stop_relevant = is_slow || predicted_distance < object_stop_speed_threshold_ * predicted_duration;
       object_trajectories.push_back(trajectory);
     }
   }
@@ -188,7 +192,27 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
 
   const double check_dt = std::clamp(kObjectCollisionCheckDt, 0.01, dt_);
   const size_t last_segment_idx = ego_path.size() > 1 ? ego_path.size() - 2 : 0;
+  double last_safe_t = 0.0;
   double last_safe_s = ego_path.front().s;
+
+  // Moves last_safe_s towards the conflicting sample by bisection (down to the numerical tolerance also used for comparing
+  // stop points), so that it follows the contact with the object box instead of the sampling grid (which moves with the
+  // ego vehicle).
+  auto refine_last_safe_s = [&](double conflict_t, double conflict_s, const OrientedBox2D& object_box) {
+    while (conflict_s - last_safe_s > 1e-6) {
+      const double mid_t = 0.5 * (last_safe_t + conflict_t);
+      const auto [mid_box, mid_s] = ego_sample_at(mid_t);
+      if (overlaps(expandBoxWithSafetyMargins(mid_box, object_longitudinal_safety_distance_, object_lateral_safety_distance_),
+                   object_box)) {
+        conflict_t = mid_t;
+        conflict_s = mid_s;
+      } else {
+        last_safe_t = mid_t;
+        last_safe_s = mid_s;
+      }
+    }
+  };
+
   for (size_t i = 0; i <= last_segment_idx; ++i) {
     const double segment_start_t = dt_ * static_cast<double>(i);
     if (segment_start_t > trajectory_horizon_) break;
@@ -209,6 +233,7 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
         if (object_trajectory.is_static) {
           const auto& object_sample = object_trajectory.samples.front();
           if (overlaps(ego_safety_box, object_sample.box)) {
+            refine_last_safe_s(ego_t, ego_s, object_sample.box);
             return ConflictSample{object_trajectory.id, ego_box, object_sample.box, trajectory_idx, ego_t, last_safe_s};
           }
           continue;
@@ -232,10 +257,12 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
           }
 
           if (overlaps(ego_safety_box, timed_object_sample.box)) {
+            refine_last_safe_s(ego_t, ego_s, timed_object_sample.box);
             return ConflictSample{object_trajectory.id, ego_box, timed_object_sample.box, trajectory_idx, ego_t, last_safe_s};
           }
         }
       }
+      last_safe_t = ego_t;
       last_safe_s = ego_s;
     }
   }
