@@ -98,27 +98,7 @@ std::optional<double> SimplePlannerNode::findFirstGridMapStopS(const std_msgs::m
                                           ego_data_.state.reference_point.translation_to_geometric_center.y);
 
   // The target trajectory frame is ego-centered (normally base_link), so the ego reference point is its origin.
-  const Eigen::Vector2d ego_reference_position = Eigen::Vector2d::Zero();
-  double ego_path_s = 0.0;
-  double best_dist_sq = std::numeric_limits<double>::max();
-  for (size_t i = 0; i + 1 < base_path_points.size(); ++i) {
-    const Eigen::Vector2d segment = base_path_points[i + 1].position - base_path_points[i].position;
-    const double segment_length_sq = segment.squaredNorm();
-    if (segment_length_sq < 1e-9) {
-      continue;
-    }
-
-    const double alpha =
-        std::clamp((ego_reference_position - base_path_points[i].position).dot(segment) / segment_length_sq, 0.0, 1.0);
-    const Eigen::Vector2d projected = base_path_points[i].position + alpha * segment;
-    const double dist_sq = (projected - ego_reference_position).squaredNorm();
-    if (dist_sq >= best_dist_sq) {
-      continue;
-    }
-
-    best_dist_sq = dist_sq;
-    ego_path_s = base_path_points[i].s + alpha * (base_path_points[i + 1].s - base_path_points[i].s);
-  }
+  const double ego_path_s = projectOntoPathS(base_path_points, Eigen::Vector2d::Zero());
 
   std::optional<double> last_safe_s;
   for (size_t i = 0; i + 1 < base_path_points.size(); ++i) {

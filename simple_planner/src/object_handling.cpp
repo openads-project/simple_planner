@@ -6,6 +6,7 @@
 #include <cmath>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -13,8 +14,9 @@
 #include <simple_planner/simple_planner.hpp>
 #include <tf2_perception_msgs/tf2_perception_msgs.hpp>
 
-// Object-handling part of SimplePlannerNode: turning the perceived object list into a speed cap
-// on the route-following trajectory, plus the RViz visualization of the explaining conflict.
+// Object-handling part of SimplePlannerNode: turning the perceived object list into a stop point (slow objects)
+// or a speed cap (all other objects) on the route-following trajectory, plus the RViz visualization of the
+// explaining conflict.
 // The pure geometry helpers used here live in simple_planner/object_geometry.hpp.
 
 namespace simple_planner {
@@ -109,11 +111,21 @@ std::vector<ObjectTrajectory> SimplePlannerNode::buildObjectTrajectories(const p
     if (!std::isfinite(object_width) || object_width < kMinObjectWidth) object_width = kMinObjectWidth;
     if (!std::isfinite(object_length) || object_length < kMinObjectLength) object_length = kMinObjectLength;
 
+    // Slow objects and objects without velocity information get a stop point instead of a speed cap.
+    bool is_slow = true;
+    try {
+      is_slow = perception_msgs::object_access::getVelocityMagnitude(object.state) < object_stop_speed_threshold_;
+    } catch (const std::exception&) {  // no velocity in state model -> keep is_slow
+    }
+    const TimedBox2D current = buildObjectSample(object.state, tf_object_list.header, stamp, object_length, object_width);
+
     auto add_static_object = [&]() {
       ObjectTrajectory trajectory;
       trajectory.id = object.id;
       trajectory.is_static = true;
-      trajectory.samples.push_back(buildObjectSample(object.state, tf_object_list.header, stamp, object_length, object_width));
+      trajectory.stop_relevant = true;
+      trajectory.current = current;
+      trajectory.samples.push_back(current);
       object_trajectories.push_back(trajectory);
     };
 
@@ -141,10 +153,16 @@ std::vector<ObjectTrajectory> SimplePlannerNode::buildObjectTrajectories(const p
       ObjectTrajectory trajectory;
       trajectory.id = object.id;
       trajectory.is_static = false;
+      trajectory.current = current;
       trajectory.samples.reserve(prediction->states.size());
       for (const auto& state : prediction->states) {
         trajectory.samples.push_back(buildObjectSample(state, tf_object_list.header, stamp, object_length, object_width));
       }
+      // Objects predicted to be slow on average (e.g. static predictions) get a stop point as well: a speed cap would only
+      // shift the conflict beyond the trajectory horizon.
+      const double predicted_distance = (trajectory.samples.back().box.center - current.box.center).norm();
+      const double predicted_duration = trajectory.samples.back().t - current.t;
+      trajectory.stop_relevant = is_slow || predicted_distance < object_stop_speed_threshold_ * predicted_duration;
       object_trajectories.push_back(trajectory);
     }
   }
@@ -158,8 +176,8 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
   const auto& ego_offset_msg = ego_data_.state.reference_point.translation_to_geometric_center;
   const Eigen::Vector2d ego_center_offset(ego_offset_msg.x, ego_offset_msg.y);
 
-  // Interpolates the ego bounding box along the (time-equidistant) path at relative time ego_t.
-  auto ego_box_at = [&](double ego_t) {
+  // Interpolates the ego bounding box and path coordinate along the (time-equidistant) path at relative time ego_t.
+  auto ego_sample_at = [&](double ego_t) -> std::pair<OrientedBox2D, double> {
     const size_t idx = std::min(static_cast<size_t>(std::floor(std::max(ego_t, 0.0) / dt_)), ego_path.size() - 1);
     const size_t next_idx = std::min(idx + 1, ego_path.size() - 1);
     const double segment_start_t = dt_ * static_cast<double>(idx);
@@ -168,11 +186,33 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
     Eigen::Vector2d heading = ego_path[next_idx].position - ego_path[idx].position;
     if (heading.squaredNorm() < 1e-9 && idx > 0) heading = ego_path[idx].position - ego_path[idx - 1].position;
     const double yaw = heading.squaredNorm() > 1e-9 ? wrap_angle_rad(std::atan2(heading.y(), heading.x())) : 0.0;
-    return buildOrientedBox(position + rotate(ego_center_offset, yaw), yaw, ego_data_.length, ego_data_.width);
+    const double s = ego_path[idx].s + alpha * (ego_path[next_idx].s - ego_path[idx].s);
+    return {buildOrientedBox(position + rotate(ego_center_offset, yaw), yaw, ego_data_.length, ego_data_.width), s};
   };
 
   const double check_dt = std::clamp(kObjectCollisionCheckDt, 0.01, dt_);
   const size_t last_segment_idx = ego_path.size() > 1 ? ego_path.size() - 2 : 0;
+  double last_safe_t = 0.0;
+  double last_safe_s = ego_path.front().s;
+
+  // Moves last_safe_s towards the conflicting sample by bisection (down to the numerical tolerance also used for comparing
+  // stop points), so that it follows the contact with the object box instead of the sampling grid (which moves with the
+  // ego vehicle).
+  auto refine_last_safe_s = [&](double conflict_t, double conflict_s, const OrientedBox2D& object_box) {
+    while (conflict_s - last_safe_s > 1e-6) {
+      const double mid_t = 0.5 * (last_safe_t + conflict_t);
+      const auto [mid_box, mid_s] = ego_sample_at(mid_t);
+      if (overlaps(expandBoxWithSafetyMargins(mid_box, object_longitudinal_safety_distance_, object_lateral_safety_distance_),
+                   object_box)) {
+        conflict_t = mid_t;
+        conflict_s = mid_s;
+      } else {
+        last_safe_t = mid_t;
+        last_safe_s = mid_s;
+      }
+    }
+  };
+
   for (size_t i = 0; i <= last_segment_idx; ++i) {
     const double segment_start_t = dt_ * static_cast<double>(i);
     if (segment_start_t > trajectory_horizon_) break;
@@ -182,17 +222,19 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
     for (int step = 0; step <= steps; ++step) {
       const double ego_t =
           segment_start_t + (segment_end_t - segment_start_t) * static_cast<double>(step) / static_cast<double>(steps);
-      const OrientedBox2D ego_box = ego_box_at(ego_t);
+      const auto [ego_box, ego_s] = ego_sample_at(ego_t);
       const OrientedBox2D ego_safety_box =
           expandBoxWithSafetyMargins(ego_box, object_longitudinal_safety_distance_, object_lateral_safety_distance_);
 
-      for (const auto& object_trajectory : object_trajectories) {
+      for (size_t trajectory_idx = 0; trajectory_idx < object_trajectories.size(); ++trajectory_idx) {
+        const auto& object_trajectory = object_trajectories[trajectory_idx];
         if (object_trajectory.samples.empty()) continue;
 
         if (object_trajectory.is_static) {
           const auto& object_sample = object_trajectory.samples.front();
           if (overlaps(ego_safety_box, object_sample.box)) {
-            return ConflictSample{object_trajectory.id, ego_box, object_sample.box};
+            refine_last_safe_s(ego_t, ego_s, object_sample.box);
+            return ConflictSample{object_trajectory.id, ego_box, object_sample.box, trajectory_idx, ego_t, last_safe_s};
           }
           continue;
         }
@@ -215,17 +257,43 @@ std::optional<ConflictSample> SimplePlannerNode::firstConflict(const std::vector
           }
 
           if (overlaps(ego_safety_box, timed_object_sample.box)) {
-            return ConflictSample{object_trajectory.id, ego_box, timed_object_sample.box};
+            refine_last_safe_s(ego_t, ego_s, timed_object_sample.box);
+            return ConflictSample{object_trajectory.id, ego_box, timed_object_sample.box, trajectory_idx, ego_t, last_safe_s};
           }
         }
       }
+      last_safe_t = ego_t;
+      last_safe_s = ego_s;
     }
   }
   return std::nullopt;
 }
 
+double SimplePlannerNode::objectStopS(const std::vector<SimplePathPoint>& ego_path,
+                                      const ObjectTrajectory& object_trajectory,
+                                      const ConflictSample& conflict) const {
+  // Object boxes from the conflict back to the current object state.
+  std::vector<TimedBox2D> boxes;
+  for (auto sample = object_trajectory.samples.rbegin(); sample != object_trajectory.samples.rend(); ++sample) {
+    if (sample->t <= conflict.t) boxes.push_back(*sample);
+  }
+  boxes.push_back(object_trajectory.current);
+
+  // Move the stop point in front of each box as long as the box blocks the ego path up to the current stop point.
+  double stop_s = conflict.last_safe_s;
+  for (const auto& box : boxes) {
+    ObjectTrajectory box_only;
+    box_only.is_static = true;
+    box_only.samples = {box};
+    const std::optional<ConflictSample> spatial_conflict = firstConflict(ego_path, {box_only});
+    if (!spatial_conflict.has_value() || spatial_conflict->last_safe_s > stop_s) break;
+    stop_s = spatial_conflict->last_safe_s;
+  }
+  return stop_s;
+}
+
 void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& target_header,
-                                               const std::vector<SimplePathPoint>& base_path_points,
+                                               std::vector<SimplePathPoint>& base_path_points,
                                                FollowRoutePlan& route_plan) {
   if (!consider_objects_ || !object_list_init_ || route_plan.path.points.empty() || base_path_points.empty()) {
     // Only forget the remembered speed cap if objects are disabled / never received; otherwise keep it
@@ -298,24 +366,38 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
     attempted_release = search_start_speed_cap > remembered_speed_cap + 1e-6;
   }
 
-  // Step the speed cap down until the resampled path is conflict-free (or reaches zero).
+  // Step the speed cap down until the resampled path is conflict-free (or reaches zero). Conflicts with slow objects
+  // instead truncate the path at a stop point in front of the conflict, like at a stop line.
   double speed_cap = search_start_speed_cap;
   size_t iteration_count = 0;
   std::optional<ConflictSample> last_conflict;
+  std::optional<ConflictSample> stop_conflict;
   while (speed_cap > 0.0) {
     ++iteration_count;
     std::vector<SimplePathPoint> candidate_path =
         resamplePath(base_path_points, route_plan.stop_at_end, route_plan.offset_to_stop_line, &speed_cap);
     const std::optional<ConflictSample> conflict = firstConflict(candidate_path, object_trajectories);
     if (conflict.has_value()) {
+      const ObjectTrajectory& conflict_trajectory = object_trajectories[conflict->trajectory_idx];
+      if (conflict_trajectory.stop_relevant) {
+        // Only if no existing stop (stop line, grid map, object) is closer; terminates, as the stop point only moves closer.
+        const double stop_s = objectStopS(candidate_path, conflict_trajectory, *conflict);
+        if (stop_s < base_path_points.back().s - (route_plan.stop_at_end ? route_plan.offset_to_stop_line : 0.0) - 1e-6) {
+          base_path_points = truncatePathAtS(base_path_points, stop_s);
+          route_plan.stop_at_end = true;
+          route_plan.offset_to_stop_line = 0.0;
+          route_plan.reason_to_stop = "Object stop point";
+          stop_conflict = conflict;
+          continue;
+        }
+      }
       last_conflict = conflict;
       speed_cap = std::max(speed_cap - object_velocity_reduction_step_, 0.0);
       continue;
     }
 
     const rclcpp::Time iteration_end = rclcpp::Clock(RCL_SYSTEM_TIME).now();
-    publishObjectInteractionMarkers(target_header,
-                                    speed_cap < initial_speed_cap ? last_conflict : std::optional<ConflictSample>{});
+    publishObjectInteractionMarkers(target_header, speed_cap < initial_speed_cap ? last_conflict : stop_conflict);
     RCLCPP_DEBUG(this->get_logger(), "Object velocity iteration took %f ms (%zu iterations)",
                  (iteration_end - iteration_begin).seconds() * 1e3, iteration_count);
 

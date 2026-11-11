@@ -111,6 +111,7 @@ class SimplePlannerNode : public rclcpp::Node {
     bool stop_at_end = false;
     std::string reason_to_stop;
     double offset_to_stop_line = 0.0;
+    bool hold_standstill = false;  // ego stands in front of the stop point and should keep standing
     uint8_t suggested_turn_signal = route_planning_msgs::msg::LaneElement::SUGGESTED_TURN_SIGNAL_NONE;
   };
 
@@ -281,17 +282,32 @@ class SimplePlannerNode : public rclcpp::Node {
    * @brief Applies trajectory-based object conflict constraints to a follow-route plan.
    *
    * The object list is transformed into vehicle frame and checked against the
-   * already planned ego trajectory. If conflicts are detected, the path is
-   * resampled repeatedly with a lower speed cap until it is conflict-free or
-   * the speed cap reaches zero.
+   * already planned ego trajectory. Conflicts with slow objects (see `ObjectTrajectory::stop_relevant`)
+   * truncate the path at a stop point in front of the conflict. For all other conflicts, the path is
+   * resampled repeatedly with a lower speed cap until it is conflict-free or the speed cap reaches zero.
    *
    * @param target_header Current planning header propagated from the timer callback.
-   * @param base_path_points Route path before time-based resampling.
+   * @param base_path_points Route path before time-based resampling; truncated at an object stop point.
    * @param route_plan Mutable route plan to be constrained by dynamic objects.
    */
   void applyObjectConstraints(const std_msgs::msg::Header& target_header,
-                              const std::vector<SimplePathPoint>& base_path_points,
+                              std::vector<SimplePathPoint>& base_path_points,
                               FollowRoutePlan& route_plan);
+
+  /**
+   * @brief Determines the stop point in front of a conflict with a slow object.
+   *
+   * Walks back from the conflict along the object's prediction (down to its current state) as long as the object
+   * blocks the ego path before the stop point: stops behind a lead vehicle, but in front of a crossing object.
+   *
+   * @param[in] ego_path Time-equidistant ego path in which the conflict was found.
+   * @param[in] object_trajectory Conflicting object trajectory.
+   * @param[in] conflict Conflict of the ego path with the object trajectory.
+   * @return Ego path coordinate of the stop point.
+   */
+  double objectStopS(const std::vector<SimplePathPoint>& ego_path,
+                     const ObjectTrajectory& object_trajectory,
+                     const ConflictSample& conflict) const;
 
   /**
    * @brief Applies occupancy-grid-based stop constraints to the base route path.
@@ -430,6 +446,15 @@ class SimplePlannerNode : public rclcpp::Node {
    * @return Truncated path including an endpoint at `stop_s`.
    */
   static std::vector<SimplePathPoint> truncatePathAtS(const std::vector<SimplePathPoint>& path, double stop_s);
+
+  /**
+   * @brief Projects a position onto a path and returns the accumulated path coordinate of the closest path point.
+   *
+   * @param[in] path Input path with accumulated `s` values.
+   * @param[in] position Position in the path frame.
+   * @return Path coordinate of the projection (`s` of the first point if the path has no valid segment).
+   */
+  static double projectOntoPathS(const std::vector<SimplePathPoint>& path, const Eigen::Vector2d& position);
 
   /**
    * @brief Resamples a path into trajectory time steps and applies optional stopping behavior.
@@ -576,6 +601,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double v_ref_ = 13.89;
   double a_decel_ = -0.5;
   double a_max_decel_ = -1.0;
+  double stop_move_up_distance_ = 2.0;
   bool trigger_turn_signals_ = true;
   bool consider_grid_map_ = false;
   int grid_occupied_threshold_ = 50;
@@ -598,6 +624,7 @@ class SimplePlannerNode : public rclcpp::Node {
   double object_velocity_release_step_ = 0.5;
   double object_standstill_speed_threshold_ = 0.2;
   int object_velocity_release_hysteresis_cycles_ = 3;
+  double object_stop_speed_threshold_ = 2.0;
   bool publish_object_interaction_markers_ = true;
 
   double lane_change_distance_factor_ = 6.0;
