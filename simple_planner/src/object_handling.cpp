@@ -284,7 +284,7 @@ void SimplePlannerNode::applyObjectConstraints(const std_msgs::msg::Header& targ
 
   double initial_speed_cap = 0.0;
   for (const auto& point : route_plan.path.points) initial_speed_cap = std::max(initial_speed_cap, point.v);
-  if (v_ref_ >= 0.0) initial_speed_cap = std::max(initial_speed_cap, v_ref_);
+  if (v_ref_ >= 0.0) initial_speed_cap = std::max(initial_speed_cap, v_ref_ + v_offset_);
 
   // Start the search at the remembered cap and allow a single release step upwards once enough
   // conflict-free cycles have passed (hysteresis to avoid oscillating between speeds).
