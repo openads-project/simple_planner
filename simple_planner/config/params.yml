@@ -14,7 +14,7 @@
     n_states: 51                    # number of states in published trajectory
     interpolation_type: 1           # 0: linear, 1: cubic spline
     v_ref: 5.0                      # reference velocity (m/s). Set to '-1.0' to use velocity from route.
-    v_offset: 0.0                   # offset added to the reference velocity (from v_ref or route) (m/s); may be negative
+    v_offset: 0.0                   # offset added to the reference velocity (m/s); may be negative
     a_decel: -0.5                   # desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0
     a_max_decel: -1.0               # maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel
     trigger_turn_signals: True      # true: planner will request turn signal services; false: planner will not trigger turn signals

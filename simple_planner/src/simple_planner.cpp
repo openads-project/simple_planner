@@ -50,8 +50,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter(
       "v_ref", v_ref_,
       "Reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
-  this->declareAndLoadParameter("v_offset", v_offset_,
-                                "Offset added to the reference velocity (from v_ref or route) (m/s); may be negative");
+  this->declareAndLoadParameter("v_offset", v_offset_, "Offset added to the reference velocity (m/s); may be negative");
   this->declareAndLoadParameter("a_decel", a_decel_,
                                 "Desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_,
