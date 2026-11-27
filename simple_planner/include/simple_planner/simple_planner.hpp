@@ -574,6 +574,7 @@ class SimplePlannerNode : public rclcpp::Node {
   int n_states_ = 51;
   uint8_t interpolation_type_ = InterpolationType::SPLINE;
   double v_ref_ = 13.89;
+  double v_offset_ = 0.0;
   double a_decel_ = -0.5;
   double a_max_decel_ = -1.0;
   bool trigger_turn_signals_ = true;

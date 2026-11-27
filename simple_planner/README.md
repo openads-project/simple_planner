@@ -61,6 +61,7 @@ flowchart LR
 | `n_states` | `int` | `51` | Number of states in the output trajectory |
 | `interpolation_type` | `int` | `1` | 0: linear, 1: cubic spline |
 | `v_ref` | `float` | `13.89` | Reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route. |
+| `v_offset` | `float` | `0.0` | Offset added to the reference velocity (m/s); may be negative |
 | `a_decel` | `float` | `-0.5` | Desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0 |
 | `a_max_decel` | `float` | `-1.0` | Maximum deceleration for safe-stop trajectories (m/s^2) - must be < 0.0 and <= a_decel |
 | `trigger_turn_signals` | `bool` | `true` | True: planner will trigger turn signal services; false: planner will not request turn signals |

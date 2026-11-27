@@ -50,6 +50,7 @@ SimplePlannerNode::SimplePlannerNode() : Node("simple_planner_node") {
   this->declareAndLoadParameter(
       "v_ref", v_ref_,
       "Reference velocity (m/s); set for all states in the trajectory. Set to '-1.0' to use velocity from route.");
+  this->declareAndLoadParameter("v_offset", v_offset_, "Offset added to the reference velocity (m/s); may be negative");
   this->declareAndLoadParameter("a_decel", a_decel_,
                                 "Desired deceleration for braking at stop lines or end of route (m/s^2) - must be < 0.0");
   this->declareAndLoadParameter("a_max_decel", a_max_decel_,
@@ -681,7 +682,7 @@ void SimplePlannerNode::appendRoutePoints(const route_planning_msgs::msg::Route&
     simple_path_point.position =
         Eigen::Vector2d(suggested_lane.reference_pose.position.x, suggested_lane.reference_pose.position.y);
     simple_path_point.s = route_element.s;
-    simple_path_point.v = v_ref_ < 0.0 ? suggested_lane.speed_limit / 3.6 : v_ref_;
+    simple_path_point.v = std::max((v_ref_ < 0.0 ? suggested_lane.speed_limit / 3.6 : v_ref_) + v_offset_, 0.0);
 
     if (!route_plan.path.points.empty()) {
       const double v_average = (route_plan.path.points.back().v + simple_path_point.v) / 2.0;
@@ -1049,8 +1050,8 @@ std::vector<SimplePathPoint> SimplePlannerNode::generateLaneChangePath(size_t st
     const double lane_change_progress = static_cast<double>(i - start_idx) / static_cast<double>(end_idx - start_idx);
     double alpha = 0.5 * (1.0 + std::cos(M_PI * lane_change_progress));
     Eigen::Vector2d interpolated_pos = alpha * suggested_lane_pos + (1.0 - alpha) * adjacent_lane_pos;
-    lane_change_path.push_back(
-        SimplePathPoint(interpolated_pos, route_element.s, suggested_lane.speed_limit / 3.6));  // convert km/h to m/s
+    lane_change_path.push_back(SimplePathPoint(interpolated_pos, route_element.s,
+                                               std::max(suggested_lane.speed_limit / 3.6 + v_offset_, 0.0)));  // km/h to m/s
   }
 
   return lane_change_path;
@@ -1144,8 +1145,8 @@ std::vector<SimplePathPoint> SimplePlannerNode::resamplePath(const std::vector<S
       }
     }
 
-    double v = v_ref_;               // option 1: use predefined constant velocity
-    if (v_ref_ < 0.0 && idx >= 0) {  // option 2: use velocity from route if predefined velocity is negative
+    double v = std::max(v_ref_ + v_offset_, 0.0);  // option 1: use predefined constant velocity
+    if (v_ref_ < 0.0 && idx >= 0) {                // option 2: use velocity from route if predefined velocity is negative
       v = path[idx].v + (path[idx + 1].v - path[idx].v) / (path[idx + 1].s - path[idx].s) * (s - path[idx].s);
     }
     if (speed_cap != nullptr) {
